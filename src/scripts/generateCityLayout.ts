@@ -307,25 +307,112 @@ function parkTilesFor(zone: ReservedZone, keptLeaves: Rect[]): Rect[] {
 }
 
 // Roads run centered on every BSP leaf boundary (ROAD_WIDTH wide), so
-// rendering a park tile at its raw leaf bounds always paints ROAD_WIDTH/2
-// of green over the road on every edge that borders a road. Insets each
-// tile's edges by PARK_ROAD_INSET to clear that — except an edge shared with
-// another tile in the SAME park (checked by a substantial-length match, not
-// just any contact), which is left at the raw boundary so merged/adjacent
-// park tiles stay seamless instead of showing a gap down the middle.
+// rendering a park tile at its raw leaf bounds always paints ROAD_WIDTH/2 of
+// green over the road on every edge that borders one. A whole-edge "inset or
+// not" decision isn't enough though — a single tile edge can border MORE
+// THAN ONE neighboring leaf (BSP leaves aren't uniformly sized), so part of
+// an edge can be a real road while the rest is a seamless join with another
+// tile in the same park. classifyEdgeIntervals finds the exact sub-ranges of
+// each edge that border a same-park tile (no inset — avoids a seam down the
+// middle of a merged park) vs. everything else (inset — a real leaf with a
+// road, a different/unpaired zone, or nothing at all past the city's edge,
+// which needs no inset either since there's no road there, but insetting it
+// anyway is harmless/no different visually). insetParkTiles then slices each
+// tile at every such interval boundary (on both axes, so a tile with mixed
+// intervals on two different sides still comes out right) and computes the
+// inset per resulting piece — a piece's cut edges that aren't part of the
+// original tile boundary (introduced purely by this slicing) never get
+// inset, since they're not real edges at all.
 const PARK_ROAD_INSET = ROAD_WIDTH / 2 + 1
 
-function insetParkTiles(tiles: Rect[]): Rect[] {
-  return tiles.map((tile) => {
-    const neighbor = (test: (o: Rect) => boolean) =>
-      tiles.some((o) => o !== tile && test(o) && tilesAreAdjacent(tile, o))
-    return {
-      x0: tile.x0 + (neighbor((n) => Math.abs(n.x1 - tile.x0) < 0.5) ? 0 : PARK_ROAD_INSET),
-      x1: tile.x1 - (neighbor((n) => Math.abs(n.x0 - tile.x1) < 0.5) ? 0 : PARK_ROAD_INSET),
-      z0: tile.z0 + (neighbor((n) => Math.abs(n.z1 - tile.z0) < 0.5) ? 0 : PARK_ROAD_INSET),
-      z1: tile.z1 - (neighbor((n) => Math.abs(n.z0 - tile.z1) < 0.5) ? 0 : PARK_ROAD_INSET),
+interface Interval { lo: number; hi: number; inset: boolean }
+
+function mergeIntervals(intervals: Interval[]): Interval[] {
+  const sorted = [...intervals].sort((a, b) => a.lo - b.lo)
+  const out: Interval[] = []
+  for (const iv of sorted) {
+    const last = out[out.length - 1]
+    if (last && last.inset === iv.inset && iv.lo <= last.hi + 0.5) {
+      last.hi = Math.max(last.hi, iv.hi)
+    } else {
+      out.push({ ...iv })
     }
-  })
+  }
+  return out
+}
+
+function classifyEdgeIntervals(tile: Rect, side: "x0" | "x1" | "z0" | "z1", ownTiles: Rect[], keptLeaves: Rect[]): Interval[] {
+  const isXSide = side === "x0" || side === "x1"
+  const lo = isXSide ? tile.z0 : tile.x0
+  const hi = isXSide ? tile.z1 : tile.x1
+  const fixed = tile[side]
+
+  const raw: Interval[] = []
+  for (const leaf of keptLeaves) {
+    if (leaf === tile) continue
+    const touches =
+      side === "x0" ? Math.abs(leaf.x1 - fixed) < 0.5 :
+      side === "x1" ? Math.abs(leaf.x0 - fixed) < 0.5 :
+      side === "z0" ? Math.abs(leaf.z1 - fixed) < 0.5 :
+                       Math.abs(leaf.z0 - fixed) < 0.5
+    if (!touches) continue
+    const nlo = isXSide ? leaf.z0 : leaf.x0
+    const nhi = isXSide ? leaf.z1 : leaf.x1
+    const olo = Math.max(lo, nlo), ohi = Math.min(hi, nhi)
+    if (ohi - olo > MIN_SHARED_EDGE) raw.push({ lo: olo, hi: ohi, inset: !ownTiles.includes(leaf) })
+  }
+
+  const merged = mergeIntervals(raw)
+  const filled: Interval[] = []
+  let cursor = lo
+  for (const iv of merged) {
+    if (iv.lo > cursor + 0.5) filled.push({ lo: cursor, hi: iv.lo, inset: false })
+    filled.push(iv)
+    cursor = iv.hi
+  }
+  if (cursor < hi - 0.5) filled.push({ lo: cursor, hi, inset: false })
+  return mergeIntervals(filled)
+}
+
+function insetParkTiles(tiles: Rect[], keptLeaves: Rect[]): Rect[] {
+  const result: Rect[] = []
+  for (const tile of tiles) {
+    const x0c = classifyEdgeIntervals(tile, "x0", tiles, keptLeaves)
+    const x1c = classifyEdgeIntervals(tile, "x1", tiles, keptLeaves)
+    const z0c = classifyEdgeIntervals(tile, "z0", tiles, keptLeaves)
+    const z1c = classifyEdgeIntervals(tile, "z1", tiles, keptLeaves)
+
+    const zPoints = new Set([tile.z0, tile.z1])
+    for (const iv of [...x0c, ...x1c]) { zPoints.add(iv.lo); zPoints.add(iv.hi) }
+    const xPoints = new Set([tile.x0, tile.x1])
+    for (const iv of [...z0c, ...z1c]) { xPoints.add(iv.lo); xPoints.add(iv.hi) }
+
+    const zSorted = [...zPoints].sort((a, b) => a - b)
+    const xSorted = [...xPoints].sort((a, b) => a - b)
+
+    const insetAt = (intervals: Interval[], mid: number) =>
+      intervals.find((iv) => mid >= iv.lo - 0.5 && mid <= iv.hi + 0.5)?.inset ?? false
+
+    for (let xi = 0; xi < xSorted.length - 1; xi++) {
+      for (let zi = 0; zi < zSorted.length - 1; zi++) {
+        const px0 = xSorted[xi], px1 = xSorted[xi + 1]
+        const pz0 = zSorted[zi], pz1 = zSorted[zi + 1]
+        if (px1 - px0 < 0.5 || pz1 - pz0 < 0.5) continue
+        const midX = (px0 + px1) / 2, midZ = (pz0 + pz1) / 2
+        const insetX0 = Math.abs(px0 - tile.x0) < 0.5 && insetAt(x0c, midZ)
+        const insetX1 = Math.abs(px1 - tile.x1) < 0.5 && insetAt(x1c, midZ)
+        const insetZ0 = Math.abs(pz0 - tile.z0) < 0.5 && insetAt(z0c, midX)
+        const insetZ1 = Math.abs(pz1 - tile.z1) < 0.5 && insetAt(z1c, midX)
+        result.push({
+          x0: px0 + (insetX0 ? PARK_ROAD_INSET : 0),
+          x1: px1 - (insetX1 ? PARK_ROAD_INSET : 0),
+          z0: pz0 + (insetZ0 ? PARK_ROAD_INSET : 0),
+          z1: pz1 - (insetZ1 ? PARK_ROAD_INSET : 0),
+        })
+      }
+    }
+  }
+  return result
 }
 
 // An organic pond outline: a circle whose radius is perturbed by two
@@ -905,7 +992,7 @@ for (const zone of parkZones) parkTilesById.set(zone.id, parkTilesFor(zone, kept
 // (see insetParkTiles's doc comment) — rendering-only, computed after the
 // tile SETS above are finalized so the shared-edge detection sees the full
 // (including park_north's extra leaf) picture.
-for (const [id, tiles] of parkTilesById) parkTilesById.set(id, insetParkTiles(tiles))
+for (const [id, tiles] of parkTilesById) parkTilesById.set(id, insetParkTiles(tiles, keptLeaves))
 
 // Lake visual size/position (2026-08-11 follow-up: "make the lake slightly
 // bigger and slightly closer to the center of the park") is intentionally
