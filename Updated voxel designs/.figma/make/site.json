@@ -1,0 +1,10 @@
+{
+  "description": "Create engaging voxel designs for children and teens, featuring customizable buildings like apartments and hospitals, inspired by Minecraft aesthetics.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
