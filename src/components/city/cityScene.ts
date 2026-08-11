@@ -253,7 +253,10 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // fallback can push a hard-to-place building slightly further out — see
   // generateCityLayout.ts), with real margin to spare.
   const groundGeo = new THREE.PlaneGeometry(800, 800)
-  const groundMat = new THREE.MeshLambertMaterial({ color: 0x6b8f5e })
+  // Light grey (2026-08-11) — was green (0x6b8f5e); kept noticeably lighter
+  // than ROAD_COLOR (0x555a5e, decor.ts) so roads still read as a distinct
+  // darker strip instead of blending into the ground.
+  const groundMat = new THREE.MeshLambertMaterial({ color: 0xb3b5b6 })
   const ground    = new THREE.Mesh(groundGeo, groundMat)
   ground.rotation.x = -Math.PI / 2
   scene.add(ground)

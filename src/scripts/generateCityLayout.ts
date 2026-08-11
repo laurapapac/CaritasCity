@@ -250,63 +250,60 @@ function zonesAreAdjacent(a: ReservedZone, b: ReservedZone): boolean {
   return gap < ZONE_PAIRING_MARGIN
 }
 
-// A park's rendered shape is the union of BSP tiles that are MOSTLY inside
-// its own circle OR the circle of any zone paired with it (zonesAreAdjacent)
-// — pulls a nearby lake's tiles into the same green polygon without needing
-// the lake to be geometrically derived from the park (lakes are independent
-// RESERVED_ZONES entries again, see that const's doc comment). Tiles that
-// only graze a circle's edge stay plain ground (still excluded from
-// buildings/roads via the deliberately permissive rectIntersectsAnyZone,
-// still eligible for zone-buffer trees, just not colored as park). Every
-// zone keeps at least its single best-overlapping tile even below threshold,
-// so a small zone never ends up with zero tiles.
-const PARK_TILE_OVERLAP_THRESHOLD = 0.15
+// Shared-edge test used both to decide which park tiles can merge seamlessly
+// (insetParkTiles) and to flood-fill a park's full connected reserved-
+// territory (parkTilesFor below) — two rects "touch" only if they share a
+// substantial run of one edge (MIN_SHARED_EDGE), not just a corner graze.
+const MIN_SHARED_EDGE = 5
 
+function tilesAreAdjacent(a: Rect, b: Rect): boolean {
+  if (Math.abs(a.x1 - b.x0) < 0.5 || Math.abs(a.x0 - b.x1) < 0.5) {
+    return Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0) > MIN_SHARED_EDGE
+  }
+  if (Math.abs(a.z1 - b.z0) < 0.5 || Math.abs(a.z0 - b.z1) < 0.5) {
+    return Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > MIN_SHARED_EDGE
+  }
+  return false
+}
+
+// A park's rendered shape is its FULL connected island of reserved territory
+// — every kept leaf that rectIntersectsAnyZone already permanently excludes
+// from buildings, reachable by walking leaf-to-leaf adjacency from the
+// zone's own best-overlapping tile (rectOverlapFraction picks that seed, so
+// a park's circle never reaches across a real gap into an unrelated zone's
+// island — see zonesAreAdjacent/ZONE_PAIRING_MARGIN for why two DIFFERENT
+// parks' islands can still merge on purpose when explicitly paired, e.g.
+// central_park+central_lake). Earlier versions only rendered the single
+// best-fraction tile (or every tile clearing a fraction threshold), which
+// under-claimed real neighboring reserved leaves whenever a zone's circle
+// happened to cover more of one leaf than another even though BOTH are
+// equally, permanently building-free — this flood-fill includes all of them,
+// matching "fill the space between the roads that circle it" (2026-08-11
+// follow-up) exactly, since a leaf that's excluded from buildableLeaves is
+// also excluded from ever contributing its own road edges (leavesToRoads),
+// so its unclaimed portion was already invisible dead space, not a road.
 function parkTilesFor(zone: ReservedZone, keptLeaves: Rect[]): Rect[] {
   const group = [zone, ...RESERVED_ZONES.filter((z) => z !== zone && zonesAreAdjacent(zone, z))]
   const candidates = keptLeaves
     .map((rect) => ({ rect, frac: Math.max(...group.map((z) => rectOverlapFraction(rect, z))) }))
     .filter((c) => c.frac > 0)
     .sort((a, b) => b.frac - a.frac)
-  const qualifying = candidates.filter((c) => c.frac >= PARK_TILE_OVERLAP_THRESHOLD)
-  if (qualifying.length > 0) return qualifying.map((c) => c.rect)
-  return candidates.length > 0 ? [candidates[0].rect] : []
-}
+  if (candidates.length === 0) return []
 
-// Purely a rendering nicety (2026-08-11 follow-up), NOT wired into
-// RESERVED_ZONES/buildableLeaves — never touches the building layout. Finds
-// the single kept leaf bordering `tile` on the given side with the most
-// overlap along that edge (e.g. "north" = the leaf sharing tile's z1 edge
-// whose x-range overlaps most). Used to hand-pick a specific neighboring BSP
-// leaf to fold into a park's rendered tile set — e.g. park_north absorbing an
-// empty leaf directly above it — without changing which leaves are
-// building-buildable (that leaf may still hold buildings in a future
-// re-generation; this only affects today's static decor output).
-function findBorderingLeaf(tile: Rect, side: "north" | "south" | "east" | "west", keptLeaves: Rect[]): Rect | null {
-  let best: Rect | null = null
-  let bestOverlap = 0
-  for (const leaf of keptLeaves) {
-    let touches = false
-    let overlap = 0
-    if (side === "north") {
-      touches = Math.abs(leaf.z0 - tile.z1) < 0.5
-      overlap = Math.min(leaf.x1, tile.x1) - Math.max(leaf.x0, tile.x0)
-    } else if (side === "south") {
-      touches = Math.abs(leaf.z1 - tile.z0) < 0.5
-      overlap = Math.min(leaf.x1, tile.x1) - Math.max(leaf.x0, tile.x0)
-    } else if (side === "east") {
-      touches = Math.abs(leaf.x0 - tile.x1) < 0.5
-      overlap = Math.min(leaf.z1, tile.z1) - Math.max(leaf.z0, tile.z0)
-    } else {
-      touches = Math.abs(leaf.x1 - tile.x0) < 0.5
-      overlap = Math.min(leaf.z1, tile.z1) - Math.max(leaf.z0, tile.z0)
-    }
-    if (touches && overlap > bestOverlap) {
-      bestOverlap = overlap
-      best = leaf
+  const zoneExcludedLeaves = keptLeaves.filter((r) => rectIntersectsAnyZone(r))
+  const included = [candidates[0].rect]
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const leaf of zoneExcludedLeaves) {
+      if (included.includes(leaf)) continue
+      if (included.some((t) => tilesAreAdjacent(t, leaf))) {
+        included.push(leaf)
+        grew = true
+      }
     }
   }
-  return best
+  return included
 }
 
 // Roads run centered on every BSP leaf boundary (ROAD_WIDTH wide), so
@@ -317,23 +314,16 @@ function findBorderingLeaf(tile: Rect, side: "north" | "south" | "east" | "west"
 // just any contact), which is left at the raw boundary so merged/adjacent
 // park tiles stay seamless instead of showing a gap down the middle.
 const PARK_ROAD_INSET = ROAD_WIDTH / 2 + 1
-const MIN_SHARED_EDGE = 5
 
 function insetParkTiles(tiles: Rect[]): Rect[] {
   return tiles.map((tile) => {
-    const sharesEdge = (other: Rect, test: (o: Rect) => boolean, overlap: (o: Rect) => number) =>
-      other !== tile && test(other) && overlap(other) > MIN_SHARED_EDGE
-    const hasNeighbor = {
-      x0: tiles.some((o) => sharesEdge(o, (n) => Math.abs(n.x1 - tile.x0) < 0.5, (n) => Math.min(n.z1, tile.z1) - Math.max(n.z0, tile.z0))),
-      x1: tiles.some((o) => sharesEdge(o, (n) => Math.abs(n.x0 - tile.x1) < 0.5, (n) => Math.min(n.z1, tile.z1) - Math.max(n.z0, tile.z0))),
-      z0: tiles.some((o) => sharesEdge(o, (n) => Math.abs(n.z1 - tile.z0) < 0.5, (n) => Math.min(n.x1, tile.x1) - Math.max(n.x0, tile.x0))),
-      z1: tiles.some((o) => sharesEdge(o, (n) => Math.abs(n.z0 - tile.z1) < 0.5, (n) => Math.min(n.x1, tile.x1) - Math.max(n.x0, tile.x0))),
-    }
+    const neighbor = (test: (o: Rect) => boolean) =>
+      tiles.some((o) => o !== tile && test(o) && tilesAreAdjacent(tile, o))
     return {
-      x0: tile.x0 + (hasNeighbor.x0 ? 0 : PARK_ROAD_INSET),
-      x1: tile.x1 - (hasNeighbor.x1 ? 0 : PARK_ROAD_INSET),
-      z0: tile.z0 + (hasNeighbor.z0 ? 0 : PARK_ROAD_INSET),
-      z1: tile.z1 - (hasNeighbor.z1 ? 0 : PARK_ROAD_INSET),
+      x0: tile.x0 + (neighbor((n) => Math.abs(n.x1 - tile.x0) < 0.5) ? 0 : PARK_ROAD_INSET),
+      x1: tile.x1 - (neighbor((n) => Math.abs(n.x0 - tile.x1) < 0.5) ? 0 : PARK_ROAD_INSET),
+      z0: tile.z0 + (neighbor((n) => Math.abs(n.z1 - tile.z0) < 0.5) ? 0 : PARK_ROAD_INSET),
+      z1: tile.z1 - (neighbor((n) => Math.abs(n.z0 - tile.z1) < 0.5) ? 0 : PARK_ROAD_INSET),
     }
   })
 }
@@ -910,21 +900,6 @@ const lakeZones = RESERVED_ZONES.filter((z) => z.kind === "lake")
 
 const parkTilesById = new Map<string, Rect[]>()
 for (const zone of parkZones) parkTilesById.set(zone.id, parkTilesFor(zone, keptLeaves))
-
-// Rendering-only follow-up (2026-08-11, see findBorderingLeaf's doc comment):
-// park_north absorbs the empty BSP leaf directly north of it (user: "make it
-// longer... fills the empty space between two building blocks above it, but
-// don't make it wider" — that leaf sits between two real building blocks and
-// happens to hold none of its own, verified by cross-referencing `placed`
-// during investigation). Doesn't touch RESERVED_ZONES/buildableLeaves, so it
-// can never shift where any of the 158 buildings land.
-{
-  const pnTiles = parkTilesById.get("park_north")
-  if (pnTiles && pnTiles.length > 0) {
-    const northLeaf = findBorderingLeaf(pnTiles[0], "north", keptLeaves)
-    if (northLeaf) parkTilesById.set("park_north", [...pnTiles, northLeaf])
-  }
-}
 
 // Inset every park tile away from the roads running along its BSP leaf edges
 // (see insetParkTiles's doc comment) — rendering-only, computed after the
