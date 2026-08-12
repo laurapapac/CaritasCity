@@ -27,21 +27,110 @@
  * naturally covers the middle, leaving a ring whose width varies around the
  * lake rather than a uniform band. See generateCityLayout.ts's lake_east
  * doc comment for the sizing logic (lake_east only, so far).
+ *
+ * Ground textures (2026-08-12): parks and beaches use small procedural
+ * CanvasTextures (buildGrassTexture/buildStoneTexture) instead of a flat
+ * fill color, repeated via THREE.RepeatWrapping at real-world density
+ * (TEXTURE_TILE_UNITS) — see scaleUV's doc comment for why the UV scaling
+ * has to happen before mergeGeometries. No image assets involved; both are
+ * drawn on an offscreen <canvas> at startup with a seeded PRNG so the
+ * pattern is stable across reloads.
  */
 
 import * as THREE from "three"
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js"
 import type { CityDecor, OrientedMarker } from "./types"
 
-const PARK_COLOR = 0x4f8f3f
 const LAKE_COLOR = 0x3a7bd5
-const BEACH_COLOR = 0xd9d9d9
 const ROAD_COLOR = 0x555a5e
 const BUSH_COLOR = 0x3d7a3f
 const LAMP_POLE_COLOR = 0x2b2b2b
 const LAMP_HEAD_COLOR = 0xffd98a
 const BENCH_COLOR = 0x8a5a3a
 const PLAZA_COLOR = 0x9a9086
+
+// ── Procedural ground textures (2026-08-12, user request: "add some texture
+// to the beach... and the grass floor in the parks so it doesn't look
+// plain") — small tileable canvases generated once at startup and repeated
+// via THREE.RepeatWrapping, instead of loading image assets (no texture
+// asset pipeline exists in this project yet, and these are simple enough to
+// draw procedurally). A seeded PRNG keeps the pattern stable across reloads
+// rather than reshuffling every time the scene builds.
+function mulberry32(seed: number): () => number {
+  let s = seed
+  return () => {
+    s |= 0
+    s = (s + 0x6d2b79f5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// World-space size (in units) one texture tile covers — how far apart UV
+// scaling repeats the canvas across a park/beach's real-world footprint.
+const TEXTURE_TILE_UNITS = { grass: 6, beach: 5 }
+
+function buildStoneTexture(): THREE.CanvasTexture {
+  const size = 128
+  const canvas = document.createElement("canvas")
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext("2d")!
+  ctx.fillStyle = "#d9d9d9"
+  ctx.fillRect(0, 0, size, size)
+  const rand = mulberry32(20260812)
+  for (let i = 0; i < 260; i++) {
+    const x = rand() * size, y = rand() * size
+    const rx = 1.2 + rand() * 2.4
+    const ry = rx * (0.7 + rand() * 0.5)
+    const shade = 172 + Math.floor(rand() * 58)
+    ctx.fillStyle = `rgb(${shade},${shade},${shade - 3})`
+    ctx.beginPath()
+    ctx.ellipse(x, y, rx, ry, rand() * Math.PI, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  return tex
+}
+
+function buildGrassTexture(): THREE.CanvasTexture {
+  const size = 128
+  const canvas = document.createElement("canvas")
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext("2d")!
+  ctx.fillStyle = "#4f8f3f"
+  ctx.fillRect(0, 0, size, size)
+  const rand = mulberry32(20260813)
+  for (let i = 0; i < 420; i++) {
+    const x = rand() * size, y = rand() * size
+    const len = 2 + rand() * 4.5
+    const angle = -Math.PI / 2 + (rand() - 0.5) * 0.9
+    ctx.strokeStyle = rand() < 0.55 ? "rgba(35,70,25,0.4)" : "rgba(150,205,95,0.4)"
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len)
+    ctx.stroke()
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  return tex
+}
+
+// Scales an existing PlaneGeometry's UVs so a repeating texture tiles at a
+// real-world density instead of stretching one full texture across the
+// whole plane — must run before mergeGeometries flattens multiple tiles'
+// UVs into one buffer.
+function scaleUV(geo: THREE.BufferGeometry, repeatX: number, repeatY: number): void {
+  const uv = geo.attributes.uv
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, uv.getX(i) * repeatX, uv.getY(i) * repeatY)
+  }
+  uv.needsUpdate = true
+}
 
 // Deterministic hash of a tree's own position → [0,1), so type/scale choices
 // are stable across renders (same layout always looks the same) without
@@ -245,26 +334,30 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
   const group = new THREE.Group()
   group.name = "decor"
 
+  const grassMat = new THREE.MeshLambertMaterial({ map: buildGrassTexture() })
   for (const park of decor.parks) {
     if (park.tiles.length === 0) continue
     const tileGeometries = park.tiles.map((tile) => {
-      const geo = new THREE.PlaneGeometry(tile.x1 - tile.x0, tile.z1 - tile.z0)
+      const width = tile.x1 - tile.x0, depth = tile.z1 - tile.z0
+      const geo = new THREE.PlaneGeometry(width, depth)
+      scaleUV(geo, width / TEXTURE_TILE_UNITS.grass, depth / TEXTURE_TILE_UNITS.grass)
       geo.rotateX(-Math.PI / 2)
       geo.translate((tile.x0 + tile.x1) / 2, 0.15, (tile.z0 + tile.z1) / 2)
       return geo
     })
     const merged = mergeGeometries(tileGeometries)
     tileGeometries.forEach((g) => g.dispose())
-    const mat = new THREE.MeshLambertMaterial({ color: PARK_COLOR })
-    group.add(new THREE.Mesh(merged, mat))
+    group.add(new THREE.Mesh(merged, grassMat))
   }
 
+  const beachMat = new THREE.MeshLambertMaterial({ map: buildStoneTexture() })
   for (const beach of decor.beaches ?? []) {
-    const geo = new THREE.PlaneGeometry(beach.x1 - beach.x0, beach.z1 - beach.z0)
+    const width = beach.x1 - beach.x0, depth = beach.z1 - beach.z0
+    const geo = new THREE.PlaneGeometry(width, depth)
+    scaleUV(geo, width / TEXTURE_TILE_UNITS.beach, depth / TEXTURE_TILE_UNITS.beach)
     geo.rotateX(-Math.PI / 2)
     geo.translate((beach.x0 + beach.x1) / 2, 0.17, (beach.z0 + beach.z1) / 2)
-    const mat = new THREE.MeshLambertMaterial({ color: BEACH_COLOR })
-    group.add(new THREE.Mesh(geo, mat))
+    group.add(new THREE.Mesh(geo, beachMat))
   }
 
   for (const lake of decor.lakes) {
@@ -332,13 +425,22 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
   return group
 }
 
+// Material.dispose() doesn't dispose textures assigned to it (map, etc.) —
+// the grass/beach CanvasTextures built above need their own disposal, or
+// they'd leak every time the scene is torn down and rebuilt.
+function disposeMaterial(mat: THREE.Material): void {
+  const map = (mat as THREE.MeshLambertMaterial).map
+  if (map) map.dispose()
+  mat.dispose()
+}
+
 export function disposeDecorGroup(group: THREE.Group): void {
   group.traverse((obj) => {
     if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
       obj.geometry.dispose()
       const mat = obj.material
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
-      else mat.dispose()
+      if (Array.isArray(mat)) mat.forEach(disposeMaterial)
+      else disposeMaterial(mat)
     }
   })
 }
