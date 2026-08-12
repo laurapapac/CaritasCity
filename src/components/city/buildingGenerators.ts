@@ -118,11 +118,23 @@ function isWin(
   return false
 }
 
-// ── Short Apartment  20×10×20 = 4,000 ───────────────────────────────────────
+// ── Short Apartment  20×10×32 (5 hollow floors) = 4,000 ─────────────────────
 // Palette varies per building instance (2026-08-12, user request: "less
 // variety than houses, but still noticeably different") — a small fixed set
 // of wall/roof/trim combos rather than houses' full per-instance style pool
 // (HOUSE_STYLE_POOL in blueprintForVariant.ts), picked by variantIndex % length.
+//
+// Hollow per floor (2026-08-12, same-day follow-up — user request: "[the
+// buildable buildings] shouldn't be a whole solid block... give it a hollow
+// effect for every floor, similar to how restaurant looks now") — same
+// ishell/islab/iwinRow technique generateRestaurant already uses, instead of
+// the old solid()-filled box. Footprint (20×10) unchanged so the static city
+// layout (which already placed this building by footprint) doesn't need
+// regenerating; height increased 20→32 instead, to land back on exactly
+// 4,000 voxels: perFloor = FH·(W·D) − (FH−1)·(W−2T)(D−2T) = 6·200 − 5·96 =
+// 720; total = foundation(200) + 5·720 + roof(200) = 4,000. Verified by
+// actually running the generator (not just the arithmetic) — see the commit
+// this shipped in.
 
 const SHORT_APARTMENT_PALETTES: { wall: number; roof: number; trim: number }[] = [
   { wall: 0xc05030, roof: 0x4a4a6a, trim: 0x8a3a28 }, // original red brick
@@ -133,27 +145,39 @@ const SHORT_APARTMENT_PALETTES: { wall: number; roof: number; trim: number }[] =
 ]
 
 export function generateShortApartment(variantIndex = 0): BlueprintVoxel[] {
-  const W = 20, D = 10, H = 20, FH = 4
+  const W = 20, D = 10, FH = 6, FLOORS = 5, T = 2
   const { wall: WALL, roof: ROOF, trim: TRIM } = SHORT_APARTMENT_PALETTES[variantIndex % SHORT_APARTMENT_PALETTES.length]
-  const FOUND = 0x7a8090
-  return solid(W, D, H, (x, y, z) => {
-    if (y === H - 1) return { type: "roof", color: ROOF }
-    if (y === 0) return { type: "stone", color: FOUND }
-    const fy = y % FH
-    if (ext(x, z, W, D)) {
-      if (fy === 0 || fy === FH - 1) return { type: "wall", color: TRIM }
-      if (isWin(x, y, z, W, D, FH, [1, 2])) return { type: "window", color: GLASS_HEX }
-      return { type: "wall", color: WALL }
+  const FOUND = 0x7a8090, FLOOR_COLOR = 0x9a8878
+  return makeBlocks(s => {
+    islab(s, 0, 0, 0, W, D, FOUND)
+    for (let f = 0; f < FLOORS; f++) {
+      const y0 = 1 + f * FH
+      ishell(s, 0, y0, 0, W, FH, D, WALL, T)
+      islab(s, T, y0, T, W - 2 * T, D - 2 * T, FLOOR_COLOR)
+      ishell(s, 0, y0, 0, W, 1, D, TRIM, T)
+      ishell(s, 0, y0 + FH - 1, 0, W, 1, D, TRIM, T)
+      // Window band covers rows 1..FH-2 (never row 0 or FH-1, the trim rows)
+      // — iwinRow paints TWO rows per call (y and y+1), so consecutive calls
+      // at offsets 1,2,3 overlap by one row and union to exactly {1,2,3,4}.
+      iwinRow(s, 0, y0 + 1, 0, W, D, P.glass, 4, 1)
+      iwinRow(s, 0, y0 + 2, 0, W, D, P.glass, 4, 1)
+      iwinRow(s, 0, y0 + 3, 0, W, D, P.glass, 4, 1)
     }
-    return { type: fy === 0 ? "floor" : "wall", color: fy === 0 ? 0x9a8878 : WALL }
+    islab(s, 0, 1 + FLOORS * FH, 0, W, D, ROOF)
   })
 }
 
-// ── Tall Apartment  16×10×50 = 8,000 ────────────────────────────────────────
+// ── Tall Apartment  16×10×77 (15 hollow floors) = 8,000 ─────────────────────
 // Palette varies per building instance (2026-08-12 follow-up to short_apartment
 // variety) — same fixed-pool-by-variantIndex pattern as SHORT_APARTMENT_PALETTES.
 // Index 0 is the original blue-grey look, kept first/unchanged so it stays
 // available exactly as the user asked ("the blue would be okay for all").
+//
+// Hollow per floor (2026-08-12, same-day follow-up, same reasoning as
+// generateShortApartment above). FH stays 5, identical to the original solid
+// version's floor height — only FLOORS (10→15) and total height (50→77)
+// change to hit exactly 8,000: perFloor = 5·160 − 4·72 = 512; total =
+// foundation(160) + 15·512 + roof(160) = 8,000.
 
 const TALL_APARTMENT_PALETTES: { wall: number; roof: number; trim: number }[] = [
   { wall: 0x8898aa, roof: 0x334455, trim: 0x6688aa }, // original blue-grey
@@ -164,19 +188,24 @@ const TALL_APARTMENT_PALETTES: { wall: number; roof: number; trim: number }[] = 
 ]
 
 export function generateTallApartment(variantIndex = 0): BlueprintVoxel[] {
-  const W = 16, D = 10, H = 50, FH = 5
+  const W = 16, D = 10, FH = 5, FLOORS = 15, T = 2
   const { wall: WALL, roof: ROOF, trim: TRIM } = TALL_APARTMENT_PALETTES[variantIndex % TALL_APARTMENT_PALETTES.length]
-  const FOUND = 0x666677
-  return solid(W, D, H, (x, y, z) => {
-    if (y === H - 1) return { type: "roof", color: ROOF }
-    if (y === 0) return { type: "stone", color: FOUND }
-    const fy = y % FH
-    if (ext(x, z, W, D)) {
-      if (fy === 0 || fy === FH - 1) return { type: "wall", color: TRIM }
-      if (isWin(x, y, z, W, D, FH, [1, 2, 3], 2)) return { type: "window", color: GLASS_HEX }
-      return { type: "wall", color: WALL }
+  const FOUND = 0x666677, FLOOR_COLOR = 0x777888
+  return makeBlocks(s => {
+    islab(s, 0, 0, 0, W, D, FOUND)
+    for (let f = 0; f < FLOORS; f++) {
+      const y0 = 1 + f * FH
+      ishell(s, 0, y0, 0, W, FH, D, WALL, T)
+      islab(s, T, y0, T, W - 2 * T, D - 2 * T, FLOOR_COLOR)
+      ishell(s, 0, y0, 0, W, 1, D, TRIM, T)
+      ishell(s, 0, y0 + FH - 1, 0, W, 1, D, TRIM, T)
+      // Rows 1,2 (union of two 2-row iwinRow calls, offset by 1) cover
+      // exactly {1,2,3} — the 3 middle rows of FH=5, matching the original
+      // solid version's isWin(winFys=[1,2,3]) window band exactly.
+      iwinRow(s, 0, y0 + 1, 0, W, D, P.glass, 2, 1)
+      iwinRow(s, 0, y0 + 2, 0, W, D, P.glass, 2, 1)
     }
-    return { type: fy === 0 ? "floor" : "wall", color: fy === 0 ? 0x777888 : WALL }
+    islab(s, 0, 1 + FLOORS * FH, 0, W, D, ROOF)
   })
 }
 
