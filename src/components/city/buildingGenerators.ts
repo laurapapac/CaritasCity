@@ -181,10 +181,21 @@ export function generateTallApartment(variantIndex = 0): BlueprintVoxel[] {
 }
 
 // ── Food Bank  40×10×10 = 4,000 ─────────────────────────────────────────────
+// Palette varies per building instance (2026-08-12, user request: "3
+// colors") — same fixed-pool-by-variantIndex pattern as apartments.
+// wallAlt covers the non-storefront side fallback fill, kept proportioned to
+// each palette's own WALL (a touch darker/desaturated) rather than a fixed
+// value, so it never clashes with a differently-colored WALL.
 
-export function generateFoodBank(): BlueprintVoxel[] {
+const FOOD_BANK_PALETTES: { wall: number; roof: number; found: number; wallAlt: number }[] = [
+  { wall: 0xc8a870, roof: 0x8b6c42, found: 0x8a7a5a, wallAlt: 0xb89860 }, // original tan
+  { wall: 0x9aa0a8, roof: 0x5a6068, found: 0x6e7880, wallAlt: 0x848a92 }, // industrial grey-blue
+  { wall: 0x8a9e6a, roof: 0x5a6e42, found: 0x6a7a52, wallAlt: 0x7a8e5a }, // fresh-produce green
+]
+
+export function generateFoodBank(variantIndex = 0): BlueprintVoxel[] {
   const W = 40, D = 10, H = 10
-  const WALL = 0xc8a870, ROOF = 0x8b6c42, FOUND = 0x8a7a5a
+  const { wall: WALL, roof: ROOF, found: FOUND, wallAlt: WALL_ALT } = FOOD_BANK_PALETTES[variantIndex % FOOD_BANK_PALETTES.length]
   const DOOR = 0x3a3020
   return solid(W, D, H, (x, y, z) => {
     if (y === H - 1) return { type: "roof", color: ROOF }
@@ -202,20 +213,37 @@ export function generateFoodBank(): BlueprintVoxel[] {
         return { type: "window", color: GLASS_HEX }
       return { type: "wall", color: WALL }
     }
-    return { type: "wall", color: 0xb89860 }
+    return { type: "wall", color: WALL_ALT }
   })
 }
 
 // ── Restaurant  22×11×(6 floors × fh4) = 5,000 ──────────────────────────────
 // Visual: warm brick, large storefront glazing, red awning, chimney, rooftop sign
+// Brick/chimney color varies per building instance (2026-08-12, user request:
+// "a variety of colors, minimum 7" — the red awning is explicitly kept as-is,
+// "that can stay red", so P.red/P.redLight/P.yellow and everything else
+// (foundation, window trim, glass, sign wood) stay fixed across all
+// palettes — only the brick wall + its matching chimney color vary.
 
-export function generateRestaurant(): BlueprintVoxel[] {
+const RESTAURANT_PALETTES: { brick: number; brickDark: number }[] = [
+  { brick: 0xc05030, brickDark: 0x8a3420 }, // original brick red-orange
+  { brick: 0xc9a03c, brickDark: 0x8a6c28 }, // mustard gold
+  { brick: 0x3f6b4a, brickDark: 0x2a4a33 }, // forest green
+  { brick: 0x4a6a8a, brickDark: 0x33475e }, // slate blue
+  { brick: 0x4a4a50, brickDark: 0x2f2f33 }, // charcoal modern
+  { brick: 0xd8cfb0, brickDark: 0xa89870 }, // cream ivory
+  { brick: 0x6a4468, brickDark: 0x472e46 }, // plum
+  { brick: 0x2f7a72, brickDark: 0x1f524c }, // teal
+]
+
+export function generateRestaurant(variantIndex = 0): BlueprintVoxel[] {
+  const { brick: BRICK, brickDark: BRICK_DARK } = RESTAURANT_PALETTES[variantIndex % RESTAURANT_PALETTES.length]
   return makeBlocks(s => {
     const [W, D, floors, fh] = [22, 11, 6, 4]
     ifill(s, 0, 0, 0, W, 2, D, P.sandDark)
     for (let f = 0; f < floors; f++) {
       const y0 = 2 + f * fh
-      ishell(s, 0, y0, 0, W, fh, D, P.brick, 2)
+      ishell(s, 0, y0, 0, W, fh, D, BRICK, 2)
       islab(s, 2, y0, 2, W - 4, D - 4, P.woodDark)
       if (f === 0) {
         ifill(s, 2, y0, 0, W - 4, fh - 1, 2, P.glassDark)
@@ -224,12 +252,12 @@ export function generateRestaurant(): BlueprintVoxel[] {
         iwinRow(s, 0, y0 + 1, 0, W, D, P.glass, 4, 1)
       }
     }
-    // Red awning
+    // Red awning — kept red regardless of palette, per user request
     ifill(s, -1, 2 + fh - 1, -2, W + 2, 1, 3, P.red)
     ifill(s, -1, 2 + fh, -2, W + 2, 1, 3, P.redLight)
     // Chimney + cap
-    ifill(s, W - 3, 2 + floors * fh, D - 3, 2, 5, 2, P.brickDark)
-    ifill(s, W - 4, 2 + floors * fh + 5, D - 4, 4, 1, 1, P.brickDark)
+    ifill(s, W - 3, 2 + floors * fh, D - 3, 2, 5, 2, BRICK_DARK)
+    ifill(s, W - 4, 2 + floors * fh + 5, D - 4, 4, 1, 1, BRICK_DARK)
     // Rooftop sign
     ifill(s, 3, 2 + floors * fh, 0, W - 6, 3, 2, P.wood)
     ifill(s, 4, 2 + floors * fh + 1, 0, W - 8, 2, 1, P.yellow)
@@ -504,9 +532,10 @@ export function generateFountain(): BlueprintVoxel[] {
 // blueprint, not a fixed shape generator like these). "church" and
 // "fountain" are not among the 158 real QR-linked buildings — see their own
 // generators' comments. Every generator receives a per-building variantIndex
-// (2026-08-12) — generateShortApartment and generateTallApartment use it for
-// palette variety, the rest ignore the argument, which TS allows for a
-// function with fewer declared params than the Record's value type expects.
+// (2026-08-12) — generateShortApartment, generateTallApartment,
+// generateFoodBank, and generateRestaurant use it for palette variety, the
+// rest ignore the argument, which TS allows for a function with fewer
+// declared params than the Record's value type expects.
 export const HAND_AUTHORED_DESIGNS: Partial<Record<string, (variantIndex: number) => BlueprintVoxel[]>> = {
   short_apartment: generateShortApartment,
   tall_apartment: generateTallApartment,
