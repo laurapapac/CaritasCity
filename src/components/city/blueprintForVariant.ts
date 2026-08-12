@@ -6,7 +6,7 @@
 
 import type { Blueprint } from "./types";
 import type { BuildingCategory } from "../../lib/api";
-import { generateHouseBlueprint, generateNeighbourhoodStyles } from "./houseGenerator";
+import { generateHouseBlueprint, generateNeighbourhoodStyles, type HouseStyle, type StylePreset } from "./houseGenerator";
 import { generatePlaceholderBlueprint } from "./placeholderGenerator";
 import { HAND_AUTHORED_DESIGNS } from "./buildingGenerators";
 import blueprintData from "../../imports/house-blueprint.json";
@@ -26,19 +26,49 @@ const SOURCE_BLUEPRINT = blueprintData as unknown as {
   voxels: Array<{ x: number; y: number; z: number; type: string; color: string }>;
 };
 
-const HOUSE_STYLE = generateNeighbourhoodStyles("classic", "medium", "normal", 42, 1)[0];
+// Every house used to share one single HOUSE_STYLE (2026-08-11: preset
+// "classic" only, 1 style total — every house rendered as the exact same red
+// brick). User request (2026-08-12): a wide variety of colors, doubled from
+// 5 to 10 style presets in a same-day follow-up. Pooled across all 10 presets
+// (WALL_PALETTES in houseGenerator.ts), 4 style variations per preset = 40
+// total, so neighbouring houses can differ in color family too, not just
+// shade within one family. Picked per building instance via hashSeed(buildingId)
+// below, not randomly at render time — same "fixed design decision" pattern
+// the rest of the city's layout uses (a house's look shouldn't change on
+// re-render/re-login).
+const HOUSE_PRESETS: StylePreset[] = [
+  "classic", "nordic", "adobe", "modern", "cottage",
+  "coastal", "sunny", "burgundy", "lavender", "charcoal",
+];
+const HOUSE_STYLE_POOL: HouseStyle[] = HOUSE_PRESETS.flatMap((preset, i) =>
+  generateNeighbourhoodStyles(preset, "medium", "normal", 42 + i * 17, 4)
+);
+
+// Deterministic string → uint32 hash (djb2-ish), used to turn a stable
+// buildingId into a stable pick from HOUSE_STYLE_POOL / a variantIndex passed
+// to HAND_AUTHORED_DESIGNS generators (2026-08-12) — same building always
+// looks the same across renders/sessions, without needing a stored per
+// -building "style" column in the DB.
+function hashSeed(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
 
 export function blueprintForVariant(
   variant: string,
   category: BuildingCategory,
-  totalBlocks: number
+  totalBlocks: number,
+  buildingId: string = variant
 ): Blueprint {
+  const variantIndex = hashSeed(buildingId);
   if (variant === "house") {
-    return generateHouseBlueprint(SOURCE_BLUEPRINT, HOUSE_STYLE);
+    const style = HOUSE_STYLE_POOL[variantIndex % HOUSE_STYLE_POOL.length];
+    return generateHouseBlueprint(SOURCE_BLUEPRINT, style);
   }
   const handAuthored = HAND_AUTHORED_DESIGNS[variant];
   if (handAuthored) {
-    const voxels = handAuthored();
+    const voxels = handAuthored(variantIndex);
     return { name: variant, voxelCount: voxels.length, voxels };
   }
   return generatePlaceholderBlueprint(totalBlocks, CATEGORY_COLOR[category]);

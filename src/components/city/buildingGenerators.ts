@@ -119,10 +119,23 @@ function isWin(
 }
 
 // ── Short Apartment  20×10×20 = 4,000 ───────────────────────────────────────
+// Palette varies per building instance (2026-08-12, user request: "less
+// variety than houses, but still noticeably different") — a small fixed set
+// of wall/roof/trim combos rather than houses' full per-instance style pool
+// (HOUSE_STYLE_POOL in blueprintForVariant.ts), picked by variantIndex % length.
 
-export function generateShortApartment(): BlueprintVoxel[] {
+const SHORT_APARTMENT_PALETTES: { wall: number; roof: number; trim: number }[] = [
+  { wall: 0xc05030, roof: 0x4a4a6a, trim: 0x8a3a28 }, // original red brick
+  { wall: 0x8a9e7a, roof: 0x445566, trim: 0x6a7a5a }, // sage green
+  { wall: 0xc09060, roof: 0x7a5535, trim: 0x9a7a4a }, // adobe tan
+  { wall: 0x9a9a9a, roof: 0x334455, trim: 0x777777 }, // modern grey
+  { wall: 0xaa8866, roof: 0x3a6033, trim: 0x6b4828 }, // cottage brown
+]
+
+export function generateShortApartment(variantIndex = 0): BlueprintVoxel[] {
   const W = 20, D = 10, H = 20, FH = 4
-  const WALL = 0xc05030, ROOF = 0x4a4a6a, FOUND = 0x7a8090, TRIM = 0x8a3a28
+  const { wall: WALL, roof: ROOF, trim: TRIM } = SHORT_APARTMENT_PALETTES[variantIndex % SHORT_APARTMENT_PALETTES.length]
+  const FOUND = 0x7a8090
   return solid(W, D, H, (x, y, z) => {
     if (y === H - 1) return { type: "roof", color: ROOF }
     if (y === 0) return { type: "stone", color: FOUND }
@@ -477,8 +490,11 @@ export function generateFountain(): BlueprintVoxel[] {
 // design; house keeps using generateHouseBlueprint (a recolor of the imported
 // blueprint, not a fixed shape generator like these). "church" and
 // "fountain" are not among the 158 real QR-linked buildings — see their own
-// generators' comments.
-export const HAND_AUTHORED_DESIGNS: Partial<Record<string, () => BlueprintVoxel[]>> = {
+// generators' comments. Every generator receives a per-building variantIndex
+// (2026-08-12) — only generateShortApartment uses it so far (palette
+// variety), the rest ignore the argument, which TS allows for a function
+// with fewer declared params than the Record's value type expects.
+export const HAND_AUTHORED_DESIGNS: Partial<Record<string, (variantIndex: number) => BlueprintVoxel[]>> = {
   short_apartment: generateShortApartment,
   tall_apartment: generateTallApartment,
   food_bank: generateFoodBank,

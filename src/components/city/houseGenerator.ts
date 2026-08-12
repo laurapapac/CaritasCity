@@ -54,42 +54,70 @@ export interface HouseStyle {
   seed:         number
 }
 
-export type StylePreset = "classic" | "nordic" | "adobe" | "modern" | "cottage"
+export type StylePreset =
+  | "classic" | "nordic" | "adobe" | "modern" | "cottage"
+  | "coastal" | "sunny" | "burgundy" | "lavender" | "charcoal"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Colour palettes (each entry = one possible pick per house)
+// 10 presets total (2026-08-12, user request: "double the amount of colors
+// used for houses, make it 10 instead of 5") — the original 5 plus 5 more
+// distinct color families (coastal blue, sunny cream, burgundy wine-red,
+// lavender mauve, charcoal near-black), each still deliberately different
+// enough from its neighbors that a house's preset reads as a real color
+// family, not just a slightly-different shade of an existing one.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const WALL_PALETTES: Record<StylePreset, readonly string[]> = {
-  classic: ["0xc05030", "0xb84030", "0xcc6644", "0xbe5040"],
-  nordic:  ["0x7a8e6a", "0x8a9e7a", "0x6a7a5a", "0x90a07a"],
-  adobe:   ["0xc09060", "0xb08050", "0xd0a070", "0xa07848"],
-  modern:  ["0x8a8a8a", "0x9a9a9a", "0x7a7a7a", "0x888880"],
-  cottage: ["0xaa8866", "0x997755", "0xbb9977", "0xaa9060"],
+  classic:  ["0xc05030", "0xb84030", "0xcc6644", "0xbe5040"],
+  nordic:   ["0x7a8e6a", "0x8a9e7a", "0x6a7a5a", "0x90a07a"],
+  adobe:    ["0xc09060", "0xb08050", "0xd0a070", "0xa07848"],
+  modern:   ["0x8a8a8a", "0x9a9a9a", "0x7a7a7a", "0x888880"],
+  cottage:  ["0xaa8866", "0x997755", "0xbb9977", "0xaa9060"],
+  coastal:  ["0x6a95b0", "0x7aa5c0", "0x5a85a0", "0x8ab5d0"],
+  sunny:    ["0xd9c078", "0xc9b068", "0xe0c888", "0xccaa60"],
+  burgundy: ["0x6a2030", "0x7a2838", "0x5a1828", "0x8a3040"],
+  lavender: ["0x9a7a9a", "0xaa8aaa", "0x8a6a8a", "0xb090b0"],
+  charcoal: ["0x3a3a3a", "0x2a2a2a", "0x454545", "0x1a1a1a"],
 }
 
 export const ROOF_PALETTES: Record<StylePreset, readonly string[]> = {
-  classic: ["0x8b3a3a", "0x7a2a2a", "0x993a3a"],
-  nordic:  ["0x445566", "0x334455", "0x3a4a66"],
-  adobe:   ["0x7a5535", "0x8a6545", "0x6a4525"],
-  modern:  ["0x334455", "0x223344", "0x445566"],
-  cottage: ["0x3a6033", "0x4a7043", "0x2a5025"],
+  classic:  ["0x8b3a3a", "0x7a2a2a", "0x993a3a"],
+  nordic:   ["0x445566", "0x334455", "0x3a4a66"],
+  adobe:    ["0x7a5535", "0x8a6545", "0x6a4525"],
+  modern:   ["0x334455", "0x223344", "0x445566"],
+  cottage:  ["0x3a6033", "0x4a7043", "0x2a5025"],
+  coastal:  ["0x2a3a55", "0x1a2a45", "0x33445a"],
+  sunny:    ["0x6a4a2a", "0x5a3a1a", "0x7a5a3a"],
+  burgundy: ["0x2a2a2a", "0x1a1a1a", "0x3a3a3a"],
+  lavender: ["0x4a3a4a", "0x3a2a3a", "0x5a4a5a"],
+  charcoal: ["0x1a1a1a", "0x0a0a0a", "0x252525"],
 }
 
 export const TRIM_PALETTES: Record<StylePreset, readonly string[]> = {
-  classic: ["0x8b5e3c", "0x7a4e2c"],
-  nordic:  ["0x7a6a5a", "0x6a5a4a"],
-  adobe:   ["0x9a7a4a", "0x8a6a3a"],
-  modern:  ["0x666666", "0x777777"],
-  cottage: ["0x6b4828", "0x5b3818"],
+  classic:  ["0x8b5e3c", "0x7a4e2c"],
+  nordic:   ["0x7a6a5a", "0x6a5a4a"],
+  adobe:    ["0x9a7a4a", "0x8a6a3a"],
+  modern:   ["0x666666", "0x777777"],
+  cottage:  ["0x6b4828", "0x5b3818"],
+  coastal:  ["0xe8e8e0", "0xd8d8d0"],
+  sunny:    ["0xf0ead0", "0xe0dac0"],
+  burgundy: ["0x3a2a28", "0x2a1a18"],
+  lavender: ["0xe8e0e8", "0xd8d0d8"],
+  charcoal: ["0xc0c0c0", "0xd0d0d0"],
 }
 
 export const WINDOW_PALETTES: Record<StylePreset, readonly string[]> = {
-  classic: ["0x90c8d8", "0x88bbcc"],
-  nordic:  ["0xaaddee", "0x99ccdd"],
-  adobe:   ["0x88ccaa", "0x99ddbb"],
-  modern:  ["0xcceeFF", "0xddf0ff"],
-  cottage: ["0x99ddbb", "0x88cc99"],
+  classic:  ["0x90c8d8", "0x88bbcc"],
+  nordic:   ["0xaaddee", "0x99ccdd"],
+  adobe:    ["0x88ccaa", "0x99ddbb"],
+  modern:   ["0xcceeFF", "0xddf0ff"],
+  cottage:  ["0x99ddbb", "0x88cc99"],
+  coastal:  ["0xaee0f5", "0x9ed0e8"],
+  sunny:    ["0x90c8d8", "0x88bbcc"],
+  burgundy: ["0xccaa88", "0xbb9977"],
+  lavender: ["0xcce8f0", "0xbbd8e8"],
+  charcoal: ["0xaad4e0", "0x9ac4d0"],
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

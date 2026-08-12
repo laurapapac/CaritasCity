@@ -42,7 +42,7 @@ export default function DevCityPreview() {
       id: entry.buildingId,
       category: entry.category,
       position: { x: entry.x, z: entry.z },
-      blueprint: blueprintForVariant(entry.variant, entry.category, entry.totalBlocks),
+      blueprint: blueprintForVariant(entry.variant, entry.category, entry.totalBlocks, entry.buildingId),
       totalBlocks: entry.totalBlocks,
       completedBlocks: entry.totalBlocks,
     }));

@@ -60,7 +60,7 @@ function buildCityBuilding(b: BuildingState): CityBuilding {
     id: b.id,
     category: b.category,
     position: PLOTS[b.category],
-    blueprint: blueprintForVariant(b.variant, b.category, b.totalBlocks),
+    blueprint: blueprintForVariant(b.variant, b.category, b.totalBlocks, b.id),
     totalBlocks: b.totalBlocks,
     // One behind the server — the boot-reveal effect plays the last block's
     // animation to catch back up, instead of just appearing already-there.
