@@ -399,23 +399,30 @@ function insetParkTiles(tiles: Rect[], keptLeaves: Rect[]): Rect[] {
         const pz0 = zSorted[zi], pz1 = zSorted[zi + 1]
         if (px1 - px0 < 0.5 || pz1 - pz0 < 0.5) continue
         const midX = (px0 + px1) / 2, midZ = (pz0 + pz1) / 2
-        const insetX0 = Math.abs(px0 - tile.x0) < 0.5 && insetAt(x0c, midZ)
-        const insetX1 = Math.abs(px1 - tile.x1) < 0.5 && insetAt(x1c, midZ)
-        const insetZ0 = Math.abs(pz0 - tile.z0) < 0.5 && insetAt(z0c, midX)
-        const insetZ1 = Math.abs(pz1 - tile.z1) < 0.5 && insetAt(z1c, midX)
-        const rx0 = px0 + (insetX0 ? PARK_ROAD_INSET : 0)
-        const rx1 = px1 - (insetX1 ? PARK_ROAD_INSET : 0)
-        const rz0 = pz0 + (insetZ0 ? PARK_ROAD_INSET : 0)
-        const rz1 = pz1 - (insetZ1 ? PARK_ROAD_INSET : 0)
-        // A grid cell narrower than PARK_ROAD_INSET (possible when a
-        // neighboring leaf's edge doesn't line up exactly with this tile's
-        // own boundary — e.g. the sliver a mismatched south-neighbor edge
-        // introduces just inside a real west-side road) insets past its own
-        // opposite edge, producing a reversed rect that renders back at the
-        // raw, un-inset boundary — i.e. right on top of the road it was
-        // supposed to clear (2026-08-12, user-spotted overlap). Too thin to
-        // render meaningfully either way, so drop it instead of keeping the
-        // degenerate result.
+        // Effective inset boundary lines, computed straight from the tile's
+        // own true edges — NOT "does this band's raw edge exactly match the
+        // tile's original corner." A mismatched neighbor on an unrelated
+        // side (e.g. classifyEdgeIntervals's z0/z1 pass, for this tile's
+        // south edge) can introduce an extra x-cut a fraction of a unit
+        // inside the true x0 boundary, splitting the west edge into two
+        // bands; only the first ever touched the literal original x0, so
+        // the second silently skipped its inset entirely and rendered at
+        // the raw, un-inset boundary — on top of the road it was supposed
+        // to clear (2026-08-12, user-spotted overlap, still present after
+        // the first fix here only dropped the degenerate first band).
+        // Clipping every band against the same effective line — regardless
+        // of how many internal cut points fragment the true edge — fixes
+        // both that and the original reversed-rect case in one pass: a
+        // band entirely inside the inset margin now clips to nothing
+        // (dropped below) instead of either overshooting or being skipped.
+        const effX0 = tile.x0 + (insetAt(x0c, midZ) ? PARK_ROAD_INSET : 0)
+        const effX1 = tile.x1 - (insetAt(x1c, midZ) ? PARK_ROAD_INSET : 0)
+        const effZ0 = tile.z0 + (insetAt(z0c, midX) ? PARK_ROAD_INSET : 0)
+        const effZ1 = tile.z1 - (insetAt(z1c, midX) ? PARK_ROAD_INSET : 0)
+        const rx0 = Math.max(px0, effX0)
+        const rx1 = Math.min(px1, effX1)
+        const rz0 = Math.max(pz0, effZ0)
+        const rz1 = Math.min(pz1, effZ1)
         if (rx1 <= rx0 || rz1 <= rz0) continue
         result.push({ x0: rx0, x1: rx1, z0: rz0, z1: rz1 })
       }
