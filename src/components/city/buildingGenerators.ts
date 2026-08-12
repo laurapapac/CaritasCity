@@ -150,10 +150,23 @@ export function generateShortApartment(variantIndex = 0): BlueprintVoxel[] {
 }
 
 // ── Tall Apartment  16×10×50 = 8,000 ────────────────────────────────────────
+// Palette varies per building instance (2026-08-12 follow-up to short_apartment
+// variety) — same fixed-pool-by-variantIndex pattern as SHORT_APARTMENT_PALETTES.
+// Index 0 is the original blue-grey look, kept first/unchanged so it stays
+// available exactly as the user asked ("the blue would be okay for all").
 
-export function generateTallApartment(): BlueprintVoxel[] {
+const TALL_APARTMENT_PALETTES: { wall: number; roof: number; trim: number }[] = [
+  { wall: 0x8898aa, roof: 0x334455, trim: 0x6688aa }, // original blue-grey
+  { wall: 0x3a6b6e, roof: 0x1e3638, trim: 0x2a4f52 }, // deep slate teal
+  { wall: 0x555a63, roof: 0x22262c, trim: 0x3d434c }, // dark modern charcoal
+  { wall: 0x4f6b52, roof: 0x2c3b2e, trim: 0x3a5240 }, // deep institutional green
+  { wall: 0xa89078, roof: 0x5a4f3f, trim: 0x8a7a62 }, // sandstone tan
+]
+
+export function generateTallApartment(variantIndex = 0): BlueprintVoxel[] {
   const W = 16, D = 10, H = 50, FH = 5
-  const WALL = 0x8898aa, ROOF = 0x334455, FOUND = 0x666677, TRIM = 0x6688aa
+  const { wall: WALL, roof: ROOF, trim: TRIM } = TALL_APARTMENT_PALETTES[variantIndex % TALL_APARTMENT_PALETTES.length]
+  const FOUND = 0x666677
   return solid(W, D, H, (x, y, z) => {
     if (y === H - 1) return { type: "roof", color: ROOF }
     if (y === 0) return { type: "stone", color: FOUND }
@@ -491,9 +504,9 @@ export function generateFountain(): BlueprintVoxel[] {
 // blueprint, not a fixed shape generator like these). "church" and
 // "fountain" are not among the 158 real QR-linked buildings — see their own
 // generators' comments. Every generator receives a per-building variantIndex
-// (2026-08-12) — only generateShortApartment uses it so far (palette
-// variety), the rest ignore the argument, which TS allows for a function
-// with fewer declared params than the Record's value type expects.
+// (2026-08-12) — generateShortApartment and generateTallApartment use it for
+// palette variety, the rest ignore the argument, which TS allows for a
+// function with fewer declared params than the Record's value type expects.
 export const HAND_AUTHORED_DESIGNS: Partial<Record<string, (variantIndex: number) => BlueprintVoxel[]>> = {
   short_apartment: generateShortApartment,
   tall_apartment: generateTallApartment,
