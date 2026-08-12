@@ -1168,26 +1168,25 @@ const lakeEastZone = lakeZones.find((z) => z.id === "lake_east")
 const lakeEastLeaf = lakeEastZone ? keptLeaves.find((r) => rectIntersectsZone(r, lakeEastZone)) : undefined
 const LAKE_EAST_ROAD_CLEARANCE = 5 // gap between the beach rect's outer edge and the road
 // Ellipse radii + rotation picked by hand (design decision, like the rest of
-// this file's bespoke numbers), refined over three follow-ups (2026-08-12):
-// widened (radiusX 30→34), then rotation set to 24° "toward east" and both
-// radii scaled 1.125x (34→38.25, 20→22.5), then nudged south. Checked
-// against the beach rect's half-extents each time via the ACTUAL generated
-// polygon bounds (not just the theoretical worst-case wobble formula, which
-// turned out far more pessimistic than what the seeded RNG actually
-// produces — e.g. the radiusX=34 run's real bounds left 5.8-16.4 units of
-// margin against beach half-extents the formula predicted as low as ~3.9) —
+// this file's bespoke numbers), refined over several follow-ups (2026-08-12):
+// widened (radiusX 30→34), rotated 24° "toward east" and both radii scaled
+// 1.125x (34→38.25, 20→22.5), then rotation tried at 0° instead (user
+// preferred it — reads more upright/axis-aligned) and kept. Checked against
+// the beach rect's half-extents each time via the ACTUAL generated polygon
+// bounds (not just the theoretical worst-case wobble formula, which turned
+// out far more pessimistic than what the seeded RNG actually produces) —
 // verify the same way (compare LAKES/BEACHES output bounds directly) if
-// these numbers change again. Rotation is NEGATIVE 24° (not +24): the
+// these numbers change again. Note if rotation is ever reintroduced: the
 // wobble's specific seeded bumps land differently depending on rotation
-// sign, and +24° pushed one bump 1.5 units past the beach's south edge —
-// -24° reads the same "tilted toward east" but clears every side (the
-// south margin, at 3.5, is the tightest of the four).
-const LAKE_EAST_ELLIPSE = { radiusX: 34 * 1.125, radiusZ: 20 * 1.125, rotation: (-24 * Math.PI) / 180 }
-// Lake center nudged south (smaller z) from the block's true center — a
+// sign — +24° once pushed a bump past the beach's south edge where -24°
+// (same visual tilt) cleared every side, so check both signs, not just one.
+const LAKE_EAST_ELLIPSE = { radiusX: 34 * 1.125, radiusZ: 20 * 1.125, rotation: 0 }
+// Lake center nudged south (smaller z) of the block's true center — a
 // purely visual offset, independent of the beach (which still fills the
 // whole block from the leaf's real center) since the two are computed
-// separately below.
-const LAKE_EAST_SOUTH_OFFSET = 4
+// separately below. Started at 4, reduced to 2 (user: "move it a tiny bit
+// north" of where it was) — still slightly south of dead-center, just less.
+const LAKE_EAST_SOUTH_OFFSET = 2
 let lakeEastCenter: Point | undefined
 let beachRect: Rect | undefined
 if (lakeEastLeaf) {
