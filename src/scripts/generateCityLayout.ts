@@ -759,9 +759,20 @@ const ZONE_BUFFER_SQ_UNITS_PER_TREE = 100
 const CHURCH_POSITION: Point = { x: 0, z: 165 }
 const CHURCH_TREE_CLEARANCE = 24
 
+// True for the one leaf the hand-placed church sits in — excluded from
+// generateZoneBufferTrees entirely (2026-08-12, user reference image with a
+// hand-drawn rectangle around the church's block: remove every tree in that
+// block except the ones lining its roads). Road trees are untouched — they
+// come from generateRoadTrees over the real road segments bordering this
+// leaf, a completely separate generator this function never feeds into.
+function leafContainsChurch(r: Rect): boolean {
+  return CHURCH_POSITION.x >= r.x0 && CHURCH_POSITION.x <= r.x1 &&
+         CHURCH_POSITION.z >= r.z0 && CHURCH_POSITION.z <= r.z1
+}
+
 function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[]): Point[] {
   const trees: Point[] = []
-  const bufferLeaves = keptLeaves.filter((r) => rectIntersectsAnyZone(r))
+  const bufferLeaves = keptLeaves.filter((r) => rectIntersectsAnyZone(r) && !leafContainsChurch(r))
   for (const rect of bufferLeaves) {
     const x0 = rect.x0 + 2, x1 = rect.x1 - 2
     const z0 = rect.z0 + 2, z1 = rect.z1 - 2
@@ -993,6 +1004,30 @@ for (const zone of parkZones) parkTilesById.set(zone.id, parkTilesFor(zone, kept
 // tile SETS above are finalized so the shared-edge detection sees the full
 // (including park_north's extra leaf) picture.
 for (const [id, tiles] of parkTilesById) parkTilesById.set(id, insetParkTiles(tiles, keptLeaves))
+
+// Keep the church clear of park_north's rendered polygon (2026-08-12, user
+// reference images with hand-drawn annotations, iterated three times same
+// day). park_north's flood-fill (parkTilesFor) picked up the BSP leaf the
+// hand-placed church sits in — and the leaf chained on past it further east
+// — since all of that was already zone-excluded territory (over-claimed by
+// park_north's circle, same permissive rectIntersectsAnyZone pattern noted
+// throughout this file), even though the church itself sits well outside
+// park_north's actual circle. First two passes tried clipping/dropping the
+// wrong side of the church; user's final call: restore the original west
+// cluster exactly as it was and drop the whole east extension (the leaves
+// past the church) instead. The two clusters share one exact BSP leaf
+// boundary (x ≈ -26.64, where the west cluster's easternmost tiles border
+// the leaf the east extension continues from) — keeping only tiles fully
+// west of that boundary removes the entire east extension (church's leaf
+// included) with no partial clipping needed, and leaves the west cluster
+// byte-for-byte untouched (it was never west of any cut to begin with).
+// Purely a rendering choice either way — every tile here stays
+// zone-excluded from buildings/roads regardless (unaffected).
+const PARK_NORTH_WEST_CLUSTER_MAX_X = -26
+function dropParkNorthEastExtension(tiles: Rect[]): Rect[] {
+  return tiles.filter((t) => Math.max(t.x0, t.x1) <= PARK_NORTH_WEST_CLUSTER_MAX_X)
+}
+parkTilesById.set("park_north", dropParkNorthEastExtension(parkTilesById.get("park_north")!))
 
 // Lake visual size/position (2026-08-11 follow-up: "make the lake slightly
 // bigger and slightly closer to the center of the park") is intentionally
