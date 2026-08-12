@@ -267,10 +267,27 @@ export function generateRestaurant(variantIndex = 0): BlueprintVoxel[] {
 }
 
 // ── School  50×10×10 = 5,000 ────────────────────────────────────────────────
+// Multi-color per building (2026-08-12, user request: "schools tend to be
+// [multi-color] in real life... i would like 3 variants") — unlike every
+// other hand-authored generator here (one wall color per building), each
+// school splits its 50-wide front/back into 4 vertical color sections (like
+// real schools' colorful panel architecture), picked from one of 3
+// SCHOOL_PALETTES via variantIndex. Roof/foundation/trim come from the same
+// palette entry (not a globally-fixed neutral) so each scheme reads as one
+// coordinated design — index 0 preserves the original tan/blue/gold look,
+// now expressed as an alternating panel rhythm instead of one flat wall.
 
-export function generateSchool(): BlueprintVoxel[] {
+const SCHOOL_PALETTES: { colors: readonly number[]; roof: number; found: number; trim: number }[] = [
+  { colors: [0xddc870, 0x6688aa, 0xddc870, 0xaa9444], roof: 0x6688aa, found: 0x9a8040, trim: 0xaa9444 }, // original tan/blue, now paneled
+  { colors: [0xd64545, 0x4a7bc9, 0xe0c040, 0x5a9e4f], roof: 0x556070, found: 0x8a8a86, trim: 0xe8e8e2 }, // primary colors
+  { colors: [0xc06a45, 0xd4a83c, 0x3a8a82, 0x4a4a50], roof: 0x3a3f47, found: 0x7a746c, trim: 0xd8d4c8 }, // warm modern
+]
+
+export function generateSchool(variantIndex = 0): BlueprintVoxel[] {
   const W = 50, D = 10, H = 10, FH = 5
-  const WALL = 0xddc870, ROOF = 0x6688aa, FOUND = 0x9a8040, TRIM = 0xaa9444
+  const { colors, roof: ROOF, found: FOUND, trim: TRIM } = SCHOOL_PALETTES[variantIndex % SCHOOL_PALETTES.length]
+  const sectionWidth = W / colors.length
+  const wallColorAt = (x: number) => colors[Math.min(colors.length - 1, Math.floor(x / sectionWidth))]
   const cx = Math.floor(W / 2)
   return solid(W, D, H, (x, y, z) => {
     if (y === H - 1) return { type: "roof", color: ROOF }
@@ -287,9 +304,9 @@ export function generateSchool(): BlueprintVoxel[] {
       // Side windows
       if ((x === 0 || x === W - 1) && z > 0 && z < D - 1 && z % 2 === 1)
         return { type: "window", color: GLASS_HEX }
-      return { type: "wall", color: WALL }
+      return { type: "wall", color: wallColorAt(x) }
     }
-    return { type: fy === 0 ? "floor" : "wall", color: fy === 0 ? 0x9a8040 : WALL }
+    return { type: fy === 0 ? "floor" : "wall", color: fy === 0 ? FOUND : wallColorAt(x) }
   })
 }
 
@@ -533,7 +550,9 @@ export function generateFountain(): BlueprintVoxel[] {
 // "fountain" are not among the 158 real QR-linked buildings — see their own
 // generators' comments. Every generator receives a per-building variantIndex
 // (2026-08-12) — generateShortApartment, generateTallApartment,
-// generateFoodBank, and generateRestaurant use it for palette variety, the
+// generateFoodBank, generateRestaurant, and generateSchool use it for
+// palette variety (generateSchool alone uses it for multi-color panel
+// sections within one building, not just a single wall color), the
 // rest ignore the argument, which TS allows for a function with fewer
 // declared params than the Record's value type expects.
 export const HAND_AUTHORED_DESIGNS: Partial<Record<string, (variantIndex: number) => BlueprintVoxel[]>> = {
