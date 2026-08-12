@@ -5,18 +5,28 @@
  * THREE.Group — no per-frame updates, no gameplay/DB tie-in.
  *
  * Y-stacking (bottom to top): ground(0) < grid(0.05, cityScene.ts) <
- * roads(0.10) < plazas(0.12) < parks(0.15) < lakes(0.20). Keep every layer at
- * least ~0.02 apart — cramming them closer (an earlier version had roads and
- * the grid at the identical y=0.02) is what caused z-fighting/flicker at long
- * camera distances, fixed alongside logarithmicDepthBuffer in cityScene.ts.
- * All values stay far under the ~1-unit building-foundation floor.
+ * roads(0.10) < plazas(0.12) < parks(0.15) < beaches(0.17) < lakes(0.20).
+ * Keep every layer at least ~0.02 apart — cramming them closer (an earlier
+ * version had roads and the grid at the identical y=0.02) is what caused
+ * z-fighting/flicker at long camera distances, fixed alongside
+ * logarithmicDepthBuffer in cityScene.ts. All values stay far under the
+ * ~1-unit building-foundation floor.
  *
  * Parks/lakes shape overhaul (2026-08-11): parks render as a merged rectangle
  * per block tile (ParkShape.tiles, following the block grid instead of a
  * disc); lakes render as a THREE.Shape traced from an organic blob outline
  * (LakeShape.points) instead of a circle. See cityDecor.ts's doc comment for
  * why (matches user's reference image). No fountains — added, then removed
- * again at the user's request in the same follow-up round.
+ * again at the user's request in the same follow-up round (a different,
+ * hand-placed voxel fountain landmark was added later, see
+ * buildingGenerators.ts's generateFountain).
+ *
+ * Beaches (2026-08-12): a plain rect (BeachShape, like a park tile) filling
+ * a lake's block minus road clearance, rendered under the lake — the lake's
+ * own smaller, organic (and for lake_east, elliptical + rotated) shape
+ * naturally covers the middle, leaving a ring whose width varies around the
+ * lake rather than a uniform band. See generateCityLayout.ts's lake_east
+ * doc comment for the sizing logic (lake_east only, so far).
  */
 
 import * as THREE from "three"
@@ -25,6 +35,7 @@ import type { CityDecor, OrientedMarker } from "./types"
 
 const PARK_COLOR = 0x4f8f3f
 const LAKE_COLOR = 0x3a7bd5
+const BEACH_COLOR = 0xd9d9d9
 const ROAD_COLOR = 0x555a5e
 const BUSH_COLOR = 0x3d7a3f
 const LAMP_POLE_COLOR = 0x2b2b2b
@@ -246,6 +257,14 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
     tileGeometries.forEach((g) => g.dispose())
     const mat = new THREE.MeshLambertMaterial({ color: PARK_COLOR })
     group.add(new THREE.Mesh(merged, mat))
+  }
+
+  for (const beach of decor.beaches ?? []) {
+    const geo = new THREE.PlaneGeometry(beach.x1 - beach.x0, beach.z1 - beach.z0)
+    geo.rotateX(-Math.PI / 2)
+    geo.translate((beach.x0 + beach.x1) / 2, 0.17, (beach.z0 + beach.z1) / 2)
+    const mat = new THREE.MeshLambertMaterial({ color: BEACH_COLOR })
+    group.add(new THREE.Mesh(geo, mat))
   }
 
   for (const lake of decor.lakes) {

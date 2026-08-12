@@ -452,6 +452,35 @@ function sampleBlobPolygon(rng: RNG, cx: number, cz: number, baseRadius: number,
   return points
 }
 
+// Same wobbly-outline idea as sampleBlobPolygon, but elliptical (independent
+// x/z radii) and rotated — for a lake meant to read as an elongated, angled
+// shape filling most of a rectangular block (2026-08-12, user reference
+// image) rather than a wobbly circle. Wobble amplitude is toned down from
+// sampleBlobPolygon's (18%/10% vs 22%/12%) since the ellipse+rotation
+// combination already has less margin to the block's edges to work with —
+// see the lake_east sizing comment below for the worst-case-extent math this
+// assumes.
+function sampleEllipticalBlob(
+  rng: RNG, cx: number, cz: number, radiusX: number, radiusZ: number, rotation: number, segments = 24
+): Point[] {
+  const freq1 = 2 + Math.floor(rng.next() * 2)
+  const freq2 = 5 + Math.floor(rng.next() * 3)
+  const phase1 = rng.next() * Math.PI * 2
+  const phase2 = rng.next() * Math.PI * 2
+  const cos = Math.cos(rotation), sin = Math.sin(rotation)
+  const points: Point[] = []
+  for (let i = 0; i < segments; i++) {
+    const theta = (i / segments) * Math.PI * 2
+    const wobble = 1 + 0.18 * Math.sin(freq1 * theta + phase1) + 0.10 * Math.sin(freq2 * theta + phase2)
+    const ex = radiusX * wobble * Math.cos(theta)
+    const ez = radiusZ * wobble * Math.sin(theta)
+    const rx = ex * cos - ez * sin
+    const rz = ex * sin + ez * cos
+    points.push({ x: Math.round((cx + rx) * 10) / 10, z: Math.round((cz + rz) * 10) / 10 })
+  }
+  return points
+}
+
 // Recursively splits `rect` in two along its longer axis (so blocks stay
 // roughly proportioned, not skinny slivers), at a randomized 38-62% fraction,
 // until a leaf is small enough or deep enough to stop. Returns every leaf
@@ -775,20 +804,22 @@ const ZONE_BUFFER_SQ_UNITS_PER_TREE = 100
 const CHURCH_POSITION: Point = { x: 0, z: 165 }
 const CHURCH_TREE_CLEARANCE = 24
 
-// True for the one leaf the hand-placed church sits in — excluded from
-// generateZoneBufferTrees entirely (2026-08-12, user reference image with a
-// hand-drawn rectangle around the church's block: remove every tree in that
-// block except the ones lining its roads). Road trees are untouched — they
-// come from generateRoadTrees over the real road segments bordering this
-// leaf, a completely separate generator this function never feeds into.
-function leafContainsChurch(r: Rect): boolean {
-  return CHURCH_POSITION.x >= r.x0 && CHURCH_POSITION.x <= r.x1 &&
-         CHURCH_POSITION.z >= r.z0 && CHURCH_POSITION.z <= r.z1
+// True when `point` falls inside leaf `r` — used to find the one BSP leaf a
+// given hand-placed landmark or lake sits in, so its interior can be
+// excluded from generateZoneBufferTrees below (2026-08-12: first for the
+// church's own leaf — user reference image with a hand-drawn rectangle
+// around its block, wanting every tree gone except the ones lining its
+// roads — then the same treatment for lake_east's leaf). Road trees are
+// untouched either way — they come from generateRoadTrees over the real
+// road segments bordering a leaf, a completely separate generator this
+// function never feeds into.
+function leafContainsPoint(r: Rect, point: Point): boolean {
+  return point.x >= r.x0 && point.x <= r.x1 && point.z >= r.z0 && point.z <= r.z1
 }
 
-function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[]): Point[] {
+function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[], excludeLeaves: Rect[]): Point[] {
   const trees: Point[] = []
-  const bufferLeaves = keptLeaves.filter((r) => rectIntersectsAnyZone(r) && !leafContainsChurch(r))
+  const bufferLeaves = keptLeaves.filter((r) => rectIntersectsAnyZone(r) && !excludeLeaves.includes(r))
   for (const rect of bufferLeaves) {
     const x0 = rect.x0 + 2, x1 = rect.x1 - 2
     const z0 = rect.z0 + 2, z1 = rect.z1 - 2
@@ -890,17 +921,15 @@ function generateLampPosts(rng: RNG, blocks: BlockState[]): OrientedPoint[] {
 }
 
 // User request (2026-08-12, reference image of the church's block): a street
-// lamp "between every three" of the road trees lining that block, on top of
-// the block-interior lamps generateLampPosts already places elsewhere. The
-// church's own leaf is zone-excluded (see leafContainsChurch), so it
-// contributes none of its own road edges — every real road bordering it
-// (south/east/north in full, west only for the short sub-range where a real
-// buildable leaf sits across from it — see the DevCityPreview.tsx comment on
-// CHURCH_POSITION for the leaf's exact bounds) comes entirely from its
-// non-excluded neighbors. Rather than re-deriving that adjacency, this walks
-// the real, already-computed road segments and keeps only the ones lying
-// exactly on the leaf's own boundary.
-const CHURCH_LAMP_GROUP_SIZE = 2
+// lamp "between every two" of the road trees lining that block, on top of
+// the block-interior lamps generateLampPosts already places elsewhere —
+// later reused the same way for lake_east's block. A zone-excluded leaf
+// (see leafContainsPoint) contributes none of its own road edges — every
+// real road bordering it comes entirely from its non-excluded neighbors.
+// Rather than re-deriving that adjacency, this walks the real,
+// already-computed road segments and keeps only the ones lying exactly on
+// the leaf's own boundary.
+const LEAF_LAMP_GROUP_SIZE = 2
 
 function segmentBordersLeaf(seg: RoadSegment, leaf: Rect): boolean {
   const EPS = 1
@@ -922,7 +951,7 @@ function segmentBordersLeaf(seg: RoadSegment, leaf: Rect): boolean {
 // interval (in the gap after that many trees), on whichever side of the road
 // faces into the leaf, and clipped to the leaf's own span (a shared segment
 // can run past the leaf's corner into a wider neighbor's edge).
-function generateChurchLeafLamps(leaf: Rect, roadSegments: RoadSegment[]): OrientedPoint[] {
+function generateLeafBorderLamps(leaf: Rect, roadSegments: RoadSegment[]): OrientedPoint[] {
   const lamps: OrientedPoint[] = []
   const center = { x: (leaf.x0 + leaf.x1) / 2, z: (leaf.z0 + leaf.z1) / 2 }
   for (const seg of roadSegments) {
@@ -937,7 +966,7 @@ function generateChurchLeafLamps(leaf: Rect, roadSegments: RoadSegment[]): Orien
 
     let i = 0
     for (let t = TREE_MARGIN; t <= length - TREE_MARGIN; t += TREE_SPACING, i++) {
-      if (i % CHURCH_LAMP_GROUP_SIZE !== CHURCH_LAMP_GROUP_SIZE - 1) continue
+      if (i % LEAF_LAMP_GROUP_SIZE !== LEAF_LAMP_GROUP_SIZE - 1) continue
       const tMid = Math.min(t + TREE_SPACING / 2, length - TREE_MARGIN)
       const cx = seg.x1 + ux * tMid, cz = seg.z1 + uz * tMid
       if (cx < leaf.x0 - 1 || cx > leaf.x1 + 1 || cz < leaf.z0 - 1 || cz > leaf.z1 + 1) continue
@@ -1114,10 +1143,60 @@ parkTilesById.set("park_north", dropParkNorthEastExtension(parkTilesById.get("pa
 // the user explicitly asked not to touch. Overriding only the rendered blob,
 // nudged toward its own containing tile's centroid, stays entirely inside
 // already-excluded park territory (no building/road ever placed there) so
-// it's a purely visual change. Only central_lake gets an override; lake_east
-// renders at its literal zone size/position, unchanged.
+// it's a purely visual change.
 const LAKE_VISUAL_OVERRIDES: Record<string, { radius: number; center: Point }> = {
   central_lake: { radius: 22, center: { x: 20, z: 1 } },
+}
+
+// lake_east's own BSP leaf (2026-08-12, user request: center the lake in its
+// block and enlarge it, with a sandy "beach" filling the rest of the block
+// between the water and each bordering road). Unlike park_north, lake_east's
+// leaf is a single simple rectangle — every one of its 4 sides borders a
+// real, non-zone-excluded neighbor (confirmed via a debug dump of keptLeaves
+// during this session) — so its center/size can be derived directly from the
+// leaf's own dimensions instead of hand-picked constants.
+//
+// Follow-up same day (reference image): a plain circular beach with a
+// uniform ring didn't match — user wants the beach to fill the WHOLE
+// rectangular block (not just a circle sized to the shorter side), and the
+// lake enlarged into a bigger, elongated, ROTATED blob (not a wobbly circle)
+// so the beach's visible width varies naturally around it, same as the
+// reference. Beach is now a rect (like a park tile) inset from the leaf's
+// edges by LAKE_EAST_ROAD_CLEARANCE; the lake uses sampleEllipticalBlob
+// (independent x/z radii + a rotation) instead of sampleBlobPolygon.
+const lakeEastZone = lakeZones.find((z) => z.id === "lake_east")
+const lakeEastLeaf = lakeEastZone ? keptLeaves.find((r) => rectIntersectsZone(r, lakeEastZone)) : undefined
+const LAKE_EAST_ROAD_CLEARANCE = 5 // gap between the beach rect's outer edge and the road
+// Ellipse radii + rotation picked by hand (design decision, like the rest of
+// this file's bespoke numbers), then checked against the beach rect's
+// half-extents using the worst-case wobbled+rotated bounding box: with
+// radiusX=34/radiusZ=20/rotation=25° and this function's toned-down ±18%/10%
+// wobble (worst case ~1.28x nominal), the rotated ellipse's axis-aligned
+// half-extents come out to ~40.9×29.6 — comfortably inside a beach rect
+// whose own half-extents are ~44.8×34.18 (leaf ~99.6×78.36, minus the 5-unit
+// clearance on each side), leaving a real (if uneven, by design) beach margin
+// on every side rather than clipping the road at the widest bulge. radiusX
+// bumped from 30 (2026-08-12 follow-up: "make the lake a bit wider" — the
+// height was already right, so radiusZ is untouched).
+const LAKE_EAST_ELLIPSE = { radiusX: 34, radiusZ: 20, rotation: (25 * Math.PI) / 180 }
+let lakeEastCenter: Point | undefined
+let beachRect: Rect | undefined
+if (lakeEastLeaf) {
+  lakeEastCenter = {
+    x: Math.round((lakeEastLeaf.x0 + lakeEastLeaf.x1) / 2),
+    z: Math.round((lakeEastLeaf.z0 + lakeEastLeaf.z1) / 2),
+  }
+  beachRect = {
+    x0: lakeEastLeaf.x0 + LAKE_EAST_ROAD_CLEARANCE, x1: lakeEastLeaf.x1 - LAKE_EAST_ROAD_CLEARANCE,
+    z0: lakeEastLeaf.z0 + LAKE_EAST_ROAD_CLEARANCE, z1: lakeEastLeaf.z1 - LAKE_EAST_ROAD_CLEARANCE,
+  }
+  // Kept in LAKE_VISUAL_OVERRIDES too (as a circle, radius = the ellipse's
+  // larger axis) purely so visualLakeCircle's existing circular-avoidance
+  // callers (park bench/tree placement near a *paired* park) have a
+  // reasonable estimate — lake_east is never paired with any park in
+  // practice (too far from every RESERVED_ZONES park circle), so this is
+  // unused in this run but kept for API consistency.
+  LAKE_VISUAL_OVERRIDES.lake_east = { radius: LAKE_EAST_ELLIPSE.radiusX, center: lakeEastCenter }
 }
 
 // Same visual-vs-zone split as LAKE_VISUAL_OVERRIDES — anything that needs to
@@ -1130,6 +1209,15 @@ function visualLakeCircle(zone: ReservedZone): Circle {
 }
 
 const lakeShapes = lakeZones.map((zone) => {
+  if (zone.id === "lake_east" && lakeEastCenter) {
+    return {
+      id: zone.id,
+      points: sampleEllipticalBlob(
+        new RNG(SEED + 8 + zone.id.length), lakeEastCenter.x, lakeEastCenter.z,
+        LAKE_EAST_ELLIPSE.radiusX, LAKE_EAST_ELLIPSE.radiusZ, LAKE_EAST_ELLIPSE.rotation
+      ),
+    }
+  }
   const override = LAKE_VISUAL_OVERRIDES[zone.id]
   const cx = override?.center.x ?? zone.x
   const cz = override?.center.z ?? zone.z
@@ -1139,6 +1227,13 @@ const lakeShapes = lakeZones.map((zone) => {
     points: sampleBlobPolygon(new RNG(SEED + 8 + zone.id.length), cx, cz, radius),
   }
 })
+
+// Beach: a plain rect (like a park tile), filling the block minus road
+// clearance, rendered under the lake — the lake's own (smaller, organic)
+// shape, drawn on top, naturally covers the middle of it, leaving an evenly
+// -uneven ring per the reference image. Light grey placeholder — texture is
+// a later pass per the user's own note.
+const beachShapes = beachRect ? [{ id: "lake_east", ...beachRect }] : []
 
 console.log(`Parks: ${parkZones.map((z) => `${z.id}=${parkTilesById.get(z.id)?.length ?? 0} tiles`).join(", ")}`)
 console.log(`Lakes: ${lakeZones.map((z) => `${z.id} r${z.radius}`).join(", ")}`)
@@ -1176,13 +1271,15 @@ console.log(`Buildings per block: min ${blockSizes[0]}, max ${blockSizes[blockSi
   `median ${blockSizes[Math.floor(blockSizes.length / 2)]}`)
 
 const bushes = generateBushes(new RNG(SEED + 2), blocks)
-const churchLeaf = keptLeaves.find(leafContainsChurch)
-const churchLeafLamps = churchLeaf ? generateChurchLeafLamps(churchLeaf, roadSegments) : []
-const lampPosts = [...generateLampPosts(new RNG(SEED + 3), blocks), ...churchLeafLamps]
+const churchLeaf = keptLeaves.find((r) => leafContainsPoint(r, CHURCH_POSITION))
+const churchLeafLamps = churchLeaf ? generateLeafBorderLamps(churchLeaf, roadSegments) : []
+const lakeEastLeafLamps = lakeEastLeaf ? generateLeafBorderLamps(lakeEastLeaf, roadSegments) : []
+const lampPosts = [...generateLampPosts(new RNG(SEED + 3), blocks), ...churchLeafLamps, ...lakeEastLeafLamps]
 const benches = generateBenches(new RNG(SEED + 4), blocks)
 const plazas = generatePlazas(blocks)
 console.log(`Furniture: ${bushes.length} bushes, ${lampPosts.length} lamp posts ` +
-  `(${churchLeafLamps.length} along the church's block), ${benches.length} benches, ${plazas.length} plazas`)
+  `(${churchLeafLamps.length} along the church's block, ${lakeEastLeafLamps.length} along lake_east's), ` +
+  `${benches.length} benches, ${plazas.length} plazas`)
 
 verifyNoOverlaps(placed)
 
@@ -1234,7 +1331,10 @@ console.log(`Wrote ${layoutPath}`)
 
 // ── Decor: parks, lakes, park-interior trees ─────────────────────────────
 
-const zoneBufferTrees = generateZoneBufferTrees(new RNG(SEED + 6), keptLeaves)
+const zoneBufferTrees = generateZoneBufferTrees(
+  new RNG(SEED + 6), keptLeaves,
+  [churchLeaf, lakeEastLeaf].filter((l): l is Rect => l !== undefined)
+)
 const parkTreesFromTiles = parkZones.flatMap((zone) => {
   const tiles = parkTilesById.get(zone.id) ?? []
   const pairedLakes = lakeZones.filter((lake) => zonesAreAdjacent(zone, lake)).map(visualLakeCircle)
@@ -1280,6 +1380,18 @@ export interface LakeShape {
   points: { x: number; z: number }[];
 }
 
+/** A plain rect (like a park tile), filling a lake's block minus road
+ *  clearance, rendered under the lake so the lake's own smaller/organic
+ *  shape covers its middle, leaving a ring — see the lake_east doc comment
+ *  in generateCityLayout.ts (2026-08-12, lake_east only for now). */
+export interface BeachShape {
+  id: string;
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+}
+
 export interface TreeMarker {
   x: number;
   z: number;
@@ -1288,6 +1400,8 @@ export interface TreeMarker {
 export const PARKS: ParkShape[] = ${JSON.stringify(parkShapesOut, null, 2)};
 
 export const LAKES: LakeShape[] = ${JSON.stringify(lakeShapes, null, 2)};
+
+export const BEACHES: BeachShape[] = ${JSON.stringify(beachShapes, null, 2)};
 
 export const PARK_TREES: TreeMarker[] = ${JSON.stringify(parkTrees, null, 2)};
 

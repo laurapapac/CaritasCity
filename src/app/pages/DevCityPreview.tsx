@@ -3,7 +3,7 @@ import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, CityDecor } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
 import { CITY_LAYOUT } from "../../data/cityLayout";
-import { PARKS, LAKES, PARK_TREES, BUSHES } from "../../data/cityDecor";
+import { PARKS, LAKES, BEACHES, PARK_TREES, BUSHES } from "../../data/cityDecor";
 import { ROADS, ROAD_WIDTH, ROAD_TREES } from "../../data/cityRoads";
 import { LAMP_POSTS, BENCHES, PLAZAS } from "../../data/cityFurniture";
 import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -76,6 +76,7 @@ export default function DevCityPreview() {
     () => ({
       parks: PARKS,
       lakes: LAKES,
+      beaches: BEACHES,
       roads: ROADS,
       roadWidth: ROAD_WIDTH,
       roadTrees: ROAD_TREES,

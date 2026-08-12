@@ -76,6 +76,18 @@ export interface LakeShape {
   points: { x: number; z: number }[]
 }
 
+/** A plain rect (like a park tile) filling a lake's block minus road
+ *  clearance, rendered under the lake so the lake's own (smaller, organic)
+ *  shape covers its middle, leaving a visible ring — a placeholder "beach"
+ *  until a real texture replaces the flat color (2026-08-12). */
+export interface BeachShape {
+  id: string
+  x0: number
+  z0: number
+  x1: number
+  z1: number
+}
+
 export interface RoadSegment {
   x1: number
   z1: number
@@ -97,6 +109,7 @@ export interface OrientedMarker {
 export interface CityDecor {
   parks: ParkShape[]
   lakes: LakeShape[]
+  beaches?: BeachShape[]
   roads: RoadSegment[]
   roadWidth: number
   roadTrees: TreeMarker[]
