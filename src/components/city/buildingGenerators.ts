@@ -9,6 +9,16 @@
  * short_apartment 4,000, tall_apartment 8,000, food_bank 4,000, restaurant
  * 5,000, school 5,000, hospital_small 4,000, hospital_medium 6,000,
  * hospital_large 8,000) — no padding/truncation needed.
+ *
+ * Every variant except church/fountain (pure landmarks, no block-count target)
+ * is hollow per floor — visible interior floor slabs + window bands, not a
+ * solid box — so kiosk users feel like they're actually building the
+ * structure (2026-08-12 user request, first applied to short/tall apartment,
+ * then extended same-day to school/food_bank/hospital_small). Where a
+ * footprint's area doesn't divide evenly into uniform hollow floors + a thin
+ * cap (school, food_bank), the shortfall is absorbed by a small exact-sized
+ * architectural extra (entrance canopy, awning) rather than fudging the floor
+ * math — see each generator's own comment for its specific arithmetic.
  */
 
 import type { BlueprintVoxel } from "./types"
@@ -50,12 +60,15 @@ function ifill(s: Setter, x0: number, y0: number, z0: number, w: number, h: numb
         s(x, y, z, c)
 }
 
-function ishell(s: Setter, x0: number, y0: number, z0: number, w: number, h: number, d: number, c: number, t = 2) {
+function ishell(
+  s: Setter, x0: number, y0: number, z0: number, w: number, h: number, d: number,
+  c: number | ((x: number, z: number) => number), t = 2,
+) {
   for (let y = y0; y < y0 + h; y++)
     for (let x = x0; x < x0 + w; x++)
       for (let z = z0; z < z0 + d; z++)
         if (x < x0 + t || x >= x0 + w - t || z < z0 + t || z >= z0 + d - t)
-          s(x, y, z, c)
+          s(x, y, z, typeof c === "function" ? c(x, z) : c)
 }
 
 function islab(s: Setter, x0: number, y: number, z0: number, w: number, d: number, c: number) {
@@ -73,49 +86,6 @@ function iwinRow(s: Setter, x0: number, y: number, z0: number, w: number, d: num
       s(x0, y, z, c); s(x0, y + 1, z, c)
       s(x0 + w - 1, y, z, c); s(x0 + w - 1, y + 1, z, c)
     }
-}
-
-// ── Solid-fill helpers ──────────────────────────────────────────────────────
-
-// Fills a W×D×H solid volume, centered at origin
-function solid(
-  W: number,
-  D: number,
-  H: number,
-  fn: (x: number, y: number, z: number) => { type: string; color: number },
-): BlueprintVoxel[] {
-  const out: BlueprintVoxel[] = []
-  const ox = -Math.floor(W / 2)
-  const oz = -Math.floor(D / 2)
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++)
-      for (let z = 0; z < D; z++) {
-        const r = fn(x, y, z)
-        out.push({ x: x + ox, y, z: z + oz, type: r.type, color: toHex(r.color) })
-      }
-  return out
-}
-
-// True if (x,y,z) is on any exterior face of the W×D×H volume
-const ext = (x: number, z: number, W: number, D: number) =>
-  x === 0 || x === W - 1 || z === 0 || z === D - 1
-
-// True if a wall-face position `pos` along a face of length `len` should have a window
-function winPos(pos: number, len: number, period = 3, border = 2): boolean {
-  return pos >= border && pos < len - border && (pos - border) % period === 0
-}
-
-// True if exterior block at (x,y,z) should be a window
-function isWin(
-  x: number, y: number, z: number,
-  W: number, D: number, FH: number,
-  winFys: number[],
-  period = 3,
-): boolean {
-  if (!winFys.includes(y % FH)) return false
-  if ((z === 0 || z === D - 1) && x > 0 && x < W - 1) return winPos(x, W, period)
-  if ((x === 0 || x === W - 1) && z > 0 && z < D - 1) return winPos(z, D, period)
-  return false
 }
 
 // ── Short Apartment  20×10×32 (5 hollow floors) = 4,000 ─────────────────────
@@ -209,12 +179,29 @@ export function generateTallApartment(variantIndex = 0): BlueprintVoxel[] {
   })
 }
 
-// ── Food Bank  40×10×10 = 4,000 ─────────────────────────────────────────────
+// ── Food Bank  40×10×11 (2 hollow floors + thick found/roof + awning) = 4,000 ──
 // Palette varies per building instance (2026-08-12, user request: "3
 // colors") — same fixed-pool-by-variantIndex pattern as apartments.
-// wallAlt covers the non-storefront side fallback fill, kept proportioned to
-// each palette's own WALL (a touch darker/desaturated) rather than a fixed
-// value, so it never clashes with a differently-colored WALL.
+// wallAlt originally covered the non-storefront side fallback fill of the old
+// solid() box; repurposed (2026-08-12 hollow follow-up) as the interior floor
+// slab tint now that there's no more solid interior to fill.
+//
+// Hollow per floor (2026-08-12, same request as the apartments/school/
+// hospital_small conversions). Footprint (40×10) unchanged. 40×10's footprint
+// area (400) has no exact solution with uniform floors + a thin 1-layer cap —
+// verified by exhaustive search — so the foundation/roof caps are thickened
+// (4 + 3 layers, still T=2) to shrink the remainder to a small, clean 32
+// voxels: perFloor = FH·(W·D) − (FH−1)·(W−2T)(D−2T) = 2·400 − 1·216 = 584;
+// core = found(4·400=1600) + 2·584 + roof(3·400=1200) = 3968. The remaining
+// 32 voxels become a single flat awning slab (8×1×4) over the dock doors,
+// protruding into z<0 space that the shell never touches — same technique
+// generateRestaurant's awning uses — landing exactly on 4,000. Verified by
+// running the generator, not just this arithmetic.
+//
+// Each hollow floor is only 2 rows tall, too thin to carve out a separate
+// trim band, so floor 0 keeps its two loading-dock doors and floor 1 keeps a
+// window band as pure post-hoc recolors of the already-`ishell`'d ring cells
+// (zero added voxels) rather than baking them into the ring fill itself.
 
 const FOOD_BANK_PALETTES: { wall: number; roof: number; found: number; wallAlt: number }[] = [
   { wall: 0xc8a870, roof: 0x8b6c42, found: 0x8a7a5a, wallAlt: 0xb89860 }, // original tan
@@ -223,26 +210,30 @@ const FOOD_BANK_PALETTES: { wall: number; roof: number; found: number; wallAlt: 
 ]
 
 export function generateFoodBank(variantIndex = 0): BlueprintVoxel[] {
-  const W = 40, D = 10, H = 10
-  const { wall: WALL, roof: ROOF, found: FOUND, wallAlt: WALL_ALT } = FOOD_BANK_PALETTES[variantIndex % FOOD_BANK_PALETTES.length]
+  const W = 40, D = 10, T = 2, FH = 2, FLOORS = 2, FOUND_H = 4, ROOF_H = 3
+  const { wall: WALL, roof: ROOF, found: FOUND, wallAlt: FLOOR_COLOR } = FOOD_BANK_PALETTES[variantIndex % FOOD_BANK_PALETTES.length]
   const DOOR = 0x3a3020
-  return solid(W, D, H, (x, y, z) => {
-    if (y === H - 1) return { type: "roof", color: ROOF }
-    if (y === 0) return { type: "stone", color: FOUND }
-    if (ext(x, z, W, D)) {
-      // Loading dock doors on front (z=0), two doors
-      const door1 = z === 0 && x >= 5 && x <= 10 && y >= 1 && y <= 6
-      const door2 = z === 0 && x >= 15 && x <= 20 && y >= 1 && y <= 6
-      if (door1 || door2) return { type: "wall", color: DOOR }
-      // Clerestory windows near top, front and back
-      if ((z === 0 || z === D - 1) && y >= 7 && y <= 8 && x > 0 && x < W - 1 && (x - 1) % 4 === 0)
-        return { type: "window", color: GLASS_HEX }
-      // Side wall windows
-      if ((x === 0 || x === W - 1) && y >= 4 && y <= 6 && z > 0 && z < D - 1 && z % 3 === 1)
-        return { type: "window", color: GLASS_HEX }
-      return { type: "wall", color: WALL }
+  return makeBlocks(s => {
+    ifill(s, 0, 0, 0, W, FOUND_H, D, FOUND)
+    for (let f = 0; f < FLOORS; f++) {
+      const y0 = FOUND_H + f * FH
+      ishell(s, 0, y0, 0, W, FH, D, WALL, T)
+      islab(s, T, y0, T, W - 2 * T, D - 2 * T, FLOOR_COLOR)
+      if (f === 0) {
+        // Loading dock doors on front (z=0), two doors — recolor over the wall ring
+        for (let y = y0; y < y0 + FH; y++) {
+          for (let x = 5; x <= 10; x++) s(x, y, 0, DOOR)
+          for (let x = 15; x <= 20; x++) s(x, y, 0, DOOR)
+        }
+      } else {
+        iwinRow(s, 0, y0, 0, W, D, P.glass, 4, 1)
+      }
     }
-    return { type: "wall", color: WALL_ALT }
+    const roofY = FOUND_H + FLOORS * FH
+    ifill(s, 0, roofY, 0, W, ROOF_H, D, ROOF)
+    // Awning over the dock doors, protruding at z<0 — absorbs the exact
+    // remainder (8×1×4=32) to land on 4,000; never overlaps the shell above.
+    ifill(s, 6, FOUND_H + FH, -4, 8, 1, 4, ROOF)
   })
 }
 
@@ -295,7 +286,7 @@ export function generateRestaurant(variantIndex = 0): BlueprintVoxel[] {
   })
 }
 
-// ── School  50×10×10 = 5,000 ────────────────────────────────────────────────
+// ── School  50×10×12 (2 hollow floors + thick found/roof + canopy) = 5,000 ──
 // Multi-color per building (2026-08-12, user request: "schools tend to be
 // [multi-color] in real life... i would like 3 variants") — unlike every
 // other hand-authored generator here (one wall color per building), each
@@ -305,6 +296,20 @@ export function generateRestaurant(variantIndex = 0): BlueprintVoxel[] {
 // palette entry (not a globally-fixed neutral) so each scheme reads as one
 // coordinated design — index 0 preserves the original tan/blue/gold look,
 // now expressed as an alternating panel rhythm instead of one flat wall.
+//
+// Hollow per floor (2026-08-12, same-day hollow-conversion follow-up).
+// Footprint (50×10) unchanged. 50×10's footprint area (500) has no exact
+// solution with uniform floors + a thin 1-layer cap — verified by exhaustive
+// search — so the foundation/roof caps are thickened (3 + 3 layers, still
+// T=2) to shrink the remainder to a small, clean 104 voxels: perFloor =
+// FH·(W·D) − (FH−1)·(W−2T)(D−2T) = 3·500 − 2·276 = 948; core = found(3·500=
+// 1500) + 2·948 + roof(3·500=1500) = 4896. The remaining 104 voxels become an
+// entrance canopy (a 10×1×4 roof slab + two 2×8×2 support columns, 40+64=104
+// exact) protruding into z<0 space the shell never touches — landing exactly
+// on 5,000. Verified by running the generator, not just this arithmetic.
+//
+// ishell's color param accepts a per-cell function so the ring can still be
+// wall-color-per-x-section (wallColorAt) even though it's now hollow.
 
 const SCHOOL_PALETTES: { colors: readonly number[]; roof: number; found: number; trim: number }[] = [
   { colors: [0xddc870, 0x6688aa, 0xddc870, 0xaa9444], roof: 0x6688aa, found: 0x9a8040, trim: 0xaa9444 }, // original tan/blue, now paneled
@@ -313,61 +318,89 @@ const SCHOOL_PALETTES: { colors: readonly number[]; roof: number; found: number;
 ]
 
 export function generateSchool(variantIndex = 0): BlueprintVoxel[] {
-  const W = 50, D = 10, H = 10, FH = 5
+  const W = 50, D = 10, T = 2, FH = 3, FLOORS = 2, FOUND_H = 3, ROOF_H = 3
   const { colors, roof: ROOF, found: FOUND, trim: TRIM } = SCHOOL_PALETTES[variantIndex % SCHOOL_PALETTES.length]
   const sectionWidth = W / colors.length
   const wallColorAt = (x: number) => colors[Math.min(colors.length - 1, Math.floor(x / sectionWidth))]
   const cx = Math.floor(W / 2)
-  return solid(W, D, H, (x, y, z) => {
-    if (y === H - 1) return { type: "roof", color: ROOF }
-    if (y === 0) return { type: "stone", color: FOUND }
-    const fy = y % FH
-    if (ext(x, z, W, D)) {
-      // Central entrance arch on front (z=0)
-      if (z === 0 && Math.abs(x - cx) <= 2 && y >= 1 && y <= 7)
-        return { type: "window", color: GLASS_HEX }
-      if (fy === 0 || fy === FH - 1) return { type: "wall", color: TRIM }
-      // Wide classroom windows on front and back
-      if ((z === 0 || z === D - 1) && x > 0 && x < W - 1 && (x - 2) % 4 === 0)
-        return { type: "window", color: GLASS_HEX }
-      // Side windows
-      if ((x === 0 || x === W - 1) && z > 0 && z < D - 1 && z % 2 === 1)
-        return { type: "window", color: GLASS_HEX }
-      return { type: "wall", color: wallColorAt(x) }
+  return makeBlocks(s => {
+    ifill(s, 0, 0, 0, W, FOUND_H, D, FOUND)
+    for (let f = 0; f < FLOORS; f++) {
+      const y0 = FOUND_H + f * FH
+      ishell(s, 0, y0, 0, W, FH, D, (x, _z) => wallColorAt(x), T)
+      islab(s, T, y0, T, W - 2 * T, D - 2 * T, FOUND)
+      // Window band (middle row) — deliberately spills into what becomes the
+      // top trim row (iwinRow always paints 2 rows); the trim call right
+      // after overwrites that spillover back, same last-write-wins trick
+      // used for the entrance-arch/red-cross overlays below.
+      iwinRow(s, 0, y0 + 1, 0, W, D, P.glass, 4, 1)
+      ishell(s, 0, y0, 0, W, 1, D, TRIM, T)
+      ishell(s, 0, y0 + FH - 1, 0, W, 1, D, TRIM, T)
     }
-    return { type: fy === 0 ? "floor" : "wall", color: fy === 0 ? FOUND : wallColorAt(x) }
+    const roofY = FOUND_H + FLOORS * FH
+    ifill(s, 0, roofY, 0, W, ROOF_H, D, ROOF)
+
+    // Central entrance arch on front (z=0), spanning both floors — pure
+    // recolor of already-populated ring cells, zero added voxels.
+    for (let y = FOUND_H; y < roofY; y++)
+      for (let x = cx - 2; x <= cx + 2; x++) s(x, y, 0, P.glass)
+
+    // Entrance canopy, protruding at z<0 — absorbs the exact remainder
+    // (40 + 32 + 32 = 104) to land on 5,000; columns (y 1..8) sit strictly
+    // below the canopy slab (y 9) so their footprints never share a
+    // coordinate (would otherwise collapse in makeBlocks' dedup map).
+    ifill(s, cx - 5, 1, -3, 2, 8, 2, TRIM)
+    ifill(s, cx + 3, 1, -3, 2, 8, 2, TRIM)
+    ifill(s, cx - 5, roofY, -4, 10, 1, 4, TRIM)
   })
 }
 
-// ── Small Hospital  20×10×20 = 4,000 ────────────────────────────────────────
+// ── Small Hospital  20×10×32 (5 hollow floors) = 4,000 ──────────────────────
+// Hollow per floor (2026-08-12, same request as the apartments/school/
+// food_bank conversions). hospital_small is geometrically identical to
+// short_apartment (same 20×10 footprint, same 4,000 target), so it reuses
+// that exact solved structure verbatim (T=2, FH=6, FLOORS=5, 1-layer
+// foundation+roof → 4,000, new H=32) with only the colors swapped in — see
+// generateShortApartment's comment for the arithmetic. The red cross (front
+// facade + roof) is a pure color overwrite applied after the shell is built,
+// adding zero voxels: z=0 is always inside the T=2 ring for every floor, and
+// the roof is a full-footprint slab, so every cell the cross touches is
+// already populated. No palette/variantIndex added — this building never had
+// per-instance color variety, and this change is scoped to hollowing the
+// structure, not adding variety that wasn't asked for.
 
 export function generateSmallHospital(): BlueprintVoxel[] {
-  const W = 20, D = 10, H = 20, FH = 4
-  const WALL = 0xe8e8f0, ROOF = 0xaaaacc, FOUND = 0x888899, TRIM = 0x9999aa
+  const W = 20, D = 10, FH = 6, FLOORS = 5, T = 2
+  const WALL = 0xe8e8f0, ROOF = 0xaaaacc, FOUND = 0x888899, TRIM = 0x9999aa, FLOOR_COLOR = 0xd0d0da
   const RED = 0xdd3344
   const midX = Math.floor(W / 2)
-  return solid(W, D, H, (x, y, z) => {
-    if (y === H - 1) {
-      // Red cross on roof
-      const isCross =
-        (Math.abs(x - midX) <= 1 && Math.abs(z - Math.floor(D / 2)) <= 3) ||
-        (Math.abs(z - Math.floor(D / 2)) <= 1 && Math.abs(x - midX) <= 3)
-      return { type: "roof", color: isCross ? RED : ROOF }
+  const midZ = Math.floor(D / 2)
+  return makeBlocks(s => {
+    islab(s, 0, 0, 0, W, D, FOUND)
+    for (let f = 0; f < FLOORS; f++) {
+      const y0 = 1 + f * FH
+      ishell(s, 0, y0, 0, W, FH, D, WALL, T)
+      islab(s, T, y0, T, W - 2 * T, D - 2 * T, FLOOR_COLOR)
+      ishell(s, 0, y0, 0, W, 1, D, TRIM, T)
+      ishell(s, 0, y0 + FH - 1, 0, W, 1, D, TRIM, T)
+      iwinRow(s, 0, y0 + 1, 0, W, D, P.glass, 4, 1)
+      iwinRow(s, 0, y0 + 2, 0, W, D, P.glass, 4, 1)
+      iwinRow(s, 0, y0 + 3, 0, W, D, P.glass, 4, 1)
     }
-    if (y === 0) return { type: "stone", color: FOUND }
-    const fy = y % FH
-    if (ext(x, z, W, D)) {
-      // Red cross on front facade (z=0)
-      const isFrontCross =
-        z === 0 &&
-        ((Math.abs(x - midX) <= 1 && y >= 4 && y <= 10) ||
-          (y >= 6 && y <= 8 && Math.abs(x - midX) <= 3))
-      if (isFrontCross) return { type: "wall", color: RED }
-      if (fy === 0 || fy === FH - 1) return { type: "wall", color: TRIM }
-      if (isWin(x, y, z, W, D, FH, [1, 2], 4)) return { type: "window", color: GLASS_HEX }
-      return { type: "wall", color: WALL }
-    }
-    return { type: fy === 0 ? "floor" : "wall", color: fy === 0 ? 0x9999aa : WALL }
+    const roofY = 1 + FLOORS * FH
+    islab(s, 0, roofY, 0, W, D, ROOF)
+
+    // Red cross overlay — recolors already-populated cells only (front
+    // facade z=0, roof), zero added voxels.
+    for (let y = 8; y <= 24; y++)
+      for (let x = midX - 1; x <= midX + 1; x++) s(x, y, 0, RED)
+    for (let y = 14; y <= 17; y++)
+      for (let x = midX - 3; x <= midX + 3; x++) s(x, y, 0, RED)
+    for (let x = 0; x < W; x++)
+      for (let z = 0; z < D; z++) {
+        const isCross = (Math.abs(x - midX) <= 1 && Math.abs(z - midZ) <= 3) || (Math.abs(z - midZ) <= 1 && Math.abs(x - midX) <= 3)
+        if (isCross) s(x, roofY, z, RED)
+      }
   })
 }
 
@@ -581,9 +614,10 @@ export function generateFountain(): BlueprintVoxel[] {
 // (2026-08-12) — generateShortApartment, generateTallApartment,
 // generateFoodBank, generateRestaurant, and generateSchool use it for
 // palette variety (generateSchool alone uses it for multi-color panel
-// sections within one building, not just a single wall color), the
-// rest ignore the argument, which TS allows for a function with fewer
-// declared params than the Record's value type expects.
+// sections within one building, not just a single wall color); the
+// rest (including generateSmallHospital, which has no palette at all) ignore
+// the argument, which TS allows for a function with fewer declared params
+// than the Record's value type expects.
 export const HAND_AUTHORED_DESIGNS: Partial<Record<string, (variantIndex: number) => BlueprintVoxel[]>> = {
   short_apartment: generateShortApartment,
   tall_apartment: generateTallApartment,
