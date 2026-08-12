@@ -403,12 +403,21 @@ function insetParkTiles(tiles: Rect[], keptLeaves: Rect[]): Rect[] {
         const insetX1 = Math.abs(px1 - tile.x1) < 0.5 && insetAt(x1c, midZ)
         const insetZ0 = Math.abs(pz0 - tile.z0) < 0.5 && insetAt(z0c, midX)
         const insetZ1 = Math.abs(pz1 - tile.z1) < 0.5 && insetAt(z1c, midX)
-        result.push({
-          x0: px0 + (insetX0 ? PARK_ROAD_INSET : 0),
-          x1: px1 - (insetX1 ? PARK_ROAD_INSET : 0),
-          z0: pz0 + (insetZ0 ? PARK_ROAD_INSET : 0),
-          z1: pz1 - (insetZ1 ? PARK_ROAD_INSET : 0),
-        })
+        const rx0 = px0 + (insetX0 ? PARK_ROAD_INSET : 0)
+        const rx1 = px1 - (insetX1 ? PARK_ROAD_INSET : 0)
+        const rz0 = pz0 + (insetZ0 ? PARK_ROAD_INSET : 0)
+        const rz1 = pz1 - (insetZ1 ? PARK_ROAD_INSET : 0)
+        // A grid cell narrower than PARK_ROAD_INSET (possible when a
+        // neighboring leaf's edge doesn't line up exactly with this tile's
+        // own boundary — e.g. the sliver a mismatched south-neighbor edge
+        // introduces just inside a real west-side road) insets past its own
+        // opposite edge, producing a reversed rect that renders back at the
+        // raw, un-inset boundary — i.e. right on top of the road it was
+        // supposed to clear (2026-08-12, user-spotted overlap). Too thin to
+        // render meaningfully either way, so drop it instead of keeping the
+        // degenerate result.
+        if (rx1 <= rx0 || rz1 <= rz0) continue
+        result.push({ x0: rx0, x1: rx1, z0: rz0, z1: rz1 })
       }
     }
   }
@@ -873,6 +882,68 @@ function generateLampPosts(rng: RNG, blocks: BlockState[]): OrientedPoint[] {
   return lamps
 }
 
+// User request (2026-08-12, reference image of the church's block): a street
+// lamp "between every three" of the road trees lining that block, on top of
+// the block-interior lamps generateLampPosts already places elsewhere. The
+// church's own leaf is zone-excluded (see leafContainsChurch), so it
+// contributes none of its own road edges — every real road bordering it
+// (south/east/north in full, west only for the short sub-range where a real
+// buildable leaf sits across from it — see the DevCityPreview.tsx comment on
+// CHURCH_POSITION for the leaf's exact bounds) comes entirely from its
+// non-excluded neighbors. Rather than re-deriving that adjacency, this walks
+// the real, already-computed road segments and keeps only the ones lying
+// exactly on the leaf's own boundary.
+const CHURCH_LAMP_GROUP_SIZE = 2
+
+function segmentBordersLeaf(seg: RoadSegment, leaf: Rect): boolean {
+  const EPS = 1
+  const vertical = Math.abs(seg.x1 - seg.x2) < EPS
+  const horizontal = Math.abs(seg.z1 - seg.z2) < EPS
+  if (vertical && (Math.abs(seg.x1 - leaf.x0) < EPS || Math.abs(seg.x1 - leaf.x1) < EPS)) {
+    const lo = Math.min(seg.z1, seg.z2), hi = Math.max(seg.z1, seg.z2)
+    return lo < leaf.z1 - EPS && hi > leaf.z0 + EPS
+  }
+  if (horizontal && (Math.abs(seg.z1 - leaf.z0) < EPS || Math.abs(seg.z1 - leaf.z1) < EPS)) {
+    const lo = Math.min(seg.x1, seg.x2), hi = Math.max(seg.x1, seg.x2)
+    return lo < leaf.x1 - EPS && hi > leaf.x0 + EPS
+  }
+  return false
+}
+
+// Same walk-the-segment-at-TREE_SPACING-intervals technique as
+// generateRoadTrees, but emits a lamp only every CHURCH_LAMP_GROUP_SIDE-th
+// interval (in the gap after that many trees), on whichever side of the road
+// faces into the leaf, and clipped to the leaf's own span (a shared segment
+// can run past the leaf's corner into a wider neighbor's edge).
+function generateChurchLeafLamps(leaf: Rect, roadSegments: RoadSegment[]): OrientedPoint[] {
+  const lamps: OrientedPoint[] = []
+  const center = { x: (leaf.x0 + leaf.x1) / 2, z: (leaf.z0 + leaf.z1) / 2 }
+  for (const seg of roadSegments) {
+    if (!segmentBordersLeaf(seg, leaf)) continue
+    const dx = seg.x2 - seg.x1, dz = seg.z2 - seg.z1
+    const length = Math.hypot(dx, dz)
+    if (length <= TREE_MARGIN * 2) continue
+    const ux = dx / length, uz = dz / length
+    let px = -uz, pz = ux
+    const midX = seg.x1 + ux * length / 2, midZ = seg.z1 + uz * length / 2
+    if ((center.x - midX) * px + (center.z - midZ) * pz < 0) { px = -px; pz = -pz }
+
+    let i = 0
+    for (let t = TREE_MARGIN; t <= length - TREE_MARGIN; t += TREE_SPACING, i++) {
+      if (i % CHURCH_LAMP_GROUP_SIZE !== CHURCH_LAMP_GROUP_SIZE - 1) continue
+      const tMid = Math.min(t + TREE_SPACING / 2, length - TREE_MARGIN)
+      const cx = seg.x1 + ux * tMid, cz = seg.z1 + uz * tMid
+      if (cx < leaf.x0 - 1 || cx > leaf.x1 + 1 || cz < leaf.z0 - 1 || cz > leaf.z1 + 1) continue
+      lamps.push({
+        x: Math.round(cx + px * TREE_OFFSET),
+        z: Math.round(cz + pz * TREE_OFFSET),
+        angle: Math.atan2(-px, -pz),
+      })
+    }
+  }
+  return lamps
+}
+
 const MIN_BENCH_AREA = 30
 const MAX_BENCHES_PER_BLOCK = 2
 
@@ -1098,11 +1169,13 @@ console.log(`Buildings per block: min ${blockSizes[0]}, max ${blockSizes[blockSi
   `median ${blockSizes[Math.floor(blockSizes.length / 2)]}`)
 
 const bushes = generateBushes(new RNG(SEED + 2), blocks)
-const lampPosts = generateLampPosts(new RNG(SEED + 3), blocks)
+const churchLeaf = keptLeaves.find(leafContainsChurch)
+const churchLeafLamps = churchLeaf ? generateChurchLeafLamps(churchLeaf, roadSegments) : []
+const lampPosts = [...generateLampPosts(new RNG(SEED + 3), blocks), ...churchLeafLamps]
 const benches = generateBenches(new RNG(SEED + 4), blocks)
 const plazas = generatePlazas(blocks)
-console.log(`Furniture: ${bushes.length} bushes, ${lampPosts.length} lamp posts, ` +
-  `${benches.length} benches, ${plazas.length} plazas`)
+console.log(`Furniture: ${bushes.length} bushes, ${lampPosts.length} lamp posts ` +
+  `(${churchLeafLamps.length} along the church's block), ${benches.length} benches, ${plazas.length} plazas`)
 
 verifyNoOverlaps(placed)
 

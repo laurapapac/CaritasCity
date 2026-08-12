@@ -420,10 +420,64 @@ export function generateChurch(): BlueprintVoxel[] {
   })
 }
 
+// ── Fountain: circular basin + raised two-tier pedestal ─────────────────────
+// Not one of the 158 real QR-linked buildings — a second purely aesthetic
+// landmark the user asked to hand-place near the church (2026-08-12), same
+// deal as generateChurch: no totalBlocks to hit, block count is whatever this
+// shape naturally comes out to.
+
+export function generateFountain(): BlueprintVoxel[] {
+  return makeBlocks((s) => {
+    const R = 5
+    const FOUNTAIN = {
+      stone: 0xb8b3a6, stoneDark: 0x8f8a7c, water: 0x4a90d9, gold: 0xd4af37,
+    } as const
+
+    // Base slab + raised rim ring (basin walls), lower basin
+    for (let x = -R; x <= R; x++) {
+      for (let z = -R; z <= R; z++) {
+        const d2 = x * x + z * z
+        if (d2 > R * R) continue
+        s(x, 0, z, FOUNTAIN.stoneDark)
+        if (d2 > (R - 1) * (R - 1)) s(x, 1, z, FOUNTAIN.stone) // rim
+      }
+    }
+    // Water surface inside the rim
+    for (let x = -(R - 1); x <= R - 1; x++)
+      for (let z = -(R - 1); z <= R - 1; z++)
+        if (x * x + z * z <= (R - 1) * (R - 1)) s(x, 1, z, FOUNTAIN.water)
+
+    // Central pedestal column rising from the basin
+    for (let y = 1; y <= 4; y++) {
+      s(0, y, 0, FOUNTAIN.stone); s(1, y, 0, FOUNTAIN.stone)
+      s(0, y, 1, FOUNTAIN.stone); s(1, y, 1, FOUNTAIN.stone)
+    }
+
+    // Upper (second-tier) basin ring + its own water pool
+    const R2 = 3
+    for (let x = -R2; x <= R2 + 1; x++) {
+      for (let z = -R2; z <= R2 + 1; z++) {
+        const cx = x - 0.5, cz = z - 0.5
+        const d2 = cx * cx + cz * cz
+        if (d2 > R2 * R2) continue
+        if (d2 > (R2 - 1) * (R2 - 1)) s(x, 4, z, FOUNTAIN.stone) // rim
+        else s(x, 4, z, FOUNTAIN.water)
+      }
+    }
+
+    // Gold finial on top
+    s(0, 5, 0, FOUNTAIN.gold); s(1, 5, 0, FOUNTAIN.gold)
+    s(0, 5, 1, FOUNTAIN.gold); s(1, 5, 1, FOUNTAIN.gold)
+    s(0, 6, 0, FOUNTAIN.gold); s(1, 6, 0, FOUNTAIN.gold)
+    s(0, 6, 1, FOUNTAIN.gold); s(1, 6, 1, FOUNTAIN.gold)
+  })
+}
+
 // Variant key → generator. Every non-house variant now has a hand-authored
 // design; house keeps using generateHouseBlueprint (a recolor of the imported
-// blueprint, not a fixed shape generator like these). "church" is not one of
-// the 158 real QR-linked buildings — see generateChurch's comment.
+// blueprint, not a fixed shape generator like these). "church" and
+// "fountain" are not among the 158 real QR-linked buildings — see their own
+// generators' comments.
 export const HAND_AUTHORED_DESIGNS: Partial<Record<string, () => BlueprintVoxel[]>> = {
   short_apartment: generateShortApartment,
   tall_apartment: generateTallApartment,
@@ -434,4 +488,5 @@ export const HAND_AUTHORED_DESIGNS: Partial<Record<string, () => BlueprintVoxel[
   hospital_medium: generateMediumHospital,
   hospital_large: generateLargeHospital,
   church: generateChurch,
+  fountain: generateFountain,
 }

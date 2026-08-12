@@ -26,6 +26,14 @@ import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/c
 
 const CHURCH_POSITION = { x: 0, z: 165 };
 
+// Second hand-placed landmark (2026-08-12, user request) — also purely
+// aesthetic, not one of the 158 real QR-linked buildings, added the same way
+// as the church. Positioned south of the church within the same buffer leaf
+// (see the CHURCH_POSITION comment above for its bounds), clear of the
+// church's own footprint, the leaf's real roads on every side, and the
+// zone-buffer/road tree clearances.
+const FOUNTAIN_POSITION = { x: 25, z: 110 };
+
 export default function DevCityPreview() {
   const cityRef = useRef<CityHandle>(null);
 
@@ -50,7 +58,18 @@ export default function DevCityPreview() {
       completedBlocks: churchBlockCount,
     };
 
-    return [...realBuildings, church];
+    const fountainBlueprint = blueprintForVariant("fountain", "school", 0);
+    const fountainBlockCount = fountainBlueprint.voxelCount ?? fountainBlueprint.voxels.length;
+    const fountain: CityBuilding = {
+      id: "fountain",
+      category: "school", // unused — "fountain" is hand-authored, same as church
+      position: FOUNTAIN_POSITION,
+      blueprint: fountainBlueprint,
+      totalBlocks: fountainBlockCount,
+      completedBlocks: fountainBlockCount,
+    };
+
+    return [...realBuildings, church, fountain];
   }, []);
 
   const decor = useMemo<CityDecor>(
