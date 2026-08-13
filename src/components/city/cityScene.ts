@@ -250,16 +250,21 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // Low enough that focusOnBlock's close-up framing (FOCUS_OFFSET) isn't
   // immediately clamped back out on the next controls.update().
   controls.minDistance       = 1.5
-  // Tightened from 1600 (2026-08-13, same day) — user wants zoom-out capped
-  // at "just enough to see the whole city fully, no more," not free-roam
-  // range over the terrain. 800 is sized off the worst case for full-city
-  // framing: a near-top-down view needs height ≈ cityRadius / tan(halfFOV)
-  // to fit the whole disc — with the 50°-vertical-FOV camera below
-  // (halfFOV=25°, tan≈0.4663) and the city's measured envelope (~344,
-  // rounded up to 350), that's 350/0.4663 ≈ 751, plus a small margin ≈ 800.
-  // Any other (non-top-down) tilt needs less distance for the same ground
-  // coverage, so 800 is a safe upper bound, not an average.
-  controls.maxDistance       = 800
+  // Tightened from 1600, then 800 (2026-08-13, same day, twice) — user
+  // wants zoom-out capped at "just enough to see the whole city fully, no
+  // more." 800 was derived from the worst case for full-city framing (a
+  // near-top-down view needs height ≈ cityRadius/tan(halfFOV) ≈ 350/0.4663
+  // ≈ 751 to fit the whole disc, +margin), but that's also the BEST case
+  // for how much empty space shows around the city — at the shallower,
+  // more oblique tilts people actually use day to day, the same distance
+  // reveals a lot more ground in the "far" direction than top-down does
+  // (perspective foreshortening), which read as "still too big." A single
+  // maxDistance can't be exactly right at every tilt angle (that would need
+  // distance to vary with controls' polar angle, which OrbitControls
+  // doesn't support), so this value is picked to look right at typical
+  // viewing angles rather than guarantee a perfect top-down fit — tune
+  // further by feel if it's still off.
+  controls.maxDistance       = 550
   controls.maxPolarAngle     = Math.PI / 2 - 0.02
   controls.panSpeed          = 1.2
   controls.rotateSpeed       = 0.65
