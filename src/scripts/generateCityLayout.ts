@@ -69,6 +69,7 @@
 
 import { writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { SimplexNoise } from "three/addons/math/SimplexNoise.js"
 
 type Category = "residential" | "hospital" | "food" | "school"
 
@@ -1496,3 +1497,507 @@ export const PLAZAS: DecorZone[] = ${JSON.stringify(plazas, null, 2)};
 const furniturePath = join(process.cwd(), "src/data/cityFurniture.ts")
 writeFileSync(furniturePath, furnitureOutput)
 console.log(`Wrote ${furniturePath}`)
+
+// ── World terrain: grass buffer, rolling hills, distant mountains
+// (2026-08-13) ───────────────────────────────────────────────────────────
+//
+// A first attempt at hiding the ground plane's edge (a ring of tall,
+// discrete voxel-cube "mountain" peaks placed close to the city, radius
+// 280-390) was built, verified working, then fully reverted — the user
+// found it made the city feel "closed off and claustrophobic." This
+// redesign fixes that by making everything outside the city (a) start much
+// further away, (b) stay low/gentle rather than tall/discrete, and (c) fade
+// into atmosphere rather than reading as a nearby wall. See
+// plans/qr-backend-todo.md's "mountain ring — tried and reverted" entry for
+// the full story.
+//
+// Measured correction: CITY_RADIUS (280) is only the BSP leaf-CENTER keep
+// filter (keepBlock) — real city geometry (building footprints, road-tree
+// positions, road segment endpoints) extends further out. Measured directly
+// against this run's own generated data (not assumed): road vertices reach
+// ~343.6, bushes ~325.7, road trees ~334.6. CITY_EDGE (350) is used as the
+// terrain floor instead of CITY_RADIUS for exactly this reason —
+// measureCityEnvelope/verifyTerrainClearsCity below re-check this on every
+// run so a future BSP/placement tweak can't silently let real geometry
+// drift past the terrain's inner edge.
+//
+// All terrain RNG uses fresh RNG instances seeded off SEED+20 and up —
+// NEVER the shared module-level `rng` (which drives building/road
+// placement) or any of the SEED+1..9(+zone.id.length) instances already in
+// use above. Terrain code must not perturb the existing building/road/decor
+// output in any way; verified by an empty git diff on cityLayout.ts/
+// cityRoads.ts/cityDecor.ts/cityFurniture.ts after regenerating.
+
+const CITY_EDGE       = 350  // terrain floor — see measured-correction note above
+const BUFFER_OUTER    = 640  // grass/park buffer:      CITY_EDGE → BUFFER_OUTER
+const HILLS_INNER     = 640
+const HILLS_RAMP_IN   = 840  // hill height reaches full weight by here
+const HILLS_RAMP_OUT  = 920  // hill height starts fading out from here
+const HILLS_OUTER     = 1150 // rolling hills:          HILLS_INNER → HILLS_OUTER
+const MOUNTAIN_INNER  = 1350
+const MOUNTAIN_OUTER  = 1550 // distant mountains:      MOUNTAIN_INNER → MOUNTAIN_OUTER
+const GROUND_RADIUS   = 2000 // ground disc rim (fades to fog color — see decor.ts)
+
+const FOG_NEAR = 800
+const FOG_FAR  = 2400
+
+const HILL_CELL   = 12 // world units per column footprint
+const HILL_STEP   = 3  // world units per height level
+const HILL_LEVELS = 5  // max levels → max height 15 (13:1 width:height per lobe — "rolling", not "peaked")
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+// Samples noise along a small circle so the result varies smoothly with
+// angle (not radius) — used to perturb the hills band's inner/outer edges
+// per-angle so neither reads as a perfect circle ("irregular outer
+// boundary" per the user's explicit ask).
+function angularJitter(simplex: SimplexNoise, angle: number, amplitude: number): number {
+  return simplex.noise(Math.cos(angle) * 3, Math.sin(angle) * 3) * amplitude
+}
+
+// 2-octave fractal noise, normalized to roughly [0,1]. The base octave's
+// ~220-unit period is the load-bearing number here: it produces hill lobes
+// ~200 units wide against a max height of 15 — a ~13:1 width:height ratio,
+// which is what "rolling" means geometrically (the rejected ring's discrete
+// peaks were close to 1:1).
+function fbmHeight(simplex: SimplexNoise, x: number, z: number): number {
+  const n1 = simplex.noise(x / 220, z / 220)
+  const n2 = simplex.noise(x / 90 + 100, z / 90 + 100)
+  return Math.min(1, Math.max(0, ((n1 + 0.35 * n2) / 1.35 + 1) / 2))
+}
+
+// Radial envelope (0 outside the band, ~1 in the middle) with per-angle
+// jitter on both edges via angularJitter — multiplied into the noise height
+// so hill columns fade in/out gradually and the band's edges are ragged,
+// not circular.
+function hillEnvelope(simplex: SimplexNoise, x: number, z: number): number {
+  const r = Math.hypot(x, z)
+  const angle = Math.atan2(z, x)
+  const innerEdge   = HILLS_INNER    + angularJitter(simplex, angle, 60)
+  const rampInEdge  = HILLS_RAMP_IN  + angularJitter(simplex, angle, 60)
+  const rampOutEdge = HILLS_RAMP_OUT + angularJitter(simplex, angle + 4.5, 60)
+  const outerEdge   = HILLS_OUTER    + angularJitter(simplex, angle + 4.5, 60)
+  const rampIn  = smoothstep(innerEdge, rampInEdge, r)
+  const rampOut = 1 - smoothstep(rampOutEdge, outerEdge, r)
+  return Math.max(0, Math.min(1, rampIn * rampOut))
+}
+
+// Quantized column height (0..HILL_LEVELS) at a world position — shared by
+// column generation (below) and hill-tree placement (trees snap to this,
+// not to the raw continuous noise, so trunks never float/sink on a
+// terraced step).
+function hillLevelAt(simplex: SimplexNoise, x: number, z: number): number {
+  const h   = fbmHeight(simplex, x, z)
+  const env = hillEnvelope(simplex, x, z)
+  return Math.max(0, Math.min(HILL_LEVELS, Math.floor(h * env * (HILL_LEVELS + 1))))
+}
+
+// One flat-topped voxel "column" per grid cell instead of stacked unit
+// cubes (like buildings/trees use) — a column is 1 InstancedMesh instance
+// with a non-uniform Y-scale, so the whole hills band costs ~11k instances
+// instead of ~11k * levels. Output is a FLAT [gx,gz,level, gx,gz,level, ...]
+// number array (grid indices, not world coords or objects) rather than the
+// {x,z,...} object-per-entry style every other data file in this project
+// uses — at this count (~11k entries), pretty-printed objects would be a
+// multi-megabyte, tens-of-thousands-of-lines source file; a flat array
+// stringified with no indent is ~10x smaller and just as fast to consume in
+// decor.ts (which already knows HILL_CELL/HILL_STEP to expand gx/gz/level
+// back into world position/height).
+function generateHillColumns(simplex: SimplexNoise): number[] {
+  const flat: number[] = []
+  const maxGrid = Math.ceil((HILLS_OUTER + 60) / HILL_CELL)
+  for (let gx = -maxGrid; gx <= maxGrid; gx++) {
+    for (let gz = -maxGrid; gz <= maxGrid; gz++) {
+      const x = gx * HILL_CELL, z = gz * HILL_CELL
+      const r = Math.hypot(x, z)
+      if (r < HILLS_INNER - HILL_CELL || r > HILLS_OUTER + HILL_CELL) continue
+      const level = hillLevelAt(simplex, x, z)
+      if (level === 0) continue
+      flat.push(gx, gz, level)
+    }
+  }
+  return flat
+}
+
+// Shared rejection-sampler for scattering points across an annulus
+// (buffer/hills trees, buffer bushes, meadow centers all use this) — keep
+// candidates whose radius falls in [inner,outer], target density controlled
+// via sqUnitsPerItem (annulus area / sqUnitsPerItem ≈ item count).
+function scatterInAnnulus(rng: RNG, inner: number, outer: number, sqUnitsPerItem: number): Point[] {
+  const area = Math.PI * (outer * outer - inner * inner)
+  const count = Math.round(area / sqUnitsPerItem)
+  const points: Point[] = []
+  for (let i = 0; i < count; i++) {
+    let x = 0, z = 0, r = 0
+    for (let attempt = 0; attempt < 8; attempt++) {
+      x = (rng.next() * 2 - 1) * outer
+      z = (rng.next() * 2 - 1) * outer
+      r = Math.hypot(x, z)
+      if (r >= inner && r <= outer) break
+    }
+    if (r >= inner && r <= outer) {
+      points.push({ x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 })
+    }
+  }
+  return points
+}
+
+interface HillTree { x: number; y: number; z: number }
+
+// Forest scatter across the hills band — density modulated by a second,
+// independent noise field (forestSimplex) so trees form loose groves and
+// clearings rather than uniform stipple. Y snaps to the tree's own cell's
+// quantized hillLevelAt (not raw continuous noise) — the terrain itself is
+// quantized/terraced, so this is what actually sits trunks flush on a step
+// instead of floating/burying them by up to HILL_STEP/2.
+function generateHillTrees(rng: RNG, simplex: SimplexNoise, forestSimplex: SimplexNoise): HillTree[] {
+  const trees: HillTree[] = []
+  for (const p of scatterInAnnulus(rng, HILLS_INNER, HILLS_OUTER, 1100)) {
+    const level = hillLevelAt(simplex, p.x, p.z)
+    if (level === 0) continue
+    const density = (forestSimplex.noise(p.x / 160 + 500, p.z / 160 + 500) + 1) / 2
+    if (rng.next() > density) continue
+    trees.push({ x: p.x, y: level * HILL_STEP, z: p.z })
+  }
+  return trees
+}
+
+// Grass/park buffer scatter (2026-08-13) — deliberately ~25x sparser than a
+// real park (ZONE_BUFFER_SQ_UNITS_PER_TREE=100 above) since this is open
+// buffer space, not another explicit park. Light density modulation from
+// the same forest noise field gives loose copses instead of uniform
+// spacing, without needing real park-style logic (generateZoneBufferTrees
+// iterates BSP leaves and excludes reserved-zone circles — not reusable
+// here, this band has neither).
+function generateBufferScatter(
+  rng: RNG, forestSimplex: SimplexNoise
+): { trees: Point[]; bushes: Point[] } {
+  const trees = scatterInAnnulus(rng, CITY_EDGE, BUFFER_OUTER, 2500).filter((p) => {
+    const density = (forestSimplex.noise(p.x / 160 + 500, p.z / 160 + 500) + 1) / 2
+    return rng.next() < 0.3 + density * 0.7
+  })
+  const bushes = scatterInAnnulus(rng, CITY_EDGE, BUFFER_OUTER, 3500)
+  return { trees, bushes }
+}
+
+interface MeadowShape { id: string; points: Point[] }
+
+// A handful of organic color-variation patches across the buffer, reusing
+// sampleBlobPolygon (already used for lakes) rather than inventing a new
+// shape technique — breaks up what would otherwise be ~290 units of
+// perfectly uniform grass.
+//
+// sampleBlobPolygon's wobble can swing a polygon vertex up to 1.34x the
+// requested base radius outward from the meadow's own CENTER — so a
+// meadow's center can't just be scattered right up to CITY_EDGE/BUFFER_OUTER
+// the way a plain point (tree/bush) can, or the blob's own far edge
+// overshoots past the buffer band (caught by verifyTerrainClearsCity the
+// first time this ran: a meadow center placed at ~370 produced a polygon
+// vertex down at 330.9, inside CITY_EDGE). MEADOW_MAX_RADIUS/WOBBLE below
+// bound that overshoot so the center-scatter margin can be computed exactly
+// rather than guessed.
+const MEADOW_MAX_RADIUS = 70
+const MEADOW_MAX_WOBBLE = 1.34 // sampleBlobPolygon: 1 + 0.22 + 0.12, worst case
+const MEADOW_MARGIN = Math.ceil(MEADOW_MAX_RADIUS * MEADOW_MAX_WOBBLE) + 5
+
+function generateMeadows(rng: RNG): MeadowShape[] {
+  const centers = scatterInAnnulus(rng, CITY_EDGE + MEADOW_MARGIN, BUFFER_OUTER - MEADOW_MARGIN, 25000) // ~10-14 patches
+  return centers.map((c, i) => ({
+    id: `meadow_${i}`,
+    points: sampleBlobPolygon(rng, c.x, c.z, 30 + rng.next() * (MEADOW_MAX_RADIUS - 30), 16),
+  }))
+}
+
+interface MountainPeakOut { x: number; z: number; cubeSize: number; levels: number; seed: number }
+
+const MOUNTAIN_MIN_GAP_DEG  = 35
+const MOUNTAIN_MIN_GAPS     = 3
+// 3 mandatory gaps, each 45-70deg, roughly evenly spaced (3 slots of 120deg
+// with jitter) — carved out FIRST. Mountain clusters only ever get placed
+// in the leftover arcs between them, each further inset by
+// MOUNTAIN_CLUSTER_MARGIN_DEG so a cluster's own peak footprints (which
+// have real angular width — up to ~5deg per peak at this radius/size) can
+// never grow back into a gap. This makes "at least 3 real gaps" true by
+// construction, not by hoping a random skip lands right — an earlier
+// version relied on randomly skipping ~30% of 9 evenly-spaced cluster slots
+// and failed its own verification (1 gap instead of 3, 79% coverage) the
+// first time it was run, because peak footprint width wasn't accounted for
+// in the spacing math. This version can't have that failure mode: gaps are
+// reserved before any cluster/peak geometry is even considered.
+const MOUNTAIN_GAP_COUNT        = 3
+const MOUNTAIN_GAP_MIN_DEG      = 45
+const MOUNTAIN_GAP_MAX_DEG      = 70
+const MOUNTAIN_CLUSTER_MARGIN_DEG = 12
+
+// Distant mountain backdrop — same stepped-pyramid cube technique the
+// rejected ring used (that part wasn't the problem), but placed ~4x further
+// out and generated as sparse clusters with real, guaranteed gaps instead
+// of a continuous ring. verifyMountainHorizonGaps below re-derives the
+// gaps from the ACTUAL placed peak footprints (not the construction's own
+// intent) as a final honest check that nothing drifted during placement.
+function generateDistantMountains(rng: RNG): MountainPeakOut[] {
+  const TWO_PI = Math.PI * 2
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+
+  // 1. Reserve the gaps first.
+  const gapSlotArc = TWO_PI / MOUNTAIN_GAP_COUNT
+  const gaps = Array.from({ length: MOUNTAIN_GAP_COUNT }, (_, i) => {
+    const center = i * gapSlotArc + (rng.next() - 0.5) * gapSlotArc * 0.5
+    const width = toRad(MOUNTAIN_GAP_MIN_DEG + rng.next() * (MOUNTAIN_GAP_MAX_DEG - MOUNTAIN_GAP_MIN_DEG))
+    return { start: center - width / 2, end: center + width / 2 }
+  })
+  const normGaps = gaps
+    .map((g) => {
+      const start = ((g.start % TWO_PI) + TWO_PI) % TWO_PI
+      return { start, end: start + (g.end - g.start) }
+    })
+    .sort((a, b) => a.start - b.start)
+
+  // 2. Whatever's left between the gaps is where clusters may go, each arc
+  // shrunk by MOUNTAIN_CLUSTER_MARGIN_DEG on both ends as a safety margin
+  // for peak footprint width.
+  const margin = toRad(MOUNTAIN_CLUSTER_MARGIN_DEG)
+  const allowedArcs: { start: number; end: number }[] = []
+  for (let i = 0; i < normGaps.length; i++) {
+    const arcStart = normGaps[i].end + margin
+    const arcEnd = (i === normGaps.length - 1 ? normGaps[0].start + TWO_PI : normGaps[i + 1].start) - margin
+    if (arcEnd > arcStart) allowedArcs.push({ start: arcStart, end: arcEnd })
+  }
+
+  // 3. Fill each allowed arc with 1-2 clusters of 3-5 peaks apiece.
+  const peaks: MountainPeakOut[] = []
+  const clusterSpans: { start: number; end: number }[] = []
+
+  for (const arc of allowedArcs) {
+    const arcWidth = arc.end - arc.start
+    const clusterCount = arcWidth > toRad(24) ? 2 : 1
+    const slotWidth = arcWidth / clusterCount
+
+    for (let c = 0; c < clusterCount; c++) {
+      const slotStart = arc.start + c * slotWidth
+      const centerAngle = slotStart + slotWidth / 2
+      const arcSpan = Math.min(slotWidth * 0.7, toRad(18)) // how far apart this cluster's own peaks spread
+      const peakCount = 3 + Math.floor(rng.next() * 3) // 3-5
+      let maxHalfAngle = 0
+
+      for (let p = 0; p < peakCount; p++) {
+        const t = peakCount === 1 ? 0.5 : p / (peakCount - 1)
+        const angle = centerAngle - arcSpan / 2 + t * arcSpan
+        const radius = MOUNTAIN_INNER + rng.next() * (MOUNTAIN_OUTER - MOUNTAIN_INNER)
+        const cubeSize = 20 + rng.next() * 6 // smaller than the first attempt — kept modest so footprint angle stays predictable
+        const levels = 3 + Math.floor(rng.next() * 3)
+        const footprintHalf = levels * cubeSize
+        maxHalfAngle = Math.max(maxHalfAngle, Math.atan2(footprintHalf, radius))
+
+        peaks.push({
+          x: Math.round(Math.cos(angle) * radius * 10) / 10,
+          z: Math.round(Math.sin(angle) * radius * 10) / 10,
+          cubeSize: Math.round(cubeSize * 10) / 10,
+          levels,
+          seed: Math.floor(rng.next() * 1e9),
+        })
+      }
+
+      clusterSpans.push({
+        start: centerAngle - arcSpan / 2 - maxHalfAngle,
+        end: centerAngle + arcSpan / 2 + maxHalfAngle,
+      })
+    }
+  }
+
+  verifyMountainHorizonGaps(clusterSpans)
+
+  const maxHeight = peaks.reduce((m, p) => Math.max(m, p.levels * p.cubeSize), 0)
+  const angularHeightDeg = (Math.atan2(maxHeight, MOUNTAIN_INNER) * 180) / Math.PI
+  console.log(`Mountains: max height ${maxHeight.toFixed(0)}, angular height ${angularHeightDeg.toFixed(1)}° ` +
+    `(design target: stay under ~6°)`)
+
+  return peaks
+}
+
+// Hard build-time gate: throws unless the mountain backdrop has real gaps
+// in it. A solid unbroken ring (the rejected attempt's actual mistake,
+// independent of its proximity/height) must never silently reappear from a
+// future reseed.
+function verifyMountainHorizonGaps(spans: { start: number; end: number }[]): void {
+  if (spans.length === 0) throw new Error("Mountain generation produced zero clusters — reseed or check MOUNTAIN_CLUSTERS skip probability")
+
+  const TWO_PI = Math.PI * 2
+  const norm = spans
+    .map((s) => ({ start: ((s.start % TWO_PI) + TWO_PI) % TWO_PI, len: s.end - s.start }))
+    .sort((a, b) => a.start - b.start)
+
+  const merged: { start: number; end: number }[] = []
+  for (const s of norm) {
+    const end = s.start + s.len
+    const last = merged[merged.length - 1]
+    if (last && s.start <= last.end) last.end = Math.max(last.end, end)
+    else merged.push({ start: s.start, end })
+  }
+
+  const coverage = merged.reduce((sum, m) => sum + (m.end - m.start), 0)
+  const coverageFrac = coverage / TWO_PI
+
+  const gapsDeg: number[] = []
+  for (let i = 0; i < merged.length; i++) {
+    const next = merged[(i + 1) % merged.length]
+    const gap = i === merged.length - 1 ? next.start + TWO_PI - merged[i].end : next.start - merged[i].end
+    gapsDeg.push((gap * 180) / Math.PI)
+  }
+  const bigGaps = gapsDeg.filter((g) => g >= MOUNTAIN_MIN_GAP_DEG).length
+
+  console.log(`Mountains: ${merged.length} horizon clusters, ${(coverageFrac * 100).toFixed(1)}% angular coverage, ` +
+    `${bigGaps} gaps >= ${MOUNTAIN_MIN_GAP_DEG}°`)
+
+  if (bigGaps < MOUNTAIN_MIN_GAPS) {
+    throw new Error(
+      `Mountain horizon has only ${bigGaps} gaps >= ${MOUNTAIN_MIN_GAP_DEG}° (need >= ${MOUNTAIN_MIN_GAPS}) — ` +
+      `this would read as a solid ring, exactly what the rejected first attempt did. Reseed or widen the skip probability.`
+    )
+  }
+  if (coverageFrac < 0.3 || coverageFrac > 0.7) {
+    console.log(`NOTE: mountain coverage ${(coverageFrac * 100).toFixed(1)}% is outside the ideal 45-60% range (not fatal).`)
+  }
+}
+
+// Re-measures the city's real geometric envelope from this run's own
+// generated data (not the theoretical CITY_RADIUS) — building footprint
+// corners, road/park-tree positions, road segment endpoints, furniture —
+// and asserts it clears CITY_EDGE. Catches a future BSP/placement tweak
+// that pushes real geometry past the terrain's inner edge before it ever
+// reaches a screenshot.
+function measureCityEnvelope(): number {
+  let maxR = 0
+  const consider = (x: number, z: number) => { maxR = Math.max(maxR, Math.hypot(x, z)) }
+
+  for (const b of placed) {
+    const spec = BUILDING_SPECS.find((s) => s.variant === b.variant)
+    const halfDiag = spec ? Math.hypot(spec.width / 2, spec.depth / 2) : 10
+    maxR = Math.max(maxR, Math.hypot(b.x, b.z) + halfDiag)
+  }
+  for (const seg of roadSegments) { consider(seg.x1, seg.z1); consider(seg.x2, seg.z2) }
+  for (const t of parkTrees) consider(t.x, t.z)
+  for (const b of bushes) consider(b.x, b.z)
+  for (const t of roadTrees) consider(t.x, t.z)
+  for (const l of lampPosts) consider(l.x, l.z)
+  for (const b of allBenches) consider(b.x, b.z)
+  for (const p of plazas) maxR = Math.max(maxR, Math.hypot(p.x, p.z) + p.radius)
+
+  return maxR
+}
+
+function verifyTerrainClearsCity(
+  cityEnvelope: number,
+  data: {
+    hillColumns: number[]
+    hillTrees: HillTree[]
+    bufferTrees: Point[]
+    bufferBushes: Point[]
+    meadows: MeadowShape[]
+    mountains: MountainPeakOut[]
+  }
+): void {
+  if (cityEnvelope > CITY_EDGE) {
+    throw new Error(
+      `City envelope (${cityEnvelope.toFixed(1)}) exceeds CITY_EDGE (${CITY_EDGE}) — real city geometry has ` +
+      `drifted past the terrain's inner edge. Widen CITY_EDGE (and the band radii above) or investigate what changed.`
+    )
+  }
+
+  let minR = Infinity
+  for (let i = 0; i < data.hillColumns.length; i += 3) {
+    minR = Math.min(minR, Math.hypot(data.hillColumns[i] * HILL_CELL, data.hillColumns[i + 1] * HILL_CELL))
+  }
+  for (const t of data.hillTrees) minR = Math.min(minR, Math.hypot(t.x, t.z))
+  for (const t of data.bufferTrees) minR = Math.min(minR, Math.hypot(t.x, t.z))
+  for (const b of data.bufferBushes) minR = Math.min(minR, Math.hypot(b.x, b.z))
+  for (const m of data.meadows) for (const p of m.points) minR = Math.min(minR, Math.hypot(p.x, p.z))
+  for (const p of data.mountains) minR = Math.min(minR, Math.hypot(p.x, p.z) - p.levels * p.cubeSize)
+
+  console.log(`Terrain clears city: min terrain radius ${minR.toFixed(1)} (CITY_EDGE ${CITY_EDGE})`)
+  if (minR < CITY_EDGE - 1) {
+    throw new Error(`Terrain element found at radius ${minR.toFixed(1)}, inside CITY_EDGE (${CITY_EDGE}) — a generator radius/threshold is wrong.`)
+  }
+}
+
+const cityEnvelope = measureCityEnvelope()
+
+const terrainNoiseRng  = new RNG(SEED + 20)
+const forestNoiseRng   = new RNG(SEED + 21)
+const hillTreesRng     = new RNG(SEED + 22)
+const bufferRng        = new RNG(SEED + 23)
+const meadowRng        = new RNG(SEED + 24)
+const mountainRng      = new RNG(SEED + 25)
+
+const terrainSimplex = new SimplexNoise({ random: () => terrainNoiseRng.next() })
+const forestSimplex  = new SimplexNoise({ random: () => forestNoiseRng.next() })
+
+const hillColumns  = generateHillColumns(terrainSimplex)
+const hillTrees     = generateHillTrees(hillTreesRng, terrainSimplex, forestSimplex)
+const bufferScatter = generateBufferScatter(bufferRng, forestSimplex)
+const meadows        = generateMeadows(meadowRng)
+const mountains      = generateDistantMountains(mountainRng)
+
+verifyTerrainClearsCity(cityEnvelope, {
+  hillColumns, hillTrees,
+  bufferTrees: bufferScatter.trees, bufferBushes: bufferScatter.bushes,
+  meadows, mountains,
+})
+
+console.log(
+  `Terrain: ${hillColumns.length / 3} hill columns, ${hillTrees.length} hill trees, ` +
+  `${bufferScatter.trees.length} buffer trees, ${bufferScatter.bushes.length} buffer bushes, ` +
+  `${meadows.length} meadows, ${mountains.length} mountain peaks`
+)
+
+const terrainOutput = `/**
+ * Static world terrain: grass/park buffer, low rolling voxel hills, distant
+ * mountain backdrop. Generated by src/scripts/generateCityLayout.ts's
+ * "World terrain" section alongside the other data files — same "fixed
+ * design decision, not runtime state" treatment. See that section's doc
+ * comment for the full design rationale (this replaced a rejected first
+ * attempt — a mountain ring placed close to the city that read as
+ * "closed off and claustrophobic").
+ *
+ * HILL_COLUMNS is a FLAT [gx,gz,level, ...] number array (not objects) —
+ * at ~${hillColumns.length / 3} entries, pretty-printed objects would make this file
+ * enormous; decor.ts's buildHillsMesh expands it using HILL_CELL/HILL_STEP.
+ */
+
+export interface HillTree { x: number; y: number; z: number; }
+export interface Point { x: number; z: number; }
+export interface MeadowShape { id: string; points: Point[]; }
+export interface MountainPeak { x: number; z: number; cubeSize: number; levels: number; seed: number; }
+export interface TerrainBands {
+  cityEdge: number; bufferOuter: number; hillsInner: number; hillsOuter: number;
+  mountainInner: number; mountainOuter: number; groundRadius: number;
+  fogNear: number; fogFar: number;
+}
+
+export const HILL_CELL = ${HILL_CELL};
+export const HILL_STEP = ${HILL_STEP};
+export const HILL_COLUMNS: number[] = ${JSON.stringify(hillColumns)};
+
+export const HILL_TREES: HillTree[] = ${JSON.stringify(hillTrees, null, 2)};
+
+export const BUFFER_TREES: Point[] = ${JSON.stringify(bufferScatter.trees, null, 2)};
+
+export const BUFFER_BUSHES: Point[] = ${JSON.stringify(bufferScatter.bushes, null, 2)};
+
+export const MEADOWS: MeadowShape[] = ${JSON.stringify(meadows, null, 2)};
+
+export const MOUNTAINS: MountainPeak[] = ${JSON.stringify(mountains, null, 2)};
+
+export const TERRAIN_BANDS: TerrainBands = ${JSON.stringify({
+  cityEdge: CITY_EDGE, bufferOuter: BUFFER_OUTER, hillsInner: HILLS_INNER, hillsOuter: HILLS_OUTER,
+  mountainInner: MOUNTAIN_INNER, mountainOuter: MOUNTAIN_OUTER, groundRadius: GROUND_RADIUS,
+  fogNear: FOG_NEAR, fogFar: FOG_FAR,
+}, null, 2)};
+`
+
+const terrainPath = join(process.cwd(), "src/data/cityTerrain.ts")
+writeFileSync(terrainPath, terrainOutput)
+console.log(`Wrote ${terrainPath}`)

@@ -23,7 +23,7 @@ import {
   isGlass,
   computeUpTo,
 } from "./utils"
-import { buildDecorGroup, disposeDecorGroup } from "./decor"
+import { buildDecorGroup, buildGroundGroup, disposeDecorGroup } from "./decor"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -43,6 +43,16 @@ const DEFAULT_CAMERA_TARGET = { x: 0, y: 10, z: 0 }
 // outward normal. Far enough to show neighboring blocks on the same wall, not just
 // the single target block filling the frame.
 const FOCUS_OFFSET = 22
+
+// Soft world boundary (2026-08-13) — how far controls.target may be panned
+// from the origin. OrbitControls has no built-in pan-distance clamp
+// (min/maxDistance only bound zoom/dolly), so this is enforced by hand in
+// animate() below. 600 sits in the near part of the rolling-hills band
+// (640-1150, see generateCityLayout.ts's TERRAIN_BANDS) — a generous,
+// "final safeguard" boundary per the user's own framing, not the primary
+// mechanism keeping the world feeling bounded (that's the terrain/fog
+// layering itself).
+const PAN_LIMIT = 600
 
 // Vertical (floor/ceiling — nothing above or below) is checked before lateral
 // (wall) on purpose: a block completing a floor/ceiling layer should be framed
@@ -199,7 +209,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
   // ── Renderer ────────────────────────────────────────────────────────────
   // logarithmicDepthBuffer: with near=1/far=4000 (a large ratio, needed since
-  // the camera can zoom out to maxDistance=1200) a linear depth buffer loses
+  // the camera can zoom out to maxDistance=1600) a linear depth buffer loses
   // almost all its precision at distance — parks/lakes/roads sitting within a
   // fraction of a unit of the ground and each other flickered/z-fought once
   // zoomed out. Logarithmic redistributes precision to fix exactly this.
@@ -212,7 +222,16 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // ── Scene ────────────────────────────────────────────────────────────────
   const scene = new THREE.Scene()
   scene.background = new THREE.Color("#87ceeb")
-  if (!disableFog) scene.fog = new THREE.Fog(0xc5e8f7, 300, 900)
+  // Fog near/far widened (2026-08-13, was 300/900) to match the world
+  // terrain's much larger scale (grass buffer/hills/mountains now extend to
+  // ~2000, see generateCityLayout.ts's TERRAIN_BANDS) — near=800 keeps the
+  // whole city (envelope ~344) crisp, far=2400 means the ground rim and
+  // distant mountains sit mostly hazed. Fog color (0xc5e8f7) is duplicated
+  // as FOG_TINT_COLOR in decor.ts, which bakes the same atmospheric
+  // perspective directly into hill/mountain/ground-rim vertex colors so
+  // they read as background even with fog disabled or at close range —
+  // keep both in sync if this color ever changes.
+  if (!disableFog) scene.fog = new THREE.Fog(0xc5e8f7, 800, 2400)
 
   // ── Camera ───────────────────────────────────────────────────────────────
   // near=1 (not 0.5): nothing ever renders closer than controls.minDistance
@@ -228,7 +247,12 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // Low enough that focusOnBlock's close-up framing (FOCUS_OFFSET) isn't
   // immediately clamped back out on the next controls.update().
   controls.minDistance       = 1.5
-  controls.maxDistance       = 1200
+  // Raised from 1200 (2026-08-13) — an INCREASE, deliberately the opposite
+  // of a rejected first attempt's tightening to 800. Openness now comes
+  // from the terrain/fog layering itself (see decor.ts/generateCityLayout.ts)
+  // rather than a tight zoom clamp; PAN_LIMIT above is the real "final
+  // safeguard" boundary, not this.
+  controls.maxDistance       = 1600
   controls.maxPolarAngle     = Math.PI / 2 - 0.02
   controls.panSpeed          = 1.2
   controls.rotateSpeed       = 0.65
@@ -247,27 +271,19 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   fill.position.set(-80, 60, 80)
   scene.add(fill)
 
-  // ── Ground & grid ────────────────────────────────────────────────────────
-  // 800: comfortably covers the Phase 2/3 city's placement disc (extent grows
-  // a little past the theoretical radius estimate since the RSA placement
-  // fallback can push a hard-to-place building slightly further out — see
-  // generateCityLayout.ts), with real margin to spare.
-  const groundGeo = new THREE.PlaneGeometry(800, 800)
-  // Light grey (2026-08-11) — was green (0x6b8f5e); kept noticeably lighter
-  // than ROAD_COLOR (0x555a5e, decor.ts) so roads still read as a distinct
-  // darker strip instead of blending into the ground.
-  const groundMat = new THREE.MeshLambertMaterial({ color: 0xb3b5b6 })
-  const ground    = new THREE.Mesh(groundGeo, groundMat)
-  ground.rotation.x = -Math.PI / 2
-  scene.add(ground)
+  // ── Ground ───────────────────────────────────────────────────────────────
+  // Replaces the old flat PlaneGeometry(800,800) + square GridHelper
+  // (2026-08-13) — a grey inner disc (radius 360, comfortably covers the
+  // city's measured ~344 envelope) plus a large gradient ring fading
+  // grey→grass→haze→fog-color out to radius 2000, so there's no rectangular
+  // edge and no visible outer boundary at any camera angle. GridHelper is
+  // dropped entirely, not just resized — its own square boundary was part
+  // of what read as "the rectangular edge" in the first place. See
+  // decor.ts's buildGroundGroup for the full rationale.
+  const groundGroup = buildGroundGroup()
+  scene.add(groundGroup)
 
-  const grid = new THREE.GridHelper(800, 800, 0x3a6032, 0x4a7a42)
-  ;(grid.material as THREE.Material).transparent = true
-  ;(grid.material as THREE.Material).opacity     = 0.35
-  grid.position.y = 0.05
-  scene.add(grid)
-
-  // ── Decor (parks, lakes, roads, trees) — static, built once ───────────────
+  // ── Decor (parks, lakes, roads, trees, world terrain) — static, built once
   const decorGroup = decor ? buildDecorGroup(decor) : null
   if (decorGroup) scene.add(decorGroup)
 
@@ -309,6 +325,24 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   const animate = () => {
     rafId = requestAnimationFrame(animate)
     controls.update()
+
+    // Soft world boundary (2026-08-13) — see PAN_LIMIT's doc comment.
+    // Clamps controls.target's XZ distance from the origin by hand, since
+    // OrbitControls has no built-in pan clamp. Moves camera.position by the
+    // same delta so orbit distance/angle are preserved — panning into the
+    // wall feels like sliding along it, not like the view snapping or
+    // rotating. Runs after controls.update() and before renderer.render()
+    // so an over-panned frame is never actually displayed.
+    const targetR = Math.hypot(controls.target.x, controls.target.z)
+    if (targetR > PAN_LIMIT) {
+      const shrink = PAN_LIMIT / targetR - 1
+      const dx = controls.target.x * shrink
+      const dz = controls.target.z * shrink
+      controls.target.x += dx
+      controls.target.z += dz
+      camera.position.x += dx
+      camera.position.z += dz
+    }
 
     const now = performance.now() / 1000
     for (const node of nodes.values()) {
@@ -542,10 +576,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       voxelGeo.dispose()
       solidMat.dispose()
       glassMat.dispose()
-      groundGeo.dispose()
-      groundMat.dispose()
-      grid.geometry.dispose()
-      ;(grid.material as THREE.Material).dispose()
+      scene.remove(groundGroup)
+      disposeDecorGroup(groundGroup)
       if (decorGroup) {
         scene.remove(decorGroup)
         disposeDecorGroup(decorGroup)

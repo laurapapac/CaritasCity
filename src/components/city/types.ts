@@ -98,12 +98,70 @@ export interface RoadSegment {
 export interface TreeMarker {
   x: number
   z: number
+  /** World-space Y (2026-08-13) — undefined/omitted means ground level (0),
+   *  matching every existing tree. Used by hill trees so trunks sit flush on
+   *  their terraced hill-column top instead of at y=0. */
+  y?: number
 }
 
 export interface OrientedMarker {
   x: number
   z: number
   angle: number
+}
+
+// ── World terrain (2026-08-13) — grass buffer, rolling hills, distant
+// mountains past the city; see generateCityLayout.ts's "World terrain"
+// section for the full design rationale (replaces a rejected first attempt,
+// a mountain ring that read as "closed off and claustrophobic"). ─────────
+
+/** A stepped stack of terraced voxel-cube layers — same shape as a tree
+ *  canopy's CanopyShape in decor.ts, just at mountain scale. `levels` is the
+ *  number of tapering layers (footprint radius = levels - layerIndex, in
+ *  cube units); `seed` drives per-cell jitter so no two peaks are
+ *  identical. */
+export interface MountainPeak {
+  x: number
+  z: number
+  cubeSize: number
+  levels: number
+  seed: number
+}
+
+/** An organic color-variation patch in the grass buffer — same shape as a
+ *  LakeShape (sampleBlobPolygon), rendered as flat ground color instead of
+ *  water. */
+export interface MeadowShape {
+  id: string
+  points: { x: number; z: number }[]
+}
+
+export interface TerrainBands {
+  cityEdge: number
+  bufferOuter: number
+  hillsInner: number
+  hillsOuter: number
+  mountainInner: number
+  mountainOuter: number
+  groundRadius: number
+  fogNear: number
+  fogFar: number
+}
+
+/** Static world-terrain data (src/data/cityTerrain.ts). hillColumns is a
+ *  flat [gx,gz,level, ...] number array (grid indices, not world
+ *  coordinates or objects) — see cityTerrain.ts's doc comment for why;
+ *  cellSize/step are needed to expand it back into world position/height. */
+export interface TerrainData {
+  cellSize: number
+  step: number
+  hillColumns: number[]
+  hillTrees: TreeMarker[]
+  bufferTrees: TreeMarker[]
+  bufferBushes: TreeMarker[]
+  meadows: MeadowShape[]
+  mountains: MountainPeak[]
+  bands: TerrainBands
 }
 
 export interface CityDecor {
@@ -121,4 +179,8 @@ export interface CityDecor {
   lampPosts?: OrientedMarker[]
   benches?: OrientedMarker[]
   plazas?: DecorZone[]
+  /** World terrain past the city — grass buffer, rolling hills, distant
+   *  mountains (2026-08-13). Optional so callers without it (e.g. /kiosk,
+   *  which passes no decor at all today) are unaffected. */
+  terrain?: TerrainData
 }

@@ -6,6 +6,10 @@ import { CITY_LAYOUT } from "../../data/cityLayout";
 import { PARKS, LAKES, BEACHES, PARK_TREES, BUSHES } from "../../data/cityDecor";
 import { ROADS, ROAD_WIDTH, ROAD_TREES } from "../../data/cityRoads";
 import { LAMP_POSTS, BENCHES, PLAZAS } from "../../data/cityFurniture";
+import {
+  HILL_CELL, HILL_STEP, HILL_COLUMNS, HILL_TREES,
+  BUFFER_TREES, BUFFER_BUSHES, MEADOWS, MOUNTAINS, TERRAIN_BANDS,
+} from "../../data/cityTerrain";
 import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
 // Dev-only preview of the full Phase 2/3 static layout: all 158 buildings
@@ -85,6 +89,17 @@ export default function DevCityPreview() {
       lampPosts: LAMP_POSTS,
       benches: BENCHES,
       plazas: PLAZAS,
+      terrain: {
+        cellSize: HILL_CELL,
+        step: HILL_STEP,
+        hillColumns: HILL_COLUMNS,
+        hillTrees: HILL_TREES,
+        bufferTrees: BUFFER_TREES,
+        bufferBushes: BUFFER_BUSHES,
+        meadows: MEADOWS,
+        mountains: MOUNTAINS,
+        bands: TERRAIN_BANDS,
+      },
     }),
     []
   );
@@ -95,7 +110,6 @@ export default function DevCityPreview() {
         ref={cityRef}
         initialBuildings={buildings}
         decor={decor}
-        disableFog
         style={{ position: "absolute", inset: 0 }}
       />
 

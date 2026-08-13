@@ -41,11 +41,27 @@
  * a chunkier "Minecraft-style" look matching the buildings' own blocky
  * voxel aesthetic — see buildTreeTypes' doc comment. Trunk geometry and
  * every tree's (x,z) position are unchanged.
+ *
+ * World terrain (2026-08-13, same-day follow-up): grass buffer, low rolling
+ * hills, distant mountains past the city — replaces a rejected first
+ * attempt (a mountain ring placed close to the city that read as "closed
+ * off and claustrophobic"). See generateCityLayout.ts's "World terrain"
+ * section for the generation-side design rationale. buildGroundGroup
+ * replaces cityScene.ts's old inline flat-plane-and-square-grid ground with
+ * a grey inner disc (city, unchanged look) + a large gradient ring that
+ * fades grey → grass → haze → fog-color with radius, so the world's outer
+ * edge is rendered as sky-colored rather than merely faded by fog (works at
+ * any camera angle or fog setting). buildHillsMesh/buildMountainsMesh use
+ * absolute per-instance colors (material color left white, InstancedMesh
+ * .setColorAt carries the real RGB) rather than the tree canopies'
+ * multiplicative shadeForLayer tint, since both need genuine color
+ * blending toward the fog color for atmospheric perspective, not just a
+ * ±12% brightness nudge.
  */
 
 import * as THREE from "three"
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js"
-import type { CityDecor, OrientedMarker } from "./types"
+import type { CityDecor, MeadowShape, MountainPeak, OrientedMarker, TerrainData } from "./types"
 
 const LAKE_COLOR = 0x3a7bd5
 const ROAD_COLOR = 0x555a5e
@@ -287,11 +303,17 @@ function shadeForLayer(dy: number, maxDy: number): THREE.Color {
 // deterministic scale variation (0.85-1.15x, applied to both the trunk and
 // every one of its canopy cubes) so same-type trees aren't perfectly
 // identical clones.
-function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.InstancedMesh[] {
+//
+// Optional per-tree `y` (2026-08-13, world terrain): every existing caller
+// passes trees with no `y`, defaulting to 0 (ground level, unchanged
+// behavior). Hill trees set it to their hill column's quantized top height,
+// so trunks sit flush on a terraced step instead of floating/sinking by up
+// to half a step if snapped to raw continuous noise instead.
+function buildVariedTreesMesh(trees: { x: number; z: number; y?: number }[]): THREE.InstancedMesh[] {
   if (trees.length === 0) return []
 
   const types = buildTreeTypes()
-  const buckets: { x: number; z: number }[][] = types.map(() => [])
+  const buckets: { x: number; z: number; y?: number }[][] = types.map(() => [])
   for (const t of trees) buckets[pickTreeType(t.x, t.z)].push(t)
 
   const canopyCubeGeo = new THREE.BoxGeometry(1, 1, 1)
@@ -309,8 +331,9 @@ function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.Instance
 
     bucket.forEach((t, i) => {
       const scale = 0.85 + hash2D(t.x, t.z, 2) * 0.3
+      const groundY = t.y ?? 0
 
-      dummy.position.set(t.x, type.trunkY * scale, t.z)
+      dummy.position.set(t.x, type.trunkY * scale + groundY, t.z)
       dummy.scale.setScalar(scale)
       dummy.updateMatrix()
       trunkMesh.setMatrixAt(i, dummy.matrix)
@@ -318,7 +341,7 @@ function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.Instance
       offsets.forEach((o, j) => {
         dummy.position.set(
           t.x + o.dx * cubeSize * scale,
-          (baseY + o.dy * cubeSize) * scale,
+          (baseY + o.dy * cubeSize) * scale + groundY,
           t.z + o.dz * cubeSize * scale,
         )
         dummy.scale.setScalar(cubeSize * scale)
@@ -422,6 +445,229 @@ function buildBenchesMesh(benches: OrientedMarker[]): [THREE.InstancedMesh, THRE
   return [seatMesh, backMesh]
 }
 
+// ── World terrain rendering (2026-08-13) ──────────────────────────────────
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+// Same color the fog is set to in cityScene.ts (scene.fog color, kept in
+// sync there) — used here so hills/mountains/the ground rim can bake
+// atmospheric-perspective blending directly into their vertex colors,
+// working correctly even with fog disabled (e.g. DevCityPreview) or at
+// close camera distances fog barely touches.
+const FOG_TINT_COLOR = new THREE.Color(0xc5e8f7)
+
+const GROUND_GREY       = new THREE.Color(0xb3b5b6) // matches the old flat ground color exactly
+const GROUND_GRASS_EDGE = new THREE.Color(0x7f9a6e)
+const GROUND_GRASS_FULL = new THREE.Color(0x86a874)
+const GROUND_HAZY       = new THREE.Color(0x9dbcc9)
+
+// Radial color for the ground ring — grey (matching the city's own ground)
+// blends into grass, holds, then desaturates toward the fog color so the
+// world's outer rim is rendered as sky-colored rather than merely faded by
+// distance fog (which alone can't hide a flat edge from an oblique/top-down
+// angle where the edge itself isn't far from the camera — the actual
+// lesson from the rejected mountain-ring attempt).
+function groundColorAt(radius: number, out: THREE.Color): THREE.Color {
+  if (radius < 380) return out.copy(GROUND_GREY).lerp(GROUND_GRASS_EDGE, smoothstep(355, 380, radius))
+  if (radius < 900) return out.copy(GROUND_GRASS_EDGE).lerp(GROUND_GRASS_FULL, smoothstep(380, 450, radius))
+  if (radius < 1300) return out.copy(GROUND_GRASS_FULL).lerp(GROUND_HAZY, smoothstep(900, 1300, radius))
+  return out.copy(GROUND_HAZY).lerp(FOG_TINT_COLOR, smoothstep(1300, 2000, radius))
+}
+
+// Replaces cityScene.ts's old flat PlaneGeometry(800,800) + square
+// GridHelper: an inner grey disc (radius 360, same color/material as the
+// old ground — the city's own ground literally doesn't change) plus a
+// large gradient ring (355→2000) carrying the radial color fade above.
+// GridHelper is dropped entirely rather than shrunk — its own square
+// boundary was part of what read as "the rectangular edge" in the first
+// place (confirmed with user), and roads/parks/plazas/terrain already give
+// plenty of spatial reference without it.
+export function buildGroundGroup(): THREE.Group {
+  const group = new THREE.Group()
+  group.name = "ground"
+
+  const innerGeo = new THREE.CircleGeometry(360, 96)
+  const innerMat = new THREE.MeshLambertMaterial({ color: GROUND_GREY })
+  const inner = new THREE.Mesh(innerGeo, innerMat)
+  inner.rotation.x = -Math.PI / 2
+  group.add(inner)
+
+  const ringGeo = new THREE.RingGeometry(355, 2000, 128, 48)
+  ringGeo.rotateX(-Math.PI / 2)
+  const avgCircumference = 2 * Math.PI * ((355 + 2000) / 2)
+  scaleUV(ringGeo, avgCircumference / TEXTURE_TILE_UNITS.grass, (2000 - 355) / TEXTURE_TILE_UNITS.grass)
+
+  const pos = ringGeo.attributes.position
+  const colors = new Float32Array(pos.count * 3)
+  const c = new THREE.Color()
+  for (let i = 0; i < pos.count; i++) {
+    groundColorAt(Math.hypot(pos.getX(i), pos.getZ(i)), c)
+    colors[i * 3] = c.r
+    colors[i * 3 + 1] = c.g
+    colors[i * 3 + 2] = c.b
+  }
+  ringGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3))
+
+  const ringMat = new THREE.MeshLambertMaterial({ map: buildGrassTexture(), vertexColors: true })
+  const ring = new THREE.Mesh(ringGeo, ringMat)
+  ring.position.y = 0.03
+  group.add(ring)
+
+  return group
+}
+
+const HILL_BASE_COLOR = new THREE.Color(0x5d8f4a)
+
+// Expands the flat [gx,gz,level,...] array into one flat-topped voxel
+// "column" InstancedMesh instance per cell (a non-uniform-Y-scaled shared
+// unit cube, not stacked layers — see cityTerrain.ts's doc comment for why
+// this stays a flat array). Each column's color: a level-based
+// lighter/darker tint (same shadeForLayer-style idea as tree canopies, just
+// computed as an absolute color here) then lerped toward the fog color
+// past ~950 radius so the outer hills visibly desaturate into haze — this
+// happens on top of (not instead of) scene.fog, and works even with fog
+// disabled.
+function buildHillsMesh(terrain: TerrainData): THREE.InstancedMesh | null {
+  const { cellSize, step, hillColumns, bands } = terrain
+  const count = hillColumns.length / 3
+  if (count === 0) return null
+
+  const geo = new THREE.BoxGeometry(1, 1, 1)
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+  const mesh = new THREE.InstancedMesh(geo, mat, count)
+
+  const dummy = new THREE.Object3D()
+  const color = new THREE.Color()
+  const fadeStart = bands.hillsOuter - 200
+  const fadeEnd = bands.hillsOuter
+
+  for (let i = 0; i < count; i++) {
+    const gx = hillColumns[i * 3]
+    const gz = hillColumns[i * 3 + 1]
+    const level = hillColumns[i * 3 + 2]
+    const x = gx * cellSize
+    const z = gz * cellSize
+    const height = level * step
+
+    dummy.position.set(x, height / 2, z)
+    dummy.scale.set(cellSize, height, cellSize)
+    dummy.updateMatrix()
+    mesh.setMatrixAt(i, dummy.matrix)
+
+    color.copy(HILL_BASE_COLOR).multiplyScalar(0.88 + level * 0.06)
+    color.lerp(FOG_TINT_COLOR, smoothstep(fadeStart, fadeEnd, Math.hypot(x, z)) * 0.75)
+    mesh.setColorAt(i, color)
+  }
+
+  mesh.instanceMatrix.needsUpdate = true
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  return mesh
+}
+
+const MOUNTAIN_BASE_COLOR  = new THREE.Color(0x8fa3b5) // desaturated blue-grey — atmospheric perspective baked in, not realistic rock color
+const MOUNTAIN_LIGHT_COLOR = new THREE.Color(0xb9c9d8)
+const MOUNTAIN_FOG_LERP    = 0.55 // baked in at generation-independent render time — see module doc comment
+
+// A tapering diamond-footprint stack, same technique as a tree canopy's
+// conifer shape (decor.ts's buildTreeTypes) just at mountain scale — level L
+// has footprint radius `levels - L`. ~25% of each level's OUTER (diamond
+// -edge) cells are dropped, deterministically per peak via its own `seed`,
+// so silhouettes are irregular and no two peaks look identical despite
+// sharing the same generation formula.
+function mountainPeakOffsets(levels: number, seed: number): { dx: number; dy: number; dz: number }[] {
+  const offsets: { dx: number; dy: number; dz: number }[] = []
+  for (let dy = 0; dy < levels; dy++) {
+    const r = levels - dy
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.abs(dx) + Math.abs(dz) > r) continue
+        const isEdge = r > 0 && Math.abs(dx) + Math.abs(dz) === r
+        if (isEdge && hash2D(seed + dx * 13 + dz * 31, dy * 97 + seed, 7) < 0.25) continue
+        offsets.push({ dx, dy, dz })
+      }
+    }
+  }
+  return offsets
+}
+
+// Distant mountain backdrop — same stepped-pyramid cube technique the
+// rejected first attempt used (that part was never the problem — see
+// generateCityLayout.ts's "World terrain" doc comment for what actually
+// was: proximity and lack of real gaps). Colors are absolute (material left
+// white) so the fog-lerp is a genuine blend, not a multiplicative tint —
+// this is what keeps peaks reading as background regardless of camera angle
+// or fog state, rather than relying on scene.fog alone.
+function buildMountainsMesh(peaks: MountainPeak[]): THREE.InstancedMesh | null {
+  if (peaks.length === 0) return null
+
+  const perPeakOffsets = peaks.map((p) => mountainPeakOffsets(p.levels, p.seed))
+  const totalCubes = perPeakOffsets.reduce((sum, o) => sum + o.length, 0)
+  if (totalCubes === 0) return null
+
+  const geo = new THREE.BoxGeometry(1, 1, 1)
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+  const mesh = new THREE.InstancedMesh(geo, mat, totalCubes)
+
+  const dummy = new THREE.Object3D()
+  const color = new THREE.Color()
+  let cubeIndex = 0
+
+  peaks.forEach((peak, pi) => {
+    const offsets = perPeakOffsets[pi]
+    const maxDy = Math.max(1, peak.levels - 1)
+
+    for (const o of offsets) {
+      dummy.position.set(
+        peak.x + o.dx * peak.cubeSize,
+        (o.dy + 0.5) * peak.cubeSize,
+        peak.z + o.dz * peak.cubeSize,
+      )
+      dummy.scale.setScalar(peak.cubeSize)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(cubeIndex, dummy.matrix)
+
+      color.copy(MOUNTAIN_BASE_COLOR).lerp(MOUNTAIN_LIGHT_COLOR, o.dy / maxDy)
+      color.lerp(FOG_TINT_COLOR, MOUNTAIN_FOG_LERP)
+      mesh.setColorAt(cubeIndex, color)
+      cubeIndex++
+    }
+  })
+
+  mesh.instanceMatrix.needsUpdate = true
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  return mesh
+}
+
+const MEADOW_COLOR = 0x6ea355
+
+// A handful of organic color-variation patches across the grass buffer,
+// same THREE.Shape-from-blob-outline technique decor.lakes already uses —
+// just a flat solid color (no water material) at a low y (0.05) so it reads
+// as a subtle ground-color variation, not a new "zone."
+function buildMeadowsMesh(meadows: MeadowShape[]): THREE.Mesh | null {
+  const geometries: THREE.BufferGeometry[] = []
+  for (const meadow of meadows) {
+    if (meadow.points.length < 3) continue
+    const shape = new THREE.Shape()
+    shape.moveTo(meadow.points[0].x, -meadow.points[0].z)
+    for (let i = 1; i < meadow.points.length; i++) shape.lineTo(meadow.points[i].x, -meadow.points[i].z)
+    shape.closePath()
+    const geo = new THREE.ShapeGeometry(shape)
+    geo.rotateX(-Math.PI / 2)
+    geo.translate(0, 0.05, 0)
+    geometries.push(geo)
+  }
+  if (geometries.length === 0) return null
+
+  const merged = mergeGeometries(geometries)
+  geometries.forEach((g) => g.dispose())
+  const mat = new THREE.MeshLambertMaterial({ color: MEADOW_COLOR })
+  return new THREE.Mesh(merged, mat)
+}
+
 export function buildDecorGroup(decor: CityDecor): THREE.Group {
   const group = new THREE.Group()
   group.name = "decor"
@@ -502,10 +748,20 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
     group.add(new THREE.Mesh(merged, mat))
   }
 
-  const trees = buildVariedTreesMesh([...decor.parkTrees, ...decor.roadTrees])
+  const terrain = decor.terrain
+
+  if (terrain) {
+    const meadows = buildMeadowsMesh(terrain.meadows)
+    if (meadows) group.add(meadows)
+  }
+
+  const trees = buildVariedTreesMesh([
+    ...decor.parkTrees, ...decor.roadTrees,
+    ...(terrain?.hillTrees ?? []), ...(terrain?.bufferTrees ?? []),
+  ])
   group.add(...trees)
 
-  const bushes = buildBushesMesh(decor.bushes ?? [])
+  const bushes = buildBushesMesh([...(decor.bushes ?? []), ...(terrain?.bufferBushes ?? [])])
   if (bushes) group.add(bushes)
 
   const lampPosts = buildLampPostsMesh(decor.lampPosts ?? [])
@@ -513,6 +769,14 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
 
   const benches = buildBenchesMesh(decor.benches ?? [])
   if (benches) group.add(...benches)
+
+  if (terrain) {
+    const hills = buildHillsMesh(terrain)
+    if (hills) group.add(hills)
+
+    const mountains = buildMountainsMesh(terrain.mountains)
+    if (mountains) group.add(mountains)
+  }
 
   return group
 }
