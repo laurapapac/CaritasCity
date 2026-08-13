@@ -44,15 +44,18 @@ const DEFAULT_CAMERA_TARGET = { x: 0, y: 10, z: 0 }
 // the single target block filling the frame.
 const FOCUS_OFFSET = 22
 
-// Soft world boundary (2026-08-13) — how far controls.target may be panned
+// Soft world boundary (2026-08-13, tightened same day — user found panning
+// out into the grass buffer/hills "explorable" undesirable, wanted movement
+// confined to inside the city ring) — how far controls.target may be panned
 // from the origin. OrbitControls has no built-in pan-distance clamp
 // (min/maxDistance only bound zoom/dolly), so this is enforced by hand in
-// animate() below. 600 sits in the near part of the rolling-hills band
-// (640-1150, see generateCityLayout.ts's TERRAIN_BANDS) — a generous,
-// "final safeguard" boundary per the user's own framing, not the primary
-// mechanism keeping the world feeling bounded (that's the terrain/fog
-// layering itself).
-const PAN_LIMIT = 600
+// animate() below. 350 matches CITY_EDGE (generateCityLayout.ts's
+// TERRAIN_BANDS) — the real city's own measured envelope (~344) — so the
+// camera can look anywhere across the city itself but never out into the
+// grass buffer/hills beyond it. The terrain past this point is still
+// visible (it's what keeps the world from feeling boxed in) — the user
+// just can't navigate the camera's own focal point out into it.
+const PAN_LIMIT = 350
 
 // Vertical (floor/ceiling — nothing above or below) is checked before lateral
 // (wall) on purpose: a block completing a floor/ceiling layer should be framed
@@ -209,7 +212,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
   // ── Renderer ────────────────────────────────────────────────────────────
   // logarithmicDepthBuffer: with near=1/far=4000 (a large ratio, needed since
-  // the camera can zoom out to maxDistance=1600) a linear depth buffer loses
+  // the camera can zoom out to maxDistance=800) a linear depth buffer loses
   // almost all its precision at distance — parks/lakes/roads sitting within a
   // fraction of a unit of the ground and each other flickered/z-fought once
   // zoomed out. Logarithmic redistributes precision to fix exactly this.
@@ -247,12 +250,16 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // Low enough that focusOnBlock's close-up framing (FOCUS_OFFSET) isn't
   // immediately clamped back out on the next controls.update().
   controls.minDistance       = 1.5
-  // Raised from 1200 (2026-08-13) — an INCREASE, deliberately the opposite
-  // of a rejected first attempt's tightening to 800. Openness now comes
-  // from the terrain/fog layering itself (see decor.ts/generateCityLayout.ts)
-  // rather than a tight zoom clamp; PAN_LIMIT above is the real "final
-  // safeguard" boundary, not this.
-  controls.maxDistance       = 1600
+  // Tightened from 1600 (2026-08-13, same day) — user wants zoom-out capped
+  // at "just enough to see the whole city fully, no more," not free-roam
+  // range over the terrain. 800 is sized off the worst case for full-city
+  // framing: a near-top-down view needs height ≈ cityRadius / tan(halfFOV)
+  // to fit the whole disc — with the 50°-vertical-FOV camera below
+  // (halfFOV=25°, tan≈0.4663) and the city's measured envelope (~344,
+  // rounded up to 350), that's 350/0.4663 ≈ 751, plus a small margin ≈ 800.
+  // Any other (non-top-down) tilt needs less distance for the same ground
+  // coverage, so 800 is a safe upper bound, not an average.
+  controls.maxDistance       = 800
   controls.maxPolarAngle     = Math.PI / 2 - 0.02
   controls.panSpeed          = 1.2
   controls.rotateSpeed       = 0.65
