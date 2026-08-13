@@ -57,6 +57,24 @@ const FOCUS_OFFSET = 22
 // just can't navigate the camera's own focal point out into it.
 const PAN_LIMIT = 350
 
+// Angle-dependent max zoom-out (2026-08-13, same day, third camera pass) —
+// a flat controls.maxDistance can only be exactly right at one tilt: how
+// much ground a given distance reveals depends heavily on the camera's
+// polar angle (phi, OrbitControls' own convention — 0 = straight down,
+// maxPolarAngle = shallowest allowed angle near the horizon). Straight
+// down, visible radius ≈ distance*tan(halfVFOV); at a shallow/oblique
+// angle, the same distance reveals far more ground in the "far" direction
+// (perspective foreshortening). A flat 550 was tuned "perfect from the
+// top" but showed too much outer terrain at low angles — so the cap itself
+// now shrinks as phi grows, interpolated between these two tuned extremes.
+const TOP_DOWN_MAX_DISTANCE = 550 // phi≈0 — user-confirmed correct, unchanged
+const OBLIQUE_MAX_DISTANCE  = 330 // phi≈maxPolarAngle — starting point, tune by feel like the others
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
 // Vertical (floor/ceiling — nothing above or below) is checked before lateral
 // (wall) on purpose: a block completing a floor/ceiling layer should be framed
 // from above so the layer-completing motion reads clearly, even if it also
@@ -250,21 +268,14 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // Low enough that focusOnBlock's close-up framing (FOCUS_OFFSET) isn't
   // immediately clamped back out on the next controls.update().
   controls.minDistance       = 1.5
-  // Tightened from 1600, then 800 (2026-08-13, same day, twice) — user
-  // wants zoom-out capped at "just enough to see the whole city fully, no
-  // more." 800 was derived from the worst case for full-city framing (a
-  // near-top-down view needs height ≈ cityRadius/tan(halfFOV) ≈ 350/0.4663
-  // ≈ 751 to fit the whole disc, +margin), but that's also the BEST case
-  // for how much empty space shows around the city — at the shallower,
-  // more oblique tilts people actually use day to day, the same distance
-  // reveals a lot more ground in the "far" direction than top-down does
-  // (perspective foreshortening), which read as "still too big." A single
-  // maxDistance can't be exactly right at every tilt angle (that would need
-  // distance to vary with controls' polar angle, which OrbitControls
-  // doesn't support), so this value is picked to look right at typical
-  // viewing angles rather than guarantee a perfect top-down fit — tune
-  // further by feel if it's still off.
-  controls.maxDistance       = 550
+  // Tightened from 1600, then 800 (2026-08-13, same day) before landing on
+  // an angle-dependent cap (TOP_DOWN_MAX_DISTANCE/OBLIQUE_MAX_DISTANCE
+  // above) — a single flat value couldn't be right at every tilt (correct
+  // at top-down, too loose at the shallower angles people actually use day
+  // to day, since the same distance reveals far more ground at a low
+  // angle). Set here as the initial/top-down value; animate() below
+  // overwrites this every frame based on the camera's current polar angle.
+  controls.maxDistance       = TOP_DOWN_MAX_DISTANCE
   controls.maxPolarAngle     = Math.PI / 2 - 0.02
   controls.panSpeed          = 1.2
   controls.rotateSpeed       = 0.65
@@ -272,6 +283,22 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   controls.screenSpacePanning = false
   controls.target.set(DEFAULT_CAMERA_TARGET.x, DEFAULT_CAMERA_TARGET.y, DEFAULT_CAMERA_TARGET.z)
   controls.update()
+
+  // phi=0 is straight down, controls.maxPolarAngle is the shallowest allowed
+  // tilt — interpolates the two tuned extremes above. Declared here (not at
+  // module scope) since it reads controls.maxPolarAngle.
+  function maxDistanceForPhi(phi: number): number {
+    const t = smoothstep(0, controls.maxPolarAngle, phi)
+    return TOP_DOWN_MAX_DISTANCE + (OBLIQUE_MAX_DISTANCE - TOP_DOWN_MAX_DISTANCE) * t
+  }
+  // Tracks the camera's polar angle across frames — set from the ACTUAL
+  // camera position each frame (see animate() below), one frame behind,
+  // so this frame's controls.maxDistance can be picked before update() runs
+  // (phi is unknown until after update() applies pending rotate/pan/zoom
+  // deltas — a one-frame lag here is imperceptible at animation-frame rates
+  // and phi only changes from gradual user rotation anyway). Starts at 0 to
+  // match DEFAULT_CAMERA_POS's fairly top-down establishing shot.
+  let lastPhi = 0
 
   // ── Lights ───────────────────────────────────────────────────────────────
   scene.add(new THREE.HemisphereLight(0xffffff, 0x5a6b4a, 0.7))
@@ -336,7 +363,20 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   let rafId = 0
   const animate = () => {
     rafId = requestAnimationFrame(animate)
+    // Angle-dependent zoom cap (2026-08-13) — see maxDistanceForPhi's doc
+    // comment. Must be set BEFORE controls.update() so OrbitControls' own
+    // internal spherical-radius clamping (inside update()) applies it
+    // natively — overriding camera.position after the fact instead would
+    // leave that internal radius state stale/out of sync (unlike panning,
+    // handled below, which has no such hidden state).
+    controls.maxDistance = maxDistanceForPhi(lastPhi)
     controls.update()
+
+    // Recompute phi from the camera's actual post-update position, for next
+    // frame's maxDistanceForPhi call above.
+    const camOffset = camera.position.clone().sub(controls.target)
+    const camDist = camOffset.length()
+    if (camDist > 1e-6) lastPhi = Math.acos(THREE.MathUtils.clamp(camOffset.y / camDist, -1, 1))
 
     // Soft world boundary (2026-08-13) — see PAN_LIMIT's doc comment.
     // Clamps controls.target's XZ distance from the origin by hand, since
