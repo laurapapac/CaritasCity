@@ -35,6 +35,12 @@
  * has to happen before mergeGeometries. No image assets involved; both are
  * drawn on an offscreen <canvas> at startup with a seeded PRNG so the
  * pattern is stable across reloads.
+ *
+ * Tree canopies (2026-08-13): canopies are small stepped stacks of cube
+ * blocks (CanopyShape) instead of a smooth SphereGeometry/ConeGeometry, for
+ * a chunkier "Minecraft-style" look matching the buildings' own blocky
+ * voxel aesthetic — see buildTreeTypes' doc comment. Trunk geometry and
+ * every tree's (x,z) position are unchanged.
  */
 
 import * as THREE from "three"
@@ -141,20 +147,51 @@ function hash2D(x: number, z: number, salt: number): number {
   return h - Math.floor(h)
 }
 
+// A canopy is a small stepped stack of cube blocks instead of a smooth
+// primitive (2026-08-13, user request: treetops "made out of voxel blocks
+// ... give them dimension", explicitly picked the chunky ~8-14-cube
+// "Minecraft-style" look over a finer ~20-30-cube voxel-sphere approximation)
+// — same shared-BoxGeometry instancing discipline cityScene.ts already uses
+// for building voxels, just applied to canopies. `offsets` are integer
+// cube-grid coordinates relative to the canopy's own local origin (dy=0 is
+// the bottom layer, increasing upward); `baseY` is the world Y of the dy=0
+// layer's cube centers, picked per type so the stack's vertical center lands
+// close to that type's old sphere/cone center — swapping the primitive
+// shouldn't noticeably shift a tree's silhouette on the map.
+interface CanopyShape {
+  cubeSize: number
+  baseY: number
+  offsets: { dx: number; dy: number; dz: number }[]
+}
+
 interface TreeType {
   trunkGeo: THREE.BufferGeometry
   trunkMat: THREE.Material
   trunkY: number
-  foliageGeo: THREE.BufferGeometry
+  canopy: CanopyShape
   foliageMat: THREE.Material
-  foliageY: number
-  foliageScale?: [number, number, number]
+}
+
+// 3×3-footprint cross (corners omitted) — the base layer shape reused by
+// most canopies below, so a 2-layer "same shape twice" stack still reads as
+// a chunky blob rather than a perfect cube.
+const CROSS_LAYER: { dx: number; dz: number }[] = [
+  { dx: 0, dz: 0 }, { dx: 1, dz: 0 }, { dx: -1, dz: 0 }, { dx: 0, dz: 1 }, { dx: 0, dz: -1 },
+]
+
+function layerOffsets(dy: number, layer: { dx: number; dz: number }[]): { dx: number; dy: number; dz: number }[] {
+  return layer.map((c) => ({ ...c, dy }))
 }
 
 // 5 tree types, spring palette, weighted mostly deciduous (only the last —
-// the classic conifer cone — is a minority "for variety" type, matching the
-// user's "mostly deciduous... let's act like it's spring" request). Weights
-// must sum to 1 and stay in the same order as TREE_TYPE_WEIGHTS below.
+// the conifer — is a minority "for variety" type, matching the user's
+// "mostly deciduous... let's act like it's spring" request). Weights must
+// sum to 1 and stay in the same order as TREE_TYPE_WEIGHTS below.
+//
+// Birch's old non-uniform foliageScale (stretching a sphere into an
+// ellipsoid) is dropped in favor of shaping its cube stack itself
+// narrower/taller — stretching cubes anisotropically would read as slabs,
+// not blocks.
 function buildTreeTypes(): TreeType[] {
   const trunkBrown = new THREE.MeshLambertMaterial({ color: 0x6b4a2f })
   const trunkBirch = new THREE.MeshLambertMaterial({ color: 0xd9d3c1 })
@@ -162,29 +199,54 @@ function buildTreeTypes(): TreeType[] {
   return [
     { // round deciduous, spring green — the common default tree
       trunkGeo: new THREE.CylinderGeometry(0.3, 0.4, 2, 6), trunkMat: trunkBrown, trunkY: 1,
-      foliageGeo: new THREE.SphereGeometry(2.2, 7, 6),
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0x5a9c4a }), foliageY: 3.6,
+      canopy: {
+        cubeSize: 1.5, baseY: 2.1,
+        offsets: [...layerOffsets(0, CROSS_LAYER), ...layerOffsets(1, CROSS_LAYER), { dx: 0, dy: 2, dz: 0 }],
+      },
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0x5a9c4a }),
     },
-    { // flowering/blossom, soft pink — the "it's spring" tree
+    { // flowering/blossom, soft pink — the "it's spring" tree, same blob shape as deciduous
       trunkGeo: new THREE.CylinderGeometry(0.28, 0.36, 2, 6), trunkMat: trunkBrown, trunkY: 1,
-      foliageGeo: new THREE.SphereGeometry(2.0, 7, 6),
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0xf0b6d2 }), foliageY: 3.4,
+      canopy: {
+        cubeSize: 1.4, baseY: 2.0,
+        offsets: [...layerOffsets(0, CROSS_LAYER), ...layerOffsets(1, CROSS_LAYER), { dx: 0, dy: 2, dz: 0 }],
+      },
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0xf0b6d2 }),
     },
-    { // fresh yellow-green deciduous, smaller/bushier
+    { // fresh yellow-green deciduous, smaller/bushier — 2-layer stack, no cap
       trunkGeo: new THREE.CylinderGeometry(0.3, 0.4, 1.8, 6), trunkMat: trunkBrown, trunkY: 0.9,
-      foliageGeo: new THREE.SphereGeometry(1.9, 6, 5),
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0x9bcf55 }), foliageY: 3.1,
+      canopy: {
+        cubeSize: 1.3, baseY: 2.45,
+        offsets: [...layerOffsets(0, CROSS_LAYER), ...layerOffsets(1, CROSS_LAYER)],
+      },
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0x9bcf55 }),
     },
-    { // birch — pale trunk, narrow pale-green canopy
+    { // birch — pale trunk, narrow/tall canopy (narrow via shape, not stretched cubes)
       trunkGeo: new THREE.CylinderGeometry(0.25, 0.3, 2.4, 6), trunkMat: trunkBirch, trunkY: 1.2,
-      foliageGeo: new THREE.SphereGeometry(1.7, 6, 5),
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0xbadb8e }), foliageY: 3.7,
-      foliageScale: [0.85, 1.3, 0.85],
+      canopy: {
+        cubeSize: 1.1, baseY: 2.05,
+        offsets: [
+          ...layerOffsets(0, CROSS_LAYER),
+          { dx: 0, dy: 1, dz: 0 },
+          { dx: 0, dy: 2, dz: 0 }, { dx: 1, dy: 2, dz: 0 }, { dx: -1, dy: 2, dz: 0 },
+          { dx: 0, dy: 3, dz: 0 },
+        ],
+      },
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0xbadb8e }),
     },
-    { // conifer — kept for silhouette variety, deliberately the minority type
+    { // conifer — tiered pyramid (wide base tapering to a point), minority type
       trunkGeo: new THREE.CylinderGeometry(0.35, 0.5, 2, 6), trunkMat: trunkBrown, trunkY: 1,
-      foliageGeo: new THREE.ConeGeometry(1.8, 3.6, 8),
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0x3a7a3f }), foliageY: 3.1,
+      canopy: {
+        cubeSize: 1.3, baseY: 1.8,
+        offsets: [
+          { dx: -1, dy: 0, dz: -1 }, { dx: 0, dy: 0, dz: -1 }, { dx: 1, dy: 0, dz: -1 },
+          { dx: -1, dy: 0, dz: 0 }, { dx: 0, dy: 0, dz: 0 }, { dx: 1, dy: 0, dz: 0 },
+          { dx: -1, dy: 0, dz: 1 }, { dx: 0, dy: 0, dz: 1 }, { dx: 1, dy: 0, dz: 1 },
+          ...layerOffsets(1, CROSS_LAYER),
+          { dx: 0, dy: 2, dz: 0 },
+        ],
+      },
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0x3a7a3f }),
     },
   ]
 }
@@ -201,11 +263,30 @@ function pickTreeType(x: number, z: number): number {
   return TREE_TYPE_WEIGHTS.length - 1
 }
 
+// Cheap two-tone shade per cube layer (2026-08-13) — top layer ~12%
+// lighter, bottom layer ~12% darker, middle layers unshaded — set via
+// InstancedMesh.setColorAt (no material flags needed; three.js multiplies a
+// Lambert material's base color by instanceColor automatically once it
+// exists). Gives the stepped stack a subtle built-in ambient-occlusion feel
+// instead of one flat color per tree, reinforcing the "dimension" the
+// canopy shapes above are already going for.
+const canopyShadeColor = new THREE.Color()
+function shadeForLayer(dy: number, maxDy: number): THREE.Color {
+  if (maxDy > 0 && dy === maxDy) return canopyShadeColor.setScalar(1.12)
+  if (maxDy > 0 && dy === 0) return canopyShadeColor.setScalar(0.88)
+  return canopyShadeColor.setScalar(1)
+}
+
 // Buckets every tree by type (deterministic per position), then builds one
-// trunk+foliage InstancedMesh pair per type actually used — still just a
-// handful of draw calls total (at most 2 × TREE_TYPE_WEIGHTS.length), not one
-// per tree. Each instance also gets a small deterministic scale variation
-// (0.85-1.15x) so same-type trees aren't perfectly identical clones.
+// trunk InstancedMesh + one canopy InstancedMesh per type actually used —
+// still just a handful of draw calls total (at most 2 × TREE_TYPE_WEIGHTS.length),
+// not one per tree or one per cube. Each canopy InstancedMesh holds
+// bucket.length * canopy.offsets.length instances (one shared unit
+// BoxGeometry, one instance per cube per tree of that type — same pattern
+// cityScene.ts uses for building voxels). Each tree also gets a small
+// deterministic scale variation (0.85-1.15x, applied to both the trunk and
+// every one of its canopy cubes) so same-type trees aren't perfectly
+// identical clones.
 function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.InstancedMesh[] {
   if (trees.length === 0) return []
 
@@ -213,6 +294,7 @@ function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.Instance
   const buckets: { x: number; z: number }[][] = types.map(() => [])
   for (const t of trees) buckets[pickTreeType(t.x, t.z)].push(t)
 
+  const canopyCubeGeo = new THREE.BoxGeometry(1, 1, 1)
   const meshes: THREE.InstancedMesh[] = []
   const dummy = new THREE.Object3D()
 
@@ -220,9 +302,10 @@ function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.Instance
     const bucket = buckets[typeIndex]
     if (bucket.length === 0) return
 
+    const { cubeSize, baseY, offsets } = type.canopy
+    const maxDy = offsets.reduce((m, o) => Math.max(m, o.dy), 0)
     const trunkMesh = new THREE.InstancedMesh(type.trunkGeo, type.trunkMat, bucket.length)
-    const foliageMesh = new THREE.InstancedMesh(type.foliageGeo, type.foliageMat, bucket.length)
-    const [fsx, fsy, fsz] = type.foliageScale ?? [1, 1, 1]
+    const canopyMesh = new THREE.InstancedMesh(canopyCubeGeo, type.foliageMat, bucket.length * offsets.length)
 
     bucket.forEach((t, i) => {
       const scale = 0.85 + hash2D(t.x, t.z, 2) * 0.3
@@ -232,15 +315,24 @@ function buildVariedTreesMesh(trees: { x: number; z: number }[]): THREE.Instance
       dummy.updateMatrix()
       trunkMesh.setMatrixAt(i, dummy.matrix)
 
-      dummy.position.set(t.x, type.foliageY * scale, t.z)
-      dummy.scale.set(fsx * scale, fsy * scale, fsz * scale)
-      dummy.updateMatrix()
-      foliageMesh.setMatrixAt(i, dummy.matrix)
+      offsets.forEach((o, j) => {
+        dummy.position.set(
+          t.x + o.dx * cubeSize * scale,
+          (baseY + o.dy * cubeSize) * scale,
+          t.z + o.dz * cubeSize * scale,
+        )
+        dummy.scale.setScalar(cubeSize * scale)
+        dummy.updateMatrix()
+        const cubeIndex = i * offsets.length + j
+        canopyMesh.setMatrixAt(cubeIndex, dummy.matrix)
+        canopyMesh.setColorAt(cubeIndex, shadeForLayer(o.dy, maxDy))
+      })
     })
 
     trunkMesh.instanceMatrix.needsUpdate = true
-    foliageMesh.instanceMatrix.needsUpdate = true
-    meshes.push(trunkMesh, foliageMesh)
+    canopyMesh.instanceMatrix.needsUpdate = true
+    if (canopyMesh.instanceColor) canopyMesh.instanceColor.needsUpdate = true
+    meshes.push(trunkMesh, canopyMesh)
   })
 
   return meshes
