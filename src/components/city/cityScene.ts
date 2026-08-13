@@ -44,18 +44,18 @@ const DEFAULT_CAMERA_TARGET = { x: 0, y: 10, z: 0 }
 // the single target block filling the frame.
 const FOCUS_OFFSET = 22
 
-// Soft world boundary (2026-08-13, tightened same day — user found panning
-// out into the grass buffer/hills "explorable" undesirable, wanted movement
-// confined to inside the city ring) — how far controls.target may be panned
-// from the origin. OrbitControls has no built-in pan-distance clamp
+// Soft world boundary (2026-08-13, tightened twice same day — first pass
+// (350, matching CITY_EDGE's full measured envelope including sparse edge
+// roads/trees) still let a right-drag pan noticeably past what reads as
+// "the city," so pulled in further to 280 — matching CITY_RADIUS
+// (generateCityLayout.ts), the tighter "core" city boundary rather than
+// its outermost edge decor) — how far controls.target may be panned from
+// the origin. OrbitControls has no built-in pan-distance clamp
 // (min/maxDistance only bound zoom/dolly), so this is enforced by hand in
-// animate() below. 350 matches CITY_EDGE (generateCityLayout.ts's
-// TERRAIN_BANDS) — the real city's own measured envelope (~344) — so the
-// camera can look anywhere across the city itself but never out into the
-// grass buffer/hills beyond it. The terrain past this point is still
-// visible (it's what keeps the world from feeling boxed in) — the user
-// just can't navigate the camera's own focal point out into it.
-const PAN_LIMIT = 350
+// animate() below. The terrain past this point is still visible (it's
+// what keeps the world from feeling boxed in) — the user just can't
+// navigate the camera's own focal point out into it.
+const PAN_LIMIT = 280
 
 // Angle-dependent max zoom-out (2026-08-13, same day, third camera pass) —
 // a flat controls.maxDistance can only be exactly right at one tilt: how
