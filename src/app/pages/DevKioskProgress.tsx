@@ -128,6 +128,36 @@ export default function DevKioskProgress() {
     }
   }
 
+  // Whichever building would receive the category's very next real block —
+  // the first not-yet-complete entry in its rollover sequence at the
+  // category's current `placed` total. null once the category is maxed out.
+  function activeBuildingFor(category: BuildingCategory): { entry: CityLayoutEntry; completedBlocks: number } | null {
+    const dist = distribute(CATEGORY_SEQUENCE[category], placed[category]);
+    for (const entry of CATEGORY_SEQUENCE[category]) {
+      const completedBlocks = dist.get(entry.buildingId)!;
+      if (completedBlocks < entry.totalBlocks) return { entry, completedBlocks };
+    }
+    return null;
+  }
+
+  // Mirrors Kiosk.tsx's handleConfirm exactly: frame the camera on the new
+  // block's spot *before* it's revealed (so a tilted/tree-dodged shot is
+  // already in place when it pops), then reveal it with the same yellow
+  // highlight a real placement gets. Unlike the sliders above, this goes
+  // through addBlockToBuilding (not setVisibleCount) specifically to get
+  // that highlight + reveal — the whole point is seeing the real placement
+  // camera behavior in the actual city (real nearby trees/buildings), not
+  // just an instant jump.
+  function handleAddNextBlock(category: BuildingCategory) {
+    const active = activeBuildingFor(category);
+    if (!active) return;
+    const { entry, completedBlocks } = active;
+    cityRef.current?.focusOnBlock(entry.buildingId, completedBlocks);
+    cityRef.current?.addBlockToBuilding(entry.buildingId);
+    appliedRef.current.set(entry.buildingId, completedBlocks + 1);
+    setPlaced((p) => ({ ...p, [category]: p[category] + 1 }));
+  }
+
   function handleCategoryChange(category: BuildingCategory, next: number) {
     if (Number.isNaN(next)) return;
     const clamped = Math.max(0, Math.min(CATEGORY_TOTAL[category], Math.round(next)));
@@ -185,31 +215,44 @@ export default function DevKioskProgress() {
             </span>
           </div>
 
-          {CATEGORIES.map((category) => (
-            <div key={category} className="flex flex-col gap-1.5">
-              <Label>{CATEGORY_LABEL[category]}</Label>
-              <Slider
-                value={[placed[category]]}
-                min={0}
-                max={CATEGORY_TOTAL[category]}
-                step={1}
-                onValueChange={([v]) => handleCategoryChange(category, v)}
-              />
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
+          {CATEGORIES.map((category) => {
+            const active = activeBuildingFor(category);
+            return (
+              <div key={category} className="flex flex-col gap-1.5">
+                <Label>{CATEGORY_LABEL[category]}</Label>
+                <Slider
+                  value={[placed[category]]}
                   min={0}
                   max={CATEGORY_TOTAL[category]}
-                  value={placed[category]}
-                  onChange={(e) => handleCategoryChange(category, Number(e.target.value))}
-                  className="w-28"
+                  step={1}
+                  onValueChange={([v]) => handleCategoryChange(category, v)}
                 />
-                <span className="text-muted-foreground text-xs">
-                  / {CATEGORY_TOTAL[category].toLocaleString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={CATEGORY_TOTAL[category]}
+                    value={placed[category]}
+                    onChange={(e) => handleCategoryChange(category, Number(e.target.value))}
+                    className="w-28"
+                  />
+                  <span className="text-muted-foreground text-xs">
+                    / {CATEGORY_TOTAL[category].toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" disabled={!active} onClick={() => handleAddNextBlock(category)}>
+                    Add next block
+                  </Button>
+                  {active && (
+                    <span className="text-muted-foreground text-xs">
+                      → {active.entry.buildingId} ({active.completedBlocks + 1}/{active.entry.totalBlocks})
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => handleOverallChange(0)}>
