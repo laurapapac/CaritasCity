@@ -82,6 +82,45 @@ const TREE_CLEARANCE_RADIUS = 14
 // city's canopy list.
 const TREE_SEARCH_RADIUS = FOCUS_OFFSET + TREE_CLEARANCE_RADIUS + 10
 
+// Trees within TREE_SEARCH_RADIUS of a candidate's block position — the pool
+// either offset-picker below scans, so a picker with no nearby trees at all
+// degrades to "always Infinity clearance" (pick the default) without either
+// caller needing to special-case it.
+function nearbyTrees(
+  cx: number,
+  cz: number,
+  trees: Array<{ x: number; z: number }>
+): Array<{ x: number; z: number }> {
+  return trees.filter(
+    (t) => Math.abs(t.x - cx) < TREE_SEARCH_RADIUS && Math.abs(t.z - cz) < TREE_SEARCH_RADIUS
+  )
+}
+
+// Shared selection policy for both the vertical and lateral tree-dodge
+// pickers below: stay on the default (candidates[0]) direction if it's
+// already clear, otherwise swing to whichever candidate has the most
+// clearance from the nearest tree. Deliberately doesn't own the clearance
+// *formula* itself (passed in as `clearanceOf`) — the vertical and lateral
+// branches need genuinely different clearance math (see pickLateralOffset's
+// doc comment), not just different candidate lists.
+function pickClearestOffset(
+  candidates: Array<[number, number, number]>,
+  clearanceOf: (offset: [number, number, number]) => number
+): [number, number, number] {
+  if (clearanceOf(candidates[0]) >= TREE_CLEARANCE_RADIUS) return candidates[0]
+
+  let best = candidates[0]
+  let bestClearance = -Infinity
+  for (const c of candidates) {
+    const cl = clearanceOf(c)
+    if (cl > bestClearance) {
+      bestClearance = cl
+      best = c
+    }
+  }
+  return best
+}
+
 // Picks which of the 8 TOP_VIEW_DIRECTIONS to frame a floor/ceiling shot from:
 // stays on the default (south) direction unless a tree crowds it, in which case
 // it swings to whichever azimuth puts the most distance between the camera and
@@ -92,37 +131,139 @@ function pickTopViewOffset(
   cz: number,
   trees: Array<{ x: number; z: number }>
 ): [number, number, number] {
-  const nearby = trees.filter(
-    (t) => Math.abs(t.x - cx) < TREE_SEARCH_RADIUS && Math.abs(t.z - cz) < TREE_SEARCH_RADIUS
-  )
+  const nearby = nearbyTrees(cx, cz, trees)
 
-  const clearance = ([ox, oz]: [number, number]): number => {
+  // Distance from each tree to the whole camera→target sightline (not just
+  // the camera point) — a tree standing right next to the target itself
+  // (common: buildings sit only a few units from the nearest road tree)
+  // otherwise reads as "clear" purely because it's far from the camera end
+  // of the shot, even though it's squarely in front of what's being framed.
+  const clearanceOf = ([ox, , oz]: [number, number, number]): number => {
     if (nearby.length === 0) return Infinity
     const camX = cx + ox * FOCUS_OFFSET
     const camZ = cz + oz * FOCUS_OFFSET
     let nearest = Infinity
     for (const t of nearby) {
-      const d = Math.hypot(t.x - camX, t.z - camZ)
+      const d = pointToSegmentDistanceXZ(t.x, t.z, camX, camZ, cx, cz)
       if (d < nearest) nearest = d
     }
     return nearest
   }
 
-  const [defaultOx, defaultOz] = TOP_VIEW_DIRECTIONS[0]
-  if (clearance([defaultOx, defaultOz]) >= TREE_CLEARANCE_RADIUS) {
-    return [defaultOx, TOP_VIEW_VERTICAL, defaultOz]
+  const candidates: Array<[number, number, number]> = TOP_VIEW_DIRECTIONS.map(
+    ([ox, oz]) => [ox, TOP_VIEW_VERTICAL, oz]
+  )
+  return pickClearestOffset(candidates, clearanceOf)
+}
+
+// Shortest distance from point (px,pz) to the segment (ax,az)-(bx,bz), in the
+// XZ plane. Standard point-to-segment projection, clamped to the segment ends.
+// Used by both tree-dodge pickers below: a tree can sit right next to the
+// TARGET (very common — buildings are often only a few units from the
+// nearest road tree) just as easily as near the camera end of the shot, and
+// a target-adjacent tree is exactly the "covers half the screen" case, since
+// it's the thing closest to what's actually being framed. Checking only
+// camera-to-tree distance (an earlier version of this code did) missed that
+// entirely — a tree parked next to the block always reads as ~FOCUS_OFFSET
+// away from the camera, comfortably "clear."
+function pointToSegmentDistanceXZ(
+  px: number, pz: number,
+  ax: number, az: number,
+  bx: number, bz: number
+): number {
+  const abx = bx - ax, abz = bz - az
+  const apx = px - ax, apz = pz - az
+  const abLenSq = abx * abx + abz * abz
+  const t = abLenSq > 1e-9 ? Math.max(0, Math.min(1, (apx * abx + apz * abz) / abLenSq)) : 0
+  const nearX = ax + t * abx, nearZ = az + t * abz
+  return Math.hypot(px - nearX, pz - nearZ)
+}
+
+// How high (world Y) tree canopies actually top out — decor.ts's canopy
+// shapes measure ~5.05 (conifer) to ~5.9 (birch); rounded up slightly for
+// margin. Used only by the lateral picker below, never the vertical one —
+// see pickLateralOffset's doc comment for why the two can't share this.
+const TREE_CANOPY_TOP_Y = 6
+
+// Azimuths (degrees, rotated around the block's true exposed-face normal) a
+// lateral/wall shot may swing to dodge a nearby tree. Index 0 must stay 0 —
+// pickClearestOffset's "prefer the default" convention relies on it — and the
+// whole fan is deliberately much narrower than the vertical branch's full
+// 360° (8 azimuths): a lateral shot has to keep clearly reading as "viewing
+// this wall," not swing far enough to look like the adjacent face. Starting
+// point for live tuning via /dev/kiosk-progress, not a derived value (same
+// as TOP_VIEW_TILT_DEG's own tuning history).
+const LATERAL_AZIMUTH_FAN_DEG = [0, 20, -20, 40, -40]
+
+// Upward tilts (degrees off pure-horizontal) tried alongside each azimuth —
+// azimuth swinging alone couldn't reliably clear a tree standing close to
+// the target itself (verified live: swinging ±40° around a target-adjacent
+// tree barely moved its measured clearance, since the segment's near-target
+// end stays pinned close to the tree regardless of the camera end's angle).
+// A real lift moves the whole shot above canopy height instead, which is
+// what actually clears those cases — same mechanism that already makes the
+// problem "stop mattering" once a building outgrows nearby trees, just
+// applied deliberately instead of waited for. 0° keeps the original
+// level-with-the-block shot; the second value trades some directness for
+// enough clearance — tune live.
+const LATERAL_LIFT_DEG = [0, 35]
+
+function rotateAzimuth([x, z]: [number, number], deg: number): [number, number] {
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return [x * cos - z * sin, x * sin + z * cos]
+}
+
+// Picks which azimuth+lift (around the block's true exposed-face normal) to
+// frame a wall shot from, dodging nearby tree canopies the same way
+// pickTopViewOffset does for floor/ceiling shots — but with its own
+// clearance formula, not the shared one: this picker's candidates can carry
+// a genuine vertical component (oy), so a candidate's actual camera Y has to
+// be computed per-candidate here, not read once from the block's own Y like
+// the old version did. Folding that into pickTopViewOffset's *shared*
+// formula would still be wrong for the vertical branch, whose candidates are
+// always oy=TOP_VIEW_VERTICAL (~20 units up) regardless of block height —
+// this stays its own function so the vertical branch's already-tuned
+// dodge is untouched.
+function pickLateralOffset(
+  cx: number,
+  cy: number,
+  cz: number,
+  nx: number,
+  nz: number,
+  trees: Array<{ x: number; z: number }>
+): [number, number, number] {
+  const nearby = nearbyTrees(cx, cz, trees)
+
+  const clearanceOf = ([ox, oy, oz]: [number, number, number]): number => {
+    if (nearby.length === 0) return Infinity
+    const camX = cx + ox * FOCUS_OFFSET
+    const camY = cy + oy * FOCUS_OFFSET
+    const camZ = cz + oz * FOCUS_OFFSET
+    const verticalClearance = Math.max(0, camY - TREE_CANOPY_TOP_Y)
+    let nearest = Infinity
+    for (const t of nearby) {
+      const xzDist = pointToSegmentDistanceXZ(t.x, t.z, camX, camZ, cx, cz)
+      const d = Math.hypot(xzDist, verticalClearance)
+      if (d < nearest) nearest = d
+    }
+    return nearest
   }
 
-  let best = TOP_VIEW_DIRECTIONS[0]
-  let bestClearance = -Infinity
-  for (const dir of TOP_VIEW_DIRECTIONS) {
-    const c = clearance(dir)
-    if (c > bestClearance) {
-      bestClearance = c
-      best = dir
+  const candidates: Array<[number, number, number]> = []
+  for (const liftDeg of LATERAL_LIFT_DEG) {
+    const liftRad = (liftDeg * Math.PI) / 180
+    const horizScale = Math.cos(liftRad)
+    const vertComponent = Math.sin(liftRad)
+    for (const azDeg of LATERAL_AZIMUTH_FAN_DEG) {
+      const [rx, rz] = rotateAzimuth([nx, nz], azDeg)
+      candidates.push([rx * horizScale, vertComponent, rz * horizScale])
     }
   }
-  return [best[0], TOP_VIEW_VERTICAL, best[1]]
+  // candidates[0] is liftDeg=0,azDeg=0 — the original unmodified direction,
+  // matching pickClearestOffset's "prefer the default" convention.
+  return pickClearestOffset(candidates, clearanceOf)
 }
 
 // Soft world boundary (2026-08-13, tightened twice same day — first pass
@@ -256,8 +397,9 @@ function computeBBoxXZ(blocks: Block[]): BBoxXZ {
 
 // Exact (closed-form) distance along the ray (ox0,oz0)+t*(dx,dz), t>=0, at
 // which it first enters `box` — or null if it never does. A standard 2D
-// ray/AABB slab test, not step-walking: exact, O(1), and works for any
-// direction, not just the 4 compass directions.
+// ray/AABB slab test, not step-walking: exact, O(1), and works for the
+// rotated (non-axis-aligned) directions pickLateralOffset's azimuth fan
+// produces, not just the 4 compass directions.
 function rayEntersBBoxXZ(
   ox0: number,
   oz0: number,
@@ -778,7 +920,9 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       // of blending flat into the floor/rooftop plane — and steered away from
       // whichever azimuth would put a tree canopy right in front of the camera.
       const isVertical = nx === 0 && nz === 0
-      const [ox, oy, oz] = isVertical ? pickTopViewOffset(cx, cz, topViewTrees) : [nx, ny, nz]
+      const [ox, oy, oz] = isVertical
+        ? pickTopViewOffset(cx, cz, topViewTrees)
+        : pickLateralOffset(cx, cy, cz, nx, nz, topViewTrees)
 
       // Lateral shots only: don't let FOCUS_OFFSET's fixed distance fly the
       // camera past the real (often much narrower, ~ROAD_GAP=8) gap to a
