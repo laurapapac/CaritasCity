@@ -14,6 +14,8 @@ import {
 import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, ConstructionQueue } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
+import { STATIC_CITY_DECOR, STATIC_LANDMARKS } from "../../components/city/staticCityData";
+import { CITY_LAYOUT } from "../../data/cityLayout";
 import {
   MONTAGE_BLOCK_COUNT,
   MONTAGE_STAGGER_MS,
@@ -48,23 +50,39 @@ const CATEGORY_LABEL: Record<BuildingCategory, string> = {
   school: "School",
 };
 
-const PLOTS: Record<BuildingCategory, { x: number; z: number }> = {
-  residential: { x: -30, z: -20 },
-  hospital: { x: 30, z: -20 },
-  food: { x: -30, z: 20 },
-  school: { x: 30, z: 20 },
-};
+// Real city layout (2026-08-13) — replaces the old 4-fixed-plot model.
+// Position has never lived in the database (see src/lib/api.ts's
+// BuildingState.orderIndex doc comment) and still doesn't; it's joined here
+// client-side from src/data/cityLayout.ts, keyed by the same
+// `${variant}_${orderIndex}` natural key generateCityLayout.ts's buildingId
+// was already designed to match against server/src/scripts/seed.ts's
+// (variant, order_index) columns.
+const CITY_LAYOUT_BY_ID = new Map(CITY_LAYOUT.map((entry) => [entry.buildingId, entry]));
 
-function buildCityBuilding(b: BuildingState): CityBuilding {
+function buildCityBuilding(b: BuildingState): CityBuilding | null {
+  const layout = CITY_LAYOUT_BY_ID.get(`${b.variant}_${b.orderIndex}`);
+  if (!layout) {
+    // Shouldn't happen in practice — would mean seed.ts's building counts
+    // per variant have drifted out of sync with generateCityLayout.ts's
+    // BUILDING_SPECS (the one gap this join doesn't cover, see
+    // staticCityData.ts's doc comment). Skip rather than crash the kiosk.
+    console.warn(`No city-layout entry for building ${b.id} (${b.variant}_${b.orderIndex}) — skipping`);
+    return null;
+  }
   return {
     id: b.id,
     category: b.category,
-    position: PLOTS[b.category],
+    position: { x: layout.x, z: layout.z },
     blueprint: blueprintForVariant(b.variant, b.category, b.totalBlocks, b.id),
     totalBlocks: b.totalBlocks,
-    // One behind the server — the boot-reveal effect plays the last block's
-    // animation to catch back up, instead of just appearing already-there.
-    completedBlocks: Math.max(0, b.completedBlocks - 1),
+    // Only the currently in_progress building (at most one per category) is
+    // shown one block behind — the boot-reveal effect plays that last
+    // block's animation to catch back up. queued buildings are genuinely at
+    // 0; completed ones show their real final count outright (applying the
+    // same -1 trick to a completed building would leave it permanently
+    // missing its last block, since addBlock() only ever targets the
+    // active building per category).
+    completedBlocks: b.status === "in_progress" ? Math.max(0, b.completedBlocks - 1) : b.completedBlocks,
   };
 }
 
@@ -218,22 +236,37 @@ export default function Kiosk() {
   useEffect(() => {
     getBuildings()
       .then((rows) => {
-        const buildings = rows.map(buildCityBuilding);
+        const buildings = rows
+          .map(buildCityBuilding)
+          .filter((b): b is CityBuilding => b !== null);
+        // Only the in_progress row per category drives the active queue —
+        // rows also now include every queued/completed building (2026-08-13,
+        // widened from "in_progress only"), so this can't just take
+        // whichever row of a category comes last in the array anymore.
         const queue: ConstructionQueue = {};
-        for (const row of rows) queue[row.category] = row.id;
-        setCityData({ rows, buildings, queue });
+        for (const row of rows) {
+          if (row.status === "in_progress") queue[row.category] = row.id;
+        }
+        setCityData({ rows, buildings: [...buildings, ...STATIC_LANDMARKS], queue });
         setState({ phase: "entry" });
       })
       .catch(() => setState({ phase: "load_error" }));
   }, []);
 
-  // Boot animation: replay the most recent real block per category so the
-  // kiosk always opens with a "here's what's been built" reveal.
+  // Boot animation: replay the most recent real block on each category's
+  // active building so the kiosk always opens with a "here's what's been
+  // built" reveal. Scoped to in_progress rows only — a completed building's
+  // completedBlocks is also > 0, but it isn't the active building for its
+  // category anymore, so addBlock(category) wouldn't touch it anyway;
+  // filtering here just avoids redundant no-op calls for every completed
+  // building once all 158 rows are loaded instead of just the active 4.
   useEffect(() => {
     if (!cityData || revealedOnLoad.current) return;
     revealedOnLoad.current = true;
     for (const row of cityData.rows) {
-      if (row.completedBlocks > 0) cityRef.current?.addBlock(row.category);
+      if (row.status === "in_progress" && row.completedBlocks > 0) {
+        cityRef.current?.addBlock(row.category);
+      }
     }
   }, [cityData]);
 
@@ -295,7 +328,13 @@ export default function Kiosk() {
   return (
     <div className="relative min-h-screen w-screen overflow-hidden bg-background">
       {cityData && (
-        <City ref={cityRef} initialBuildings={cityData.buildings} initialQueue={cityData.queue} style={{ position: "absolute", inset: 0 }} />
+        <City
+          ref={cityRef}
+          initialBuildings={cityData.buildings}
+          initialQueue={cityData.queue}
+          decor={STATIC_CITY_DECOR}
+          style={{ position: "absolute", inset: 0 }}
+        />
       )}
 
       {state.phase === "loading" && (

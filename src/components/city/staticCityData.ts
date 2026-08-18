@@ -1,0 +1,84 @@
+/**
+ * Single shared source for the full static city's decor/terrain and its two
+ * hand-placed non-QR landmarks (church, fountain) — extracted (2026-08-13)
+ * from DevCityPreview.tsx so the live kiosk (Kiosk.tsx) can render the exact
+ * same city instead of duplicating this assembly. Both consumers regenerate
+ * the SAME picture automatically whenever the underlying generated data
+ * (src/data/cityLayout.ts, cityDecor.ts, cityRoads.ts, cityFurniture.ts,
+ * cityTerrain.ts — all produced by src/scripts/generateCityLayout.ts)
+ * changes and the frontend is rebuilt, with zero backend involvement —
+ * position/decor have never touched the database (see Kiosk.tsx's own doc
+ * comment for how it joins real DB progress onto these positions).
+ *
+ * Building COUNT changes (adding/removing a building type) are the one case
+ * this doesn't automatically cover — server/src/scripts/seed.ts's BUILDINGS
+ * array still has to be hand-kept in sync with generateCityLayout.ts's
+ * BUILDING_SPECS, same as before this change. Not addressed here.
+ */
+
+import type { CityBuilding, CityDecor } from "./types"
+import { blueprintForVariant } from "./blueprintForVariant"
+import { PARKS, LAKES, BEACHES, PARK_TREES, BUSHES } from "../../data/cityDecor"
+import { ROADS, ROAD_WIDTH, ROAD_TREES } from "../../data/cityRoads"
+import { LAMP_POSTS, BENCHES, PLAZAS } from "../../data/cityFurniture"
+import {
+  HILL_CELL, HILL_STEP, HILL_COLUMNS, HILL_TREES,
+  BUFFER_TREES, BUFFER_BUSHES, MEADOWS, MOUNTAINS, TERRAIN_BANDS,
+} from "../../data/cityTerrain"
+
+// Church (2026-08-11, user request) and fountain (2026-08-12, user request)
+// — purely aesthetic landmarks, not among the 158 real QR-linked buildings,
+// so they're hand-placed here rather than through cityLayout.ts. Church:
+// positioned in the buffer leaf just east of park_north (rect roughly
+// x:[-26.6,45.3] z:[92.8,195.3] — excluded from both buildings and roads by
+// generateCityLayout.ts since a park/lake zone overlaps it, so it's open
+// ground with nothing else placed there), safely clear of park_north's own
+// circle (center -40,175, radius 20; distance from the church's center is
+// ~41). Fountain: south of the church within the same buffer leaf, clear of
+// the church's own footprint, the leaf's real roads on every side, and the
+// zone-buffer/road tree clearances.
+const CHURCH_POSITION = { x: 0, z: 165 }
+const FOUNTAIN_POSITION = { x: 25, z: 110 }
+
+function buildLandmark(variant: string, id: string, position: { x: number; z: number }): CityBuilding {
+  const blueprint = blueprintForVariant(variant, "school", 0)
+  const totalBlocks = blueprint.voxelCount ?? blueprint.voxels.length
+  return {
+    id,
+    category: "school", // unused — hand-authored landmark, category only matters for the placeholder fallback
+    position,
+    blueprint,
+    totalBlocks,
+    completedBlocks: totalBlocks,
+  }
+}
+
+export const STATIC_LANDMARKS: CityBuilding[] = [
+  buildLandmark("church", "church", CHURCH_POSITION),
+  buildLandmark("fountain", "fountain", FOUNTAIN_POSITION),
+]
+
+export const STATIC_CITY_DECOR: CityDecor = {
+  parks: PARKS,
+  lakes: LAKES,
+  beaches: BEACHES,
+  roads: ROADS,
+  roadWidth: ROAD_WIDTH,
+  roadTrees: ROAD_TREES,
+  parkTrees: PARK_TREES,
+  bushes: BUSHES,
+  lampPosts: LAMP_POSTS,
+  benches: BENCHES,
+  plazas: PLAZAS,
+  terrain: {
+    cellSize: HILL_CELL,
+    step: HILL_STEP,
+    hillColumns: HILL_COLUMNS,
+    hillTrees: HILL_TREES,
+    bufferTrees: BUFFER_TREES,
+    bufferBushes: BUFFER_BUSHES,
+    meadows: MEADOWS,
+    mountains: MOUNTAINS,
+    bands: TERRAIN_BANDS,
+  },
+}

@@ -71,12 +71,21 @@ export function getSchools(): Promise<School[]> {
   return request<School[]>("/schools");
 }
 
+export type BuildingStatus = "queued" | "in_progress" | "completed";
+
 export type BuildingState = {
   id: string;
   category: BuildingCategory;
   variant: string;
+  /** 0-indexed within variant — combined with `variant` as `${variant}_${orderIndex}`,
+   *  this is the stable key that matches src/data/cityLayout.ts's `buildingId`
+   *  (generateCityLayout.ts's doc comment: "matches server/src/scripts/seed.ts's
+   *  (variant, order_index) natural key"). Used to join real DB progress onto
+   *  each building's real city position client-side — see Kiosk.tsx. */
+  orderIndex: number;
   totalBlocks: number;
   completedBlocks: number;
+  status: BuildingStatus;
 };
 
 export function getBuildings(): Promise<BuildingState[]> {

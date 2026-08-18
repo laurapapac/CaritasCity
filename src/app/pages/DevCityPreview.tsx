@@ -2,42 +2,17 @@ import { useMemo, useRef } from "react";
 import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, CityDecor } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
+import { STATIC_CITY_DECOR, STATIC_LANDMARKS } from "../../components/city/staticCityData";
 import { CITY_LAYOUT } from "../../data/cityLayout";
-import { PARKS, LAKES, BEACHES, PARK_TREES, BUSHES } from "../../data/cityDecor";
-import { ROADS, ROAD_WIDTH, ROAD_TREES } from "../../data/cityRoads";
-import { LAMP_POSTS, BENCHES, PLAZAS } from "../../data/cityFurniture";
-import {
-  HILL_CELL, HILL_STEP, HILL_COLUMNS, HILL_TREES,
-  BUFFER_TREES, BUFFER_BUSHES, MEADOWS, MOUNTAINS, TERRAIN_BANDS,
-} from "../../data/cityTerrain";
 import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
 // Dev-only preview of the full Phase 2/3 static layout: all 158 buildings
 // (src/data/cityLayout.ts) placed inside a block grid, fully built, at their
-// generated positions, plus parks/lakes/roads/trees (src/data/cityDecor.ts +
-// src/data/cityRoads.ts) — for reviewing the layout before treating it as
-// final. Purely client-side, never touches the real backend/DB, never
+// generated positions, plus the full decor/terrain and the two hand-placed
+// landmarks (church, fountain) — src/components/city/staticCityData.ts,
+// shared with the live kiosk (2026-08-13) so both render the exact same
+// city. Purely client-side, never touches the real backend/DB, never
 // reachable in a production build (see main.tsx).
-//
-// Plus one hand-placed church (2026-08-11, user request) — purely aesthetic,
-// not one of the 158 real QR-linked buildings, so it's added here directly
-// rather than through src/data/cityLayout.ts. Positioned in the buffer leaf
-// just east of park_north (rect roughly x:[-26.6,45.3] z:[92.8,195.3] —
-// excluded from both buildings and roads by generateCityLayout.ts since a
-// park/lake zone overlaps it, so it's open ground with nothing else placed
-// there), safely clear of park_north's own circle (center -40,175, radius
-// 20; distance from the church's center below is ~41).
-
-const CHURCH_POSITION = { x: 0, z: 165 };
-
-// Second hand-placed landmark (2026-08-12, user request) — also purely
-// aesthetic, not one of the 158 real QR-linked buildings, added the same way
-// as the church. Positioned south of the church within the same buffer leaf
-// (see the CHURCH_POSITION comment above for its bounds), clear of the
-// church's own footprint, the leaf's real roads on every side, and the
-// zone-buffer/road tree clearances.
-const FOUNTAIN_POSITION = { x: 25, z: 110 };
-
 export default function DevCityPreview() {
   const cityRef = useRef<CityHandle>(null);
 
@@ -51,58 +26,10 @@ export default function DevCityPreview() {
       completedBlocks: entry.totalBlocks,
     }));
 
-    const churchBlueprint = blueprintForVariant("church", "school", 0);
-    const churchBlockCount = churchBlueprint.voxelCount ?? churchBlueprint.voxels.length;
-    const church: CityBuilding = {
-      id: "church",
-      category: "school", // unused — "church" is hand-authored, category only matters for the placeholder fallback
-      position: CHURCH_POSITION,
-      blueprint: churchBlueprint,
-      totalBlocks: churchBlockCount,
-      completedBlocks: churchBlockCount,
-    };
-
-    const fountainBlueprint = blueprintForVariant("fountain", "school", 0);
-    const fountainBlockCount = fountainBlueprint.voxelCount ?? fountainBlueprint.voxels.length;
-    const fountain: CityBuilding = {
-      id: "fountain",
-      category: "school", // unused — "fountain" is hand-authored, same as church
-      position: FOUNTAIN_POSITION,
-      blueprint: fountainBlueprint,
-      totalBlocks: fountainBlockCount,
-      completedBlocks: fountainBlockCount,
-    };
-
-    return [...realBuildings, church, fountain];
+    return [...realBuildings, ...STATIC_LANDMARKS];
   }, []);
 
-  const decor = useMemo<CityDecor>(
-    () => ({
-      parks: PARKS,
-      lakes: LAKES,
-      beaches: BEACHES,
-      roads: ROADS,
-      roadWidth: ROAD_WIDTH,
-      roadTrees: ROAD_TREES,
-      parkTrees: PARK_TREES,
-      bushes: BUSHES,
-      lampPosts: LAMP_POSTS,
-      benches: BENCHES,
-      plazas: PLAZAS,
-      terrain: {
-        cellSize: HILL_CELL,
-        step: HILL_STEP,
-        hillColumns: HILL_COLUMNS,
-        hillTrees: HILL_TREES,
-        bufferTrees: BUFFER_TREES,
-        bufferBushes: BUFFER_BUSHES,
-        meadows: MEADOWS,
-        mountains: MOUNTAINS,
-        bands: TERRAIN_BANDS,
-      },
-    }),
-    []
-  );
+  const decor: CityDecor = STATIC_CITY_DECOR;
 
   return (
     <div className="relative min-h-screen w-screen overflow-hidden bg-background">
