@@ -232,6 +232,95 @@ function findExposedFaceNormal(blocks: Block[], index: number): [number, number,
   return best
 }
 
+interface BBoxXZ {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+}
+
+// A building's footprint in the XZ plane, padded ±0.5 since block x/z are
+// cube centers. Computed once from the full blueprint (blocks is always the
+// complete building regardless of construction progress — see syncBuilding),
+// since a footprint never changes as a building is built up.
+function computeBBoxXZ(blocks: Block[]): BBoxXZ {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (const b of blocks) {
+    if (b.x < minX) minX = b.x
+    if (b.x > maxX) maxX = b.x
+    if (b.z < minZ) minZ = b.z
+    if (b.z > maxZ) maxZ = b.z
+  }
+  return { minX: minX - 0.5, maxX: maxX + 0.5, minZ: minZ - 0.5, maxZ: maxZ + 0.5 }
+}
+
+// Exact (closed-form) distance along the ray (ox0,oz0)+t*(dx,dz), t>=0, at
+// which it first enters `box` — or null if it never does. A standard 2D
+// ray/AABB slab test, not step-walking: exact, O(1), and works for any
+// direction, not just the 4 compass directions.
+function rayEntersBBoxXZ(
+  ox0: number,
+  oz0: number,
+  dx: number,
+  dz: number,
+  box: BBoxXZ
+): number | null {
+  let tMin = 0
+  let tMax = Infinity
+
+  if (Math.abs(dx) < 1e-9) {
+    if (ox0 < box.minX || ox0 > box.maxX) return null
+  } else {
+    let t1 = (box.minX - ox0) / dx
+    let t2 = (box.maxX - ox0) / dx
+    if (t1 > t2) [t1, t2] = [t2, t1]
+    tMin = Math.max(tMin, t1)
+    tMax = Math.min(tMax, t2)
+  }
+
+  if (Math.abs(dz) < 1e-9) {
+    if (oz0 < box.minZ || oz0 > box.maxZ) return null
+  } else {
+    let t1 = (box.minZ - oz0) / dz
+    let t2 = (box.maxZ - oz0) / dz
+    if (t1 > t2) [t1, t2] = [t2, t1]
+    tMin = Math.max(tMin, t1)
+    tMax = Math.min(tMax, t2)
+  }
+
+  return tMin > tMax || tMax < 0 ? null : Math.max(0, tMin)
+}
+
+// How far a lateral camera can travel along its chosen direction before
+// entering another building's footprint — the fix for the camera sometimes
+// landing "on the wrong side," with a neighboring building's already-built
+// geometry covering the target block. Only considers neighbors with
+// visibleCount > 0 (an empty/unbuilt lot has nothing to occlude yet, and
+// clamping against it unconditionally would needlessly pull in FOCUS_OFFSET's
+// wide establishing shot for most ordinary placements). STATIC_LANDMARKS
+// (church/fountain) are ordinary entries in `nodes` and always fully built,
+// so they're correctly included here with no special-casing.
+function nearestOccupiedNeighborEntryDistance(
+  nodes: Map<string, BuildingNode>,
+  selfId: string,
+  cx: number,
+  cz: number,
+  ox: number,
+  oz: number
+): number {
+  let nearest = Infinity
+  for (const [id, other] of nodes) {
+    if (id === selfId || other.visibleCount === 0) continue
+    const t = rayEntersBBoxXZ(cx, cz, ox, oz, other.bboxXZ)
+    if (t !== null && t < nearest) nearest = t
+  }
+  return nearest
+}
+
+// Margin (world units) the lateral camera stops short of a neighbor's
+// footprint, rather than stopping exactly at its edge. Tune live.
+const NEIGHBOR_CLEARANCE_MARGIN = 2
+
 interface BuildingNode {
   solidMesh: THREE.InstancedMesh
   glassMesh: THREE.InstancedMesh
@@ -240,6 +329,7 @@ interface BuildingNode {
   glassUpTo: Int32Array
   visibleCount: number
   highlights: Map<number, HighlightEntry>
+  bboxXZ: BBoxXZ
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -610,6 +700,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           glassUpTo,
           visibleCount: 0,
           highlights: new Map(),
+          bboxXZ: computeBBoxXZ(blocks),
         }
         nodes.set(building.id, node)
       }
@@ -689,7 +780,20 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       const isVertical = nx === 0 && nz === 0
       const [ox, oy, oz] = isVertical ? pickTopViewOffset(cx, cz, topViewTrees) : [nx, ny, nz]
 
-      camera.position.set(cx + ox * FOCUS_OFFSET, cy + oy * FOCUS_OFFSET, cz + oz * FOCUS_OFFSET)
+      // Lateral shots only: don't let FOCUS_OFFSET's fixed distance fly the
+      // camera past the real (often much narrower, ~ROAD_GAP=8) gap to a
+      // neighboring building into its already-built geometry — pull the
+      // camera in instead of letting a nearer building cover the target
+      // block. Vertical shots skip this: their horizontal displacement is
+      // only sin(TOP_VIEW_TILT_DEG)*FOCUS_OFFSET (~8 units), comfortably
+      // inside typical building gaps already.
+      let dist = FOCUS_OFFSET
+      if (!isVertical) {
+        const entry = nearestOccupiedNeighborEntryDistance(nodes, buildingId, cx, cz, ox, oz)
+        if (entry < FOCUS_OFFSET) dist = Math.max(controls.minDistance, entry - NEIGHBOR_CLEARANCE_MARGIN)
+      }
+
+      camera.position.set(cx + ox * dist, cy + oy * dist, cz + oz * dist)
       controls.target.set(cx, cy, cz)
       controls.update()
 
