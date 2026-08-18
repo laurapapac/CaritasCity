@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { City, type CityHandle } from "../../components/city/City";
-import type { CityBuilding } from "../../components/city/types";
+import type { CityBuilding, CityDecor } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
 import {
   MONTAGE_BLOCK_COUNT,
@@ -39,11 +39,25 @@ const VARIANTS: VariantDef[] = [
   { key: "hospital_large", label: "Large Hospital", category: "hospital", totalBlocks: 8000 },
 ];
 
+// Matches cityScene.ts's TOP_VIEW_TILT_DEG(22)/FOCUS_OFFSET(22) exactly — the
+// horizontal distance from a framed block to where the top-view camera lands,
+// used below to place a mock tree precisely at (or well clear of) that spot.
+const TOP_VIEW_HORIZONTAL_OFFSET = Math.sin((22 * Math.PI) / 180) * 22;
+
+// Dev-only shortcut for the unverified "top-view camera framing steepened +
+// tree-dodging" work (plans/qr-backend-todo.md, 2026-08-17) — reaching a real
+// roof/floor block through hundreds of real placements wasn't practical, so
+// this jumps straight to one and optionally mocks a tree at the exact spot
+// the default (south) camera candidate would land, to exercise the dodge path.
+type TreeTest = "none" | "south";
+
 export default function DevPreview() {
   const cityRef = useRef<CityHandle>(null);
   const [variantKey, setVariantKey] = useState(VARIANTS[0].key);
   const [count, setCount] = useState(0);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(VARIANTS[0].totalBlocks - 1);
+  const [treeTest, setTreeTest] = useState<TreeTest>("none");
 
   const variant = VARIANTS.find((v) => v.key === variantKey)!;
 
@@ -63,9 +77,44 @@ export default function DevPreview() {
     [variant.key]
   );
 
+  // Local coords === world coords here (building sits at position {x:0,z:0}),
+  // and blockIndex maps 1:1 onto blueprint.voxels order (processBlueprint
+  // preserves it) — so this is exactly the block focusOnBlock would frame.
+  const focusVoxel = building.blueprint.voxels[focusIndex];
+
+  // Mocks a tree at the exact spot the default (south) top-view camera
+  // candidate would land, to force pickTopViewOffset's dodge path — real
+  // decor is never passed to this page otherwise. Only takes effect after
+  // <City> remounts (its key includes treeTest below), since cityScene.ts
+  // builds the tree census once at scene-creation time.
+  const mockDecor = useMemo<CityDecor | undefined>(() => {
+    if (treeTest === "none" || !focusVoxel) return undefined;
+    return {
+      parks: [],
+      lakes: [],
+      roads: [],
+      roadWidth: 6,
+      roadTrees: [{ x: focusVoxel.x, z: focusVoxel.z - TOP_VIEW_HORIZONTAL_OFFSET }],
+      parkTrees: [],
+    };
+  }, [treeTest, focusVoxel]);
+
   function handleVariantChange(key: string) {
     setVariantKey(key);
     setCount(0);
+    const nextVariant = VARIANTS.find((v) => v.key === key)!;
+    setFocusIndex(nextVariant.totalBlocks - 1);
+  }
+
+  // Jumps straight to blockIndex (revealing it if needed) and snaps the
+  // camera there — bypasses the montage/placement flow entirely, since this
+  // is purely about testing focusOnBlock's framing, not the reveal animation.
+  function handleFocusTest() {
+    const idx = Math.max(0, Math.min(variant.totalBlocks - 1, Math.round(focusIndex)));
+    const target = idx + 1;
+    setCount(target);
+    cityRef.current?.setVisibleCount(variant.key, target);
+    cityRef.current?.focusOnBlock(variant.key, idx, { highlight: true });
   }
 
   function handleCountChange(next: number) {
@@ -101,9 +150,10 @@ export default function DevPreview() {
   return (
     <div className="relative min-h-screen w-screen overflow-hidden bg-background">
       <City
-        key={variant.key}
+        key={`${variant.key}-${treeTest}`}
         ref={cityRef}
         initialBuildings={[building]}
+        decor={mockDecor}
         style={{ position: "absolute", inset: 0 }}
       />
 
@@ -159,6 +209,59 @@ export default function DevPreview() {
           >
             {isSimulating ? "Placing…" : "Simulate placing next block"}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="absolute right-4 top-4 w-80 bg-card/95 backdrop-blur">
+        <CardHeader>
+          <CardTitle>Camera framing test</CardTitle>
+          <CardDescription>
+            Jump straight to a block index and snap the camera there — for verifying
+            focusOnBlock&apos;s top-view tilt/tree-dodge without hundreds of real placements.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Block index</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                max={variant.totalBlocks - 1}
+                value={focusIndex}
+                onChange={(e) => setFocusIndex(Number(e.target.value))}
+                className="w-28"
+              />
+              <span className="text-muted-foreground text-sm">
+                / {variant.totalBlocks - 1} (default: last = likely roof/cap)
+              </span>
+            </div>
+            {focusVoxel && (
+              <span className="text-muted-foreground text-xs">
+                voxel: x={focusVoxel.x}, y={focusVoxel.y}, z={focusVoxel.z}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Mock tree</Label>
+            <Select value={treeTest} onValueChange={(v) => setTreeTest(v as TreeTest)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None — default south tilt</SelectItem>
+                <SelectItem value="south">
+                  South, at the default candidate spot — forces the dodge
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground text-xs">
+              Changing this remounts the scene (decor is built once per scene).
+            </span>
+          </div>
+
+          <Button onClick={handleFocusTest}>Focus camera on block</Button>
         </CardContent>
       </Card>
     </div>
