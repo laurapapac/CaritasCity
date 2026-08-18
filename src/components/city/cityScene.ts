@@ -44,6 +44,87 @@ const DEFAULT_CAMERA_TARGET = { x: 0, y: 10, z: 0 }
 // the single target block filling the frame.
 const FOCUS_OFFSET = 22
 
+// Top-view framing tilt (2026-08-17): a floor/ceiling-completing block used to be
+// framed dead straight overhead (phi=0), which read fine before decor existed but
+// now blends into the flat rooftop/floor plane and surrounding terrain — nothing
+// to tell the fresh block apart from its neighbors at a pure top-down angle. Tilting
+// the shot off vertical keeps the "from above" framing (still clearly reads as a
+// floor/ceiling shot, not a wall shot) while exposing a bit of the block's side
+// face, which is what actually makes it pop out against the flat plane. Steepened
+// from an initial 35° to 22° (2026-08-17, same day follow-up, user asked for "a bit
+// more steep") — still enough tilt to show a side face, closer to overhead than the
+// first pass.
+const TOP_VIEW_TILT_DEG = 22
+const TOP_VIEW_TILT_RAD = (TOP_VIEW_TILT_DEG * Math.PI) / 180
+const TOP_VIEW_VERTICAL = Math.cos(TOP_VIEW_TILT_RAD)
+const TOP_VIEW_HORIZONTAL = Math.sin(TOP_VIEW_TILT_RAD)
+
+// Which way (compass-wise) the top-view tilt leans is otherwise arbitrary, so it's
+// used to dodge nearby tree canopies instead of always leaning south. 8 candidate
+// azimuths at the same TOP_VIEW_TILT_DEG steepness — index 0 is due south (-z),
+// matching the original single-direction behavior, so nothing changes for a block
+// with no trees crowding it.
+const TOP_VIEW_AZIMUTH_COUNT = 8
+const TOP_VIEW_DIRECTIONS: Array<[number, number]> = Array.from({ length: TOP_VIEW_AZIMUTH_COUNT }, (_, i) => {
+  const angle = (i / TOP_VIEW_AZIMUTH_COUNT) * Math.PI * 2
+  return [Math.sin(angle) * TOP_VIEW_HORIZONTAL, -Math.cos(angle) * TOP_VIEW_HORIZONTAL]
+})
+
+// How close (world units) a tree can sit to the top-view camera's candidate
+// position before it's treated as being in the way. Tuned by feel against
+// FOCUS_OFFSET's close-up distance (22), not the tree canopy's actual geometric
+// radius — at this zoom a canopy reads as blocking well before the camera is
+// literally inside it.
+const TREE_CLEARANCE_RADIUS = 14
+
+// Only trees within this radius of the framed block are worth checking at all —
+// keeps the per-focus scan to a handful of nearby trees instead of the whole
+// city's canopy list.
+const TREE_SEARCH_RADIUS = FOCUS_OFFSET + TREE_CLEARANCE_RADIUS + 10
+
+// Picks which of the 8 TOP_VIEW_DIRECTIONS to frame a floor/ceiling shot from:
+// stays on the default (south) direction unless a tree crowds it, in which case
+// it swings to whichever azimuth puts the most distance between the camera and
+// the nearest tree. Deterministic (same inputs → same output), same as the rest
+// of this file's framing logic.
+function pickTopViewOffset(
+  cx: number,
+  cz: number,
+  trees: Array<{ x: number; z: number }>
+): [number, number, number] {
+  const nearby = trees.filter(
+    (t) => Math.abs(t.x - cx) < TREE_SEARCH_RADIUS && Math.abs(t.z - cz) < TREE_SEARCH_RADIUS
+  )
+
+  const clearance = ([ox, oz]: [number, number]): number => {
+    if (nearby.length === 0) return Infinity
+    const camX = cx + ox * FOCUS_OFFSET
+    const camZ = cz + oz * FOCUS_OFFSET
+    let nearest = Infinity
+    for (const t of nearby) {
+      const d = Math.hypot(t.x - camX, t.z - camZ)
+      if (d < nearest) nearest = d
+    }
+    return nearest
+  }
+
+  const [defaultOx, defaultOz] = TOP_VIEW_DIRECTIONS[0]
+  if (clearance([defaultOx, defaultOz]) >= TREE_CLEARANCE_RADIUS) {
+    return [defaultOx, TOP_VIEW_VERTICAL, defaultOz]
+  }
+
+  let best = TOP_VIEW_DIRECTIONS[0]
+  let bestClearance = -Infinity
+  for (const dir of TOP_VIEW_DIRECTIONS) {
+    const c = clearance(dir)
+    if (c > bestClearance) {
+      bestClearance = c
+      best = dir
+    }
+  }
+  return [best[0], TOP_VIEW_VERTICAL, best[1]]
+}
+
 // Soft world boundary (2026-08-13, tightened twice same day — first pass
 // (350, matching CITY_EDGE's full measured envelope including sparse edge
 // roads/trees) still let a right-drag pan noticeably past what reads as
@@ -227,6 +308,18 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   const { decor, disableFog } = options
   const w = container.clientWidth  || 1
   const h = container.clientHeight || 1
+
+  // Flat tree census for pickTopViewOffset's proximity check — every tree source
+  // in CityDecor, positions only. Built once (decor is static per scene instance)
+  // rather than per focus call. /kiosk and /dev/city both pass all of these; a
+  // caller with no decor (or no terrain) just gets an empty/partial list, which
+  // degrades to "no nearby trees" — always the default south-facing tilt.
+  const topViewTrees: Array<{ x: number; z: number }> = [
+    ...(decor?.roadTrees ?? []),
+    ...(decor?.parkTrees ?? []),
+    ...(decor?.terrain?.hillTrees ?? []),
+    ...(decor?.terrain?.bufferTrees ?? []),
+  ]
 
   // ── Renderer ────────────────────────────────────────────────────────────
   // logarithmicDepthBuffer: with near=1/far=4000 (a large ratio, needed since
@@ -590,8 +683,11 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       // beneath the target's horizontal plane, so offsetting downward for a
       // "ceiling" (nothing below) normal would get silently clamped into a
       // useless in-between position instead of the intended look-up shot.
+      // Tilted, not straight up, so the block's side face shows a little instead
+      // of blending flat into the floor/rooftop plane — and steered away from
+      // whichever azimuth would put a tree canopy right in front of the camera.
       const isVertical = nx === 0 && nz === 0
-      const [ox, oy, oz] = isVertical ? [0, 1, 0] : [nx, ny, nz]
+      const [ox, oy, oz] = isVertical ? pickTopViewOffset(cx, cz, topViewTrees) : [nx, ny, nz]
 
       camera.position.set(cx + ox * FOCUS_OFFSET, cy + oy * FOCUS_OFFSET, cz + oz * FOCUS_OFFSET)
       controls.target.set(cx, cy, cz)
