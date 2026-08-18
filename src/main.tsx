@@ -5,6 +5,7 @@ import ScanLanding from "./app/pages/ScanLanding.tsx";
 import Kiosk from "./app/pages/Kiosk.tsx";
 import DevPreview from "./app/pages/DevPreview.tsx";
 import DevCityPreview from "./app/pages/DevCityPreview.tsx";
+import DevKioskProgress from "./app/pages/DevKioskProgress.tsx";
 import "./styles/index.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -19,6 +20,7 @@ createRoot(document.getElementById("root")!).render(
           the route and its code don't exist in `pnpm build` output. */}
       {import.meta.env.DEV && <Route path="/dev/preview" element={<DevPreview />} />}
       {import.meta.env.DEV && <Route path="/dev/city" element={<DevCityPreview />} />}
+      {import.meta.env.DEV && <Route path="/dev/kiosk-progress" element={<DevKioskProgress />} />}
     </Routes>
   </BrowserRouter>,
 );
