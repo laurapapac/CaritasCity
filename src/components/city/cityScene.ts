@@ -80,6 +80,14 @@ function topViewTiltComponents(cy: number): { vertical: number; horizontal: numb
   return { vertical: Math.cos(tiltRad), horizontal: Math.sin(tiltRad) }
 }
 
+// TOP_VIEW_TILT_DEG's own components, independent of block height — used by
+// pickTopViewOffset as a steeper fallback tilt when a low block's shallow
+// azimuth sweep can't find any clear direction (see its doc comment).
+function topViewSteepComponents(): { vertical: number; horizontal: number } {
+  const tiltRad = (TOP_VIEW_TILT_DEG * Math.PI) / 180
+  return { vertical: Math.cos(tiltRad), horizontal: Math.sin(tiltRad) }
+}
+
 // Which way (compass-wise) the top-view tilt leans is otherwise arbitrary, so it's
 // used to dodge nearby tree canopies instead of always leaning south. 8 candidate
 // azimuths as unit-circle directions (steepness is applied separately, per-call,
@@ -148,6 +156,19 @@ function pickClearestOffset(
 // it swings to whichever azimuth puts the most distance between the camera and
 // the nearest tree. Deterministic (same inputs → same output), same as the rest
 // of this file's framing logic.
+//
+// A low block's shallow tilt (topViewTiltComponents near TOP_VIEW_TILT_LOW_DEG)
+// keeps the camera at a fixed, mostly-sideways offset from the target — rotating
+// through all 8 azimuths still can't escape a building genuinely ringed by trees
+// on multiple sides (dense road-tree frontage, common near intersections; found
+// live at hospital_small_0 block 204/4000 — every azimuth still landed inside
+// canopy). Same limitation pickLateralOffset hit with a target-adjacent tree, and
+// the same fix: once the low tilt's own 8 azimuths all fail to clear, also try
+// TOP_VIEW_TILT_DEG's steeper baseline at each azimuth — steeper pulls the camera
+// toward directly overhead (sin(22°)*22≈8.2 vs sin(55°)*22≈18.0 sideways reach),
+// which is what actually gets it out from among the trees, not just facing a
+// different one. Deliberately reusing the existing "surpasses the tree" steep
+// angle rather than inventing a third tilt.
 function pickTopViewOffset(
   cx: number,
   cy: number,
@@ -155,7 +176,6 @@ function pickTopViewOffset(
   trees: Array<{ x: number; z: number }>
 ): [number, number, number] {
   const nearby = nearbyTrees(cx, cz, trees)
-  const { vertical, horizontal } = topViewTiltComponents(cy)
 
   // Distance from each tree to the whole camera→target sightline (not just
   // the camera point) — a tree standing right next to the target itself
@@ -174,9 +194,13 @@ function pickTopViewOffset(
     return nearest
   }
 
-  const candidates: Array<[number, number, number]> = TOP_VIEW_AZIMUTHS.map(
-    ([ax, az]) => [ax * horizontal, vertical, az * horizontal]
-  )
+  const tiltOptions = [topViewTiltComponents(cy), topViewSteepComponents()]
+  const candidates: Array<[number, number, number]> = []
+  for (const { vertical, horizontal } of tiltOptions) {
+    for (const [ax, az] of TOP_VIEW_AZIMUTHS) {
+      candidates.push([ax * horizontal, vertical, az * horizontal])
+    }
+  }
   return pickClearestOffset(candidates, clearanceOf)
 }
 
@@ -228,9 +252,25 @@ const LATERAL_AZIMUTH_FAN_DEG = [0, 20, -20, 40, -40]
 // what actually clears those cases — same mechanism that already makes the
 // problem "stop mattering" once a building outgrows nearby trees, just
 // applied deliberately instead of waited for. 0° keeps the original
-// level-with-the-block shot; the second value trades some directness for
-// enough clearance — tune live.
-const LATERAL_LIFT_DEG = [0, 35]
+// level-with-the-block shot.
+//
+// 35° alone turned out insufficient — found live via temporary debug logging
+// of each candidate's clearance (hospital_small_0 block 204/4000, a low
+// west-wall block with a tree
+// only ~2.9 units from the target center, closer than the tuning up to that
+// point had been tested against): cos(35°)*FOCUS_OFFSET≈18 units of
+// horizontal reach barely retreats from a tree that close, so all 5 azimuths
+// still measured under TREE_CLEARANCE_RADIUS. 60° (cos·22≈11 horizontal /
+// sin·22≈19 vertical) crossed the threshold, but only barely (~14.6 of the
+// required 14) — visually still mostly hidden, since the clearance formula's
+// combined xz/vertical distance to a target-ADJACENT tree stays small however
+// high the camera goes without also retreating further horizontally. Added
+// 80° (cos·22≈3.8 horizontal / sin·22≈21.7 vertical) as a third step —
+// clearance jumped to ~17, and live verification showed the block genuinely
+// visible at the frame edge instead of fully buried. Still shallower than the vertical
+// branch's near-overhead framing, so a lateral shot forced this far still
+// reads as looking down onto the wall rather than straight down at a roof.
+const LATERAL_LIFT_DEG = [0, 35, 60, 80]
 
 function rotateAzimuth([x, z]: [number, number], deg: number): [number, number] {
   const rad = (deg * Math.PI) / 180
