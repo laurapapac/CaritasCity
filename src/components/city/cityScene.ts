@@ -53,21 +53,43 @@ const FOCUS_OFFSET = 22
 // face, which is what actually makes it pop out against the flat plane. Steepened
 // from an initial 35° to 22° (2026-08-17, same day follow-up, user asked for "a bit
 // more steep") — still enough tilt to show a side face, closer to overhead than the
-// first pass.
+// first pass. This is now specifically the tilt used once a block is above nearby
+// tree height — see TOP_VIEW_TILT_LOW_DEG below for how low blocks differ.
 const TOP_VIEW_TILT_DEG = 22
-const TOP_VIEW_TILT_RAD = (TOP_VIEW_TILT_DEG * Math.PI) / 180
-const TOP_VIEW_VERTICAL = Math.cos(TOP_VIEW_TILT_RAD)
-const TOP_VIEW_HORIZONTAL = Math.sin(TOP_VIEW_TILT_RAD)
+
+// A low block (still at/below TREE_CANOPY_TOP_Y) shot from TOP_VIEW_TILT_DEG's
+// steep, near-overhead angle reads as disconnected from the ground — user
+// feedback (2026-08-18): liked the steep angle in general, but wanted low
+// blocks framed closer to the ground/more horizontal instead, transitioning
+// to the steeper angle once the building actually grows tall enough for an
+// aerial-ish shot to make sense. This is the shallower end of that
+// transition — noticeably more horizontal than TOP_VIEW_TILT_DEG, short of
+// going all the way to a wall-shot's fully horizontal framing. Starting
+// point for live tuning via /dev/kiosk-progress, not a derived value.
+const TOP_VIEW_TILT_LOW_DEG = 55
+
+// Interpolates (smoothstep, matching maxDistanceForPhi's own angle-based
+// interpolation below) from TOP_VIEW_TILT_LOW_DEG at cy=0 up to
+// TOP_VIEW_TILT_DEG once cy passes TREE_CANOPY_TOP_Y — the same "surpasses
+// the tree" threshold pickLateralOffset's lift dodge uses, so both pickers
+// treat "tall enough" consistently.
+function topViewTiltComponents(cy: number): { vertical: number; horizontal: number } {
+  const t = smoothstep(0, TREE_CANOPY_TOP_Y, cy)
+  const tiltDeg = TOP_VIEW_TILT_LOW_DEG + (TOP_VIEW_TILT_DEG - TOP_VIEW_TILT_LOW_DEG) * t
+  const tiltRad = (tiltDeg * Math.PI) / 180
+  return { vertical: Math.cos(tiltRad), horizontal: Math.sin(tiltRad) }
+}
 
 // Which way (compass-wise) the top-view tilt leans is otherwise arbitrary, so it's
 // used to dodge nearby tree canopies instead of always leaning south. 8 candidate
-// azimuths at the same TOP_VIEW_TILT_DEG steepness — index 0 is due south (-z),
-// matching the original single-direction behavior, so nothing changes for a block
-// with no trees crowding it.
+// azimuths as unit-circle directions (steepness is applied separately, per-call,
+// by topViewTiltComponents — it varies with block height, so can't be baked in
+// here) — index 0 is due south (-z), matching the original single-direction
+// behavior, so nothing changes for a block with no trees crowding it.
 const TOP_VIEW_AZIMUTH_COUNT = 8
-const TOP_VIEW_DIRECTIONS: Array<[number, number]> = Array.from({ length: TOP_VIEW_AZIMUTH_COUNT }, (_, i) => {
+const TOP_VIEW_AZIMUTHS: Array<[number, number]> = Array.from({ length: TOP_VIEW_AZIMUTH_COUNT }, (_, i) => {
   const angle = (i / TOP_VIEW_AZIMUTH_COUNT) * Math.PI * 2
-  return [Math.sin(angle) * TOP_VIEW_HORIZONTAL, -Math.cos(angle) * TOP_VIEW_HORIZONTAL]
+  return [Math.sin(angle), -Math.cos(angle)]
 })
 
 // How close (world units) a tree can sit to the top-view camera's candidate
@@ -121,17 +143,19 @@ function pickClearestOffset(
   return best
 }
 
-// Picks which of the 8 TOP_VIEW_DIRECTIONS to frame a floor/ceiling shot from:
+// Picks which of the 8 TOP_VIEW_AZIMUTHS to frame a floor/ceiling shot from:
 // stays on the default (south) direction unless a tree crowds it, in which case
 // it swings to whichever azimuth puts the most distance between the camera and
 // the nearest tree. Deterministic (same inputs → same output), same as the rest
 // of this file's framing logic.
 function pickTopViewOffset(
   cx: number,
+  cy: number,
   cz: number,
   trees: Array<{ x: number; z: number }>
 ): [number, number, number] {
   const nearby = nearbyTrees(cx, cz, trees)
+  const { vertical, horizontal } = topViewTiltComponents(cy)
 
   // Distance from each tree to the whole camera→target sightline (not just
   // the camera point) — a tree standing right next to the target itself
@@ -150,8 +174,8 @@ function pickTopViewOffset(
     return nearest
   }
 
-  const candidates: Array<[number, number, number]> = TOP_VIEW_DIRECTIONS.map(
-    ([ox, oz]) => [ox, TOP_VIEW_VERTICAL, oz]
+  const candidates: Array<[number, number, number]> = TOP_VIEW_AZIMUTHS.map(
+    ([ax, az]) => [ax * horizontal, vertical, az * horizontal]
   )
   return pickClearestOffset(candidates, clearanceOf)
 }
@@ -221,11 +245,13 @@ function rotateAzimuth([x, z]: [number, number], deg: number): [number, number] 
 // clearance formula, not the shared one: this picker's candidates can carry
 // a genuine vertical component (oy), so a candidate's actual camera Y has to
 // be computed per-candidate here, not read once from the block's own Y like
-// the old version did. Folding that into pickTopViewOffset's *shared*
-// formula would still be wrong for the vertical branch, whose candidates are
-// always oy=TOP_VIEW_VERTICAL (~20 units up) regardless of block height —
-// this stays its own function so the vertical branch's already-tuned
-// dodge is untouched.
+// the old version did. pickTopViewOffset's own vertical component already
+// varies (topViewTiltComponents, height-dependent), but always represents
+// "steep, near-overhead" at any height — folding a canopy-height term into
+// that shared formula would still be wrong, since a low block's shallower
+// top-view tilt is a deliberate ground-level look, not an attempt to clear a
+// tree — this stays its own function so the vertical branch's tuning is
+// untouched.
 function pickLateralOffset(
   cx: number,
   cy: number,
@@ -921,7 +947,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       // whichever azimuth would put a tree canopy right in front of the camera.
       const isVertical = nx === 0 && nz === 0
       const [ox, oy, oz] = isVertical
-        ? pickTopViewOffset(cx, cz, topViewTrees)
+        ? pickTopViewOffset(cx, cy, cz, topViewTrees)
         : pickLateralOffset(cx, cy, cz, nx, nz, topViewTrees)
 
       // Lateral shots only: don't let FOCUS_OFFSET's fixed distance fly the
