@@ -35,7 +35,7 @@ const VARIANTS: VariantDef[] = [
   { key: "restaurant", label: "Restaurant", category: "food", totalBlocks: 5000 },
   { key: "school", label: "School", category: "school", totalBlocks: 5000 },
   { key: "hospital_small", label: "Small Hospital", category: "hospital", totalBlocks: 4000 },
-  { key: "hospital_medium", label: "Medium Hospital", category: "hospital", totalBlocks: 6000 },
+  { key: "hospital_medium", label: "Medium Hospital", category: "hospital", totalBlocks: 6100 },
   { key: "hospital_large", label: "Large Hospital", category: "hospital", totalBlocks: 8000 },
 ];
 

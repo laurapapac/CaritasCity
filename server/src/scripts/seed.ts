@@ -8,17 +8,19 @@ type BuildingSeed = {
   blocksEach: number;
 };
 
-// From plans/qr-backend-todo.md — 158 buildings, 500,000 blocks total.
+// From plans/qr-backend-todo.md — 160 buildings, 500,000 blocks total.
+// Rebalanced 2026-08-19 (must stay in sync with generateCityLayout.ts's
+// BUILDING_SPECS — same variants/counts/blocksEach, same order).
 const BUILDINGS: BuildingSeed[] = [
   { category: 'residential', variant: 'house', count: 75, blocksEach: 1080 },
-  { category: 'residential', variant: 'short_apartment', count: 23, blocksEach: 4000 },
-  { category: 'residential', variant: 'tall_apartment', count: 12, blocksEach: 8000 },
-  { category: 'food', variant: 'food_bank', count: 11, blocksEach: 4000 },
-  { category: 'food', variant: 'restaurant', count: 14, blocksEach: 5000 },
-  { category: 'school', variant: 'school', count: 13, blocksEach: 5000 },
-  { category: 'hospital', variant: 'hospital_small', count: 5, blocksEach: 4000 },
-  { category: 'hospital', variant: 'hospital_medium', count: 4, blocksEach: 6000 },
-  { category: 'hospital', variant: 'hospital_large', count: 1, blocksEach: 8000 },
+  { category: 'residential', variant: 'short_apartment', count: 7, blocksEach: 4000 },
+  { category: 'residential', variant: 'tall_apartment', count: 2, blocksEach: 8000 },
+  { category: 'food', variant: 'food_bank', count: 10, blocksEach: 4000 },
+  { category: 'food', variant: 'restaurant', count: 17, blocksEach: 5000 },
+  { category: 'school', variant: 'school', count: 25, blocksEach: 5000 },
+  { category: 'hospital', variant: 'hospital_small', count: 12, blocksEach: 4000 },
+  { category: 'hospital', variant: 'hospital_medium', count: 10, blocksEach: 6100 },
+  { category: 'hospital', variant: 'hospital_large', count: 2, blocksEach: 8000 },
 ];
 
 async function main() {

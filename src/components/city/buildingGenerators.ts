@@ -7,7 +7,7 @@
  * consequence of its own dimensions and already lands exactly on this
  * project's real totalBlocks per variant (verified by running each generator:
  * short_apartment 4,000, tall_apartment 8,000, food_bank 4,000, restaurant
- * 5,000, school 5,000, hospital_small 4,000, hospital_medium 6,000,
+ * 5,000, school 5,000, hospital_small 4,000, hospital_medium 6,100,
  * hospital_large 8,000) — no padding/truncation needed.
  *
  * Every variant except church/fountain (pure landmarks, no block-count target)
@@ -404,8 +404,9 @@ export function generateSmallHospital(): BlueprintVoxel[] {
   })
 }
 
-// ── Medium Hospital  18×18×(6 floors × fh3) + tower = 6,000 ────────────────
-// Visual: white shell + central protruding tower, roof cross, ambulance bay
+// ── Medium Hospital  18×18×(6 floors × fh3) + tower = 6,100 ────────────────
+// Visual: white shell + central protruding tower, roof cross, ambulance bay,
+// rooftop mechanical enclosure
 
 export function generateMediumHospital(): BlueprintVoxel[] {
   return makeBlocks(s => {
@@ -431,6 +432,12 @@ export function generateMediumHospital(): BlueprintVoxel[] {
     islab(s, 0, ry, 0, W, D, P.gray)
     ifill(s, W / 2 - 1, ry + 1, 3, 2, 1, D - 6, P.red)
     ifill(s, 4, ry + 1, D / 2 - 1, W - 8, 1, 2, P.red)
+    // Rooftop mechanical/AC enclosure (2026-08-19, +100 blocks: 6,000 → 6,100)
+    // — a plain 5×4×5 solid box tucked in the roof's clear top-left corner
+    // (x=1-5, z=1-5), well clear of the tower (x=6-11,z=4-13), roof cross
+    // (x=8-9/z=8-9), and antenna (x=9,z=9). Verified zero coordinate overlap
+    // with any other cell this generator sets.
+    ifill(s, 1, ry + 1, 1, 5, 4, 5, P.concDark)
     // Ambulance bay canopy
     ifill(s, 2, 2, -3, 8, 1, 4, P.white)
     ifill(s, 2, 3, -3, 8, 1, 4, P.red)
@@ -484,7 +491,7 @@ export function generateLargeHospital(): BlueprintVoxel[] {
 }
 
 // ── Church  20×36 nave + 8×8 steeple, stepped gable roof + spire + cross ────
-// Not one of the 158 real QR-linked buildings — a single purely aesthetic
+// Not one of the 160 real QR-linked buildings — a single purely aesthetic
 // landmark the user asked to hand-place (2026-08-11), so unlike every other
 // generator here it has no totalBlocks to hit exactly; block count is
 // whatever this shape naturally comes out to.
@@ -554,7 +561,7 @@ export function generateChurch(): BlueprintVoxel[] {
 }
 
 // ── Fountain: circular basin + raised two-tier pedestal ─────────────────────
-// Not one of the 158 real QR-linked buildings — a second purely aesthetic
+// Not one of the 160 real QR-linked buildings — a second purely aesthetic
 // landmark the user asked to hand-place near the church (2026-08-12), same
 // deal as generateChurch: no totalBlocks to hit, block count is whatever this
 // shape naturally comes out to.
@@ -609,7 +616,7 @@ export function generateFountain(): BlueprintVoxel[] {
 // Variant key → generator. Every non-house variant now has a hand-authored
 // design; house keeps using generateHouseBlueprint (a recolor of the imported
 // blueprint, not a fixed shape generator like these). "church" and
-// "fountain" are not among the 158 real QR-linked buildings — see their own
+// "fountain" are not among the 160 real QR-linked buildings — see their own
 // generators' comments. Every generator receives a per-building variantIndex
 // (2026-08-12) — generateShortApartment, generateTallApartment,
 // generateFoodBank, generateRestaurant, and generateSchool use it for

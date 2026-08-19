@@ -1,7 +1,9 @@
 /**
- * One-off codegen: generates the static building layout for all 158 buildings,
- * the park/lake zones, and the road network, writing them to
- * src/data/cityLayout.ts, src/data/cityDecor.ts, and src/data/cityRoads.ts.
+ * One-off codegen: generates the static building layout for all 160 real
+ * buildings plus a second, lenient pass of decoration-only buildings, the
+ * park/lake zones, and the road network, writing them to
+ * src/data/cityLayout.ts, src/data/cityDecorBuildings.ts, src/data/cityDecor.ts,
+ * and src/data/cityRoads.ts.
  * Run via (from the repo root):
  *   node --experimental-strip-types src/scripts/generateCityLayout.ts
  * Re-running with the same seed reproduces the exact same output
@@ -87,16 +89,56 @@ interface BuildingSpec {
 
 // Mirrors server/src/scripts/seed.ts's BUILDINGS array (same variants/counts/
 // totalBlocks, same insertion order) plus each variant's real footprint size.
+//
+// Rebalanced 2026-08-19 (160 buildings, still 500,000 blocks total, each of
+// the 4 categories summing to exactly 125,000 — see plans/qr-backend-todo.md):
+// short/tall apartment counts drop sharply (23->7, 12->2) since decoration
+// buildings (DECORATION_SPECS below) now restore visual density for those
+// variants without needing every instance to be real/buyable; restaurant,
+// school, hospital_small/medium/large all grow; house is unchanged.
+// hospital_medium's totalBlocks also grows 6,000->6,100 (a rooftop mechanical
+// enclosure added to generateMediumHospital() in buildingGenerators.ts) —
+// its footprint (18x18) is unchanged, roof-level growth only.
 const BUILDING_SPECS: BuildingSpec[] = [
   { variant: "house",           category: "residential", count: 75, totalBlocks: 1080, width: 14, depth: 12 },
-  { variant: "short_apartment", category: "residential", count: 23, totalBlocks: 4000, width: 20, depth: 10 },
-  { variant: "tall_apartment",  category: "residential", count: 12, totalBlocks: 8000, width: 16, depth: 10 },
-  { variant: "food_bank",       category: "food",        count: 11, totalBlocks: 4000, width: 40, depth: 10 },
-  { variant: "restaurant",      category: "food",        count: 14, totalBlocks: 5000, width: 22, depth: 11 },
-  { variant: "school",          category: "school",      count: 13, totalBlocks: 5000, width: 50, depth: 10 },
-  { variant: "hospital_small",  category: "hospital",    count: 5,  totalBlocks: 4000, width: 20, depth: 10 },
-  { variant: "hospital_medium", category: "hospital",    count: 4,  totalBlocks: 6000, width: 18, depth: 18 },
-  { variant: "hospital_large",  category: "hospital",    count: 1,  totalBlocks: 8000, width: 16, depth: 16 },
+  { variant: "short_apartment", category: "residential", count: 7,  totalBlocks: 4000, width: 20, depth: 10 },
+  { variant: "tall_apartment",  category: "residential", count: 2,  totalBlocks: 8000, width: 16, depth: 10 },
+  { variant: "food_bank",       category: "food",        count: 10, totalBlocks: 4000, width: 40, depth: 10 },
+  { variant: "restaurant",      category: "food",        count: 17, totalBlocks: 5000, width: 22, depth: 11 },
+  { variant: "school",          category: "school",      count: 25, totalBlocks: 5000, width: 50, depth: 10 },
+  { variant: "hospital_small",  category: "hospital",    count: 12, totalBlocks: 4000, width: 20, depth: 10 },
+  { variant: "hospital_medium", category: "hospital",    count: 10, totalBlocks: 6100, width: 18, depth: 18 },
+  { variant: "hospital_large",  category: "hospital",    count: 2,  totalBlocks: 8000, width: 16, depth: 16 },
+]
+
+// Decoration-only buildings (2026-08-19): extra instances of the same 9 real
+// variants, placed in a second, lenient pass (see the "Decoration buildings"
+// section near the Run block below) over whatever leaf/shelf capacity is
+// left over after BUILDING_SPECS's real, backend-linked buildings are
+// placed. These never touch the backend/QR system at all — rendered
+// permanently fully-built, exactly like the church/fountain landmarks
+// already are (src/components/city/staticCityData.ts's STATIC_LANDMARKS).
+// User's explicit asks driving this mix: (1) tall_apartment's real count
+// dropped to just 2 above, so its decoration count (10) restores today's
+// pre-rebalance total (12) so the skyline keeps its current tower density;
+// (2) "focus on residential slightly more" — house/short_apartment/
+// tall_apartment's combined decoration share (58%) runs above real
+// buildings' residential share (52.5%); (3) "use other models where fits" —
+// everything else gets a modest, tasteful bump. Total 138, deliberately
+// landing the city at ~46% "already built" at start (138/(160+138)), just
+// under half per "don't fully populate... still needs to give users the
+// idea they are creating a city." Not exact by design — this table is meant
+// to be tuned by feel the same way MIN_BLOCK_AREA/RESERVED_ZONES etc. are.
+const DECORATION_SPECS: BuildingSpec[] = [
+  { variant: "house",           category: "residential", count: 50, totalBlocks: 1080, width: 14, depth: 12 },
+  { variant: "short_apartment", category: "residential", count: 20, totalBlocks: 4000, width: 20, depth: 10 },
+  { variant: "tall_apartment",  category: "residential", count: 10, totalBlocks: 8000, width: 16, depth: 10 },
+  { variant: "food_bank",       category: "food",        count: 8,  totalBlocks: 4000, width: 40, depth: 10 },
+  { variant: "restaurant",      category: "food",        count: 12, totalBlocks: 5000, width: 22, depth: 11 },
+  { variant: "school",          category: "school",      count: 10, totalBlocks: 5000, width: 50, depth: 10 },
+  { variant: "hospital_small",  category: "hospital",    count: 10, totalBlocks: 4000, width: 20, depth: 10 },
+  { variant: "hospital_medium", category: "hospital",    count: 12, totalBlocks: 6100, width: 18, depth: 18 },
+  { variant: "hospital_large",  category: "hospital",    count: 6,  totalBlocks: 8000, width: 16, depth: 16 },
 ]
 
 // Minimum clearance reserved around every building's footprint, around every
@@ -108,7 +150,7 @@ const SEED = 20260811
 
 interface ReservedZone {
   id: string
-  kind: "park" | "lake"
+  kind: "park" | "lake" | "landmark"
   x: number
   z: number
   radius: number
@@ -147,6 +189,21 @@ const RESERVED_ZONES: ReservedZone[] = [
   { id: "park_north",   kind: "park", x: -40, z: 175, radius: 20 },
   { id: "park_south",   kind: "park", x: -70, z: -165, radius: 18 },
   { id: "lake_east",    kind: "lake", x: 185, z: 40, radius: 15 },
+  // Landmark zones (2026-08-19) — church/fountain are hand-placed OUTSIDE
+  // this script entirely (see CHURCH_POSITION's own comment below, and
+  // staticCityData.ts's CHURCH_POSITION/FOUNTAIN_POSITION, which these must
+  // stay in sync with), but the growing building/decoration count made it a
+  // real risk that a real or decoration building could land on top of one —
+  // unlike park/lake zones, a "landmark" kind still excludes its leaves from
+  // buildable placement and roads (rectIntersectsAnyZone/leavesToRoads don't
+  // filter by kind) but is NOT picked up by parkZones/lakeZones' kind-
+  // specific filters, so it renders nothing of its own (no green/blue tile) —
+  // purely a no-build/no-road hole for whatever the church/fountain already
+  // render on top of it. Radii sized generously to cover each landmark's
+  // full footprint (church: 20x36 nave + 8x8 tower; fountain: small) from its
+  // anchor point, not just the single BSP leaf containing that point.
+  { id: "church_zone",   kind: "landmark", x: 0,  z: 165, radius: 35 },
+  { id: "fountain_zone", kind: "landmark", x: 25, z: 110, radius: 15 },
 ]
 
 // ── Roads: recursive block subdivision (BSP), not a curve or a graph over
@@ -160,15 +217,23 @@ const TREE_OFFSET = ROAD_WIDTH / 2 + 2 // how far off the road centerline, to ea
 // Bounding square BSP starts from, and how far from center a leaf's center
 // has to be to get kept — the "circular-ish" filter that gives the whole city
 // an organic (not square) outline, same idea as the earlier disc-based passes.
-const ROOT_HALF_SIZE = 280
-const CITY_RADIUS = 280
+//
+// Grown 280->400 (2026-08-19, ~sqrt(2)x, doubling buildable area) to fit the
+// new decoration-building pass on top of BUILDING_SPECS's own real-building
+// load — real building count barely moves (158->160) but total on-map
+// building count nearly doubles once DECORATION_SPECS is added (160+138≈298
+// vs today's 158). MAX_SPLIT_DEPTH bumped alongside it (see below) so average
+// leaf size/grain stays close to today's instead of leaves silently doubling
+// in size against the unchanged per-leaf MAX_BUILDINGS_PER_BLOCK cap.
+const ROOT_HALF_SIZE = 400
+const CITY_RADIUS = 400
 // Stop subdividing a block once it's this small in area, or this many splits
 // deep — together these determine roughly how many buildings end up per
 // block. Tuned by running the script and checking the logged block count /
 // buildings-per-block, same "iterate by feel" approach as the rest of this
 // file's constants.
 const MIN_BLOCK_AREA = 5500
-const MAX_SPLIT_DEPTH = 6
+const MAX_SPLIT_DEPTH = 7
 
 class RNG {
   private s: number
@@ -604,8 +669,15 @@ type Job = Omit<PlacedBuilding, "x" | "z">
 // Round-robin across variants (largest-count variants keep reappearing after
 // smaller ones run out) so the flat job list used for greedy block assignment
 // is already well-mixed by category before being split across blocks.
-function buildInterleavedJobs(rng: RNG): Job[] {
-  const remaining = BUILDING_SPECS.map((s) => ({ spec: s, left: s.count }))
+//
+// `specs`/`idPrefix` (2026-08-19) parameterize this for the new decoration-
+// building pass: the real-building call site (`buildInterleavedJobs(rng)`)
+// is unchanged/byte-identical (defaults preserve it exactly), while the
+// decoration call site passes `DECORATION_SPECS` and an `"deco_"` prefix so
+// a decoration buildingId (e.g. `deco_house_0`) can never collide with a
+// real one (`house_0`).
+function buildInterleavedJobs(rng: RNG, specs: BuildingSpec[] = BUILDING_SPECS, idPrefix = ""): Job[] {
+  const remaining = specs.map((s) => ({ spec: s, left: s.count }))
   const jobs: Job[] = []
   const order = [...remaining].sort(() => rng.next() - 0.5)
   while (order.some((r) => r.left > 0)) {
@@ -613,7 +685,7 @@ function buildInterleavedJobs(rng: RNG): Job[] {
       if (r.left <= 0) continue
       const i = r.spec.count - r.left
       jobs.push({
-        buildingId: `${r.spec.variant}_${i}`,
+        buildingId: `${idPrefix}${r.spec.variant}_${i}`,
         variant: r.spec.variant,
         category: r.spec.category,
         totalBlocks: r.spec.totalBlocks,
@@ -715,7 +787,15 @@ function blockLeftoverRect(block: BlockState): Rect | null {
 // currently holds the fewest buildings (spreads load across blocks instead
 // of stuffing the first eligible one), falling through to the next-fullest
 // candidate if the preferred one's actual shelf state doesn't have room.
-function assignAndPlace(jobs: Job[], blocks: BlockState[]): PlacedBuilding[] {
+//
+// `strict` (2026-08-19, default true — real-building call site unchanged):
+// when false, a job that finds no eligible/fitting block is skipped (logged,
+// not thrown) instead of aborting the whole run. Used by the new decoration-
+// building pass, whose count is explicitly "doesn't need to be exact" —
+// unlike real buildings, which must place every single one (their count is
+// the physical QR-code budget) and so keep the original hard-throw behavior.
+function assignAndPlace(jobs: Job[], blocks: BlockState[], opts: { strict?: boolean } = {}): PlacedBuilding[] {
+  const strict = opts.strict ?? true
   // Largest footprint first (global order) so oversized buildings get first
   // pick of blocks while more are still empty — but every building sharing a
   // variant has the EXACT same width/depth, so sorting purely by area
@@ -757,6 +837,13 @@ function assignAndPlace(jobs: Job[], blocks: BlockState[]): PlacedBuilding[] {
     }
 
     if (!result || !chosenCenter) {
+      if (!strict) {
+        console.warn(
+          `Skipped ${job.buildingId} (${job.width}x${job.depth}) — ` +
+          `${eligible.length} block(s) were dimensionally eligible but none had shelf room left`
+        )
+        continue
+      }
       throw new Error(
         `No block could fit ${job.buildingId} (${job.width}x${job.depth}) — ` +
         `${eligible.length} block(s) were dimensionally eligible but none had shelf room left`
@@ -1280,6 +1367,24 @@ const blockSizes = blocks.map((b) => b.jobCount).sort((a, b) => a - b)
 console.log(`Buildings per block: min ${blockSizes[0]}, max ${blockSizes[blockSizes.length - 1]}, ` +
   `median ${blockSizes[Math.floor(blockSizes.length / 2)]}`)
 
+// Decoration buildings (2026-08-19) — a second, lenient pass over the SAME
+// `blocks` array, run here (before bushes/lampPosts/benches/plazas below,
+// which read each block's leftover shelf space via block.rowZ/cursorX) so
+// that furniture never gets scattered into space a decoration building then
+// also claims. `strict: false` means a decoration job that doesn't fit is
+// skipped (logged), not fatal — see DECORATION_SPECS's own comment for why
+// this list's exact count was never meant to be guaranteed like real
+// buildings' is. A fresh RNG (SEED+7, unused by anything else in this file)
+// keeps decoration job ordering independent/reproducible, not coupled to how
+// many random() calls the real-building pass happened to consume.
+const decoJobs = buildInterleavedJobs(new RNG(SEED + 7), DECORATION_SPECS, "deco_")
+const decoPlaced: PlacedBuilding[] = assignAndPlace(decoJobs, blocks, { strict: false })
+verifyNoOverlaps([...placed, ...decoPlaced])
+const decoByVariant = new Map<string, number>()
+for (const p of decoPlaced) decoByVariant.set(p.variant, (decoByVariant.get(p.variant) ?? 0) + 1)
+console.log(`Decoration buildings: ${decoPlaced.length}/${decoJobs.length} placed — ` +
+  DECORATION_SPECS.map((s) => `${s.variant} ${decoByVariant.get(s.variant) ?? 0}/${s.count}`).join(", "))
+
 const bushes = generateBushes(new RNG(SEED + 2), blocks)
 const churchLeaf = keptLeaves.find((r) => leafContainsPoint(r, CHURCH_POSITION))
 const churchLeafLamps = churchLeaf ? generateLeafBorderLamps(churchLeaf, roadSegments) : []
@@ -1312,11 +1417,13 @@ const outEntries = placed.map(({ buildingId, variant, category, totalBlocks, x, 
 }))
 
 const layoutOutput = `/**
- * Static building layout — 158 buildings placed inside a recursively
- * subdivided block grid (see src/scripts/generateCityLayout.ts's "road
- * revision #2" doc comment for why). Position is a fixed design decision,
- * not runtime state — regenerate only if the layout design itself is being
- * revisited.
+ * Static building layout — 160 real (backend/QR-linked) buildings placed
+ * inside a recursively subdivided block grid (see
+ * src/scripts/generateCityLayout.ts's "road revision #2" doc comment for
+ * why). Position is a fixed design decision, not runtime state — regenerate
+ * only if the layout design itself is being revisited. Decoration-only
+ * buildings (never backend-linked) live in the separate cityDecorBuildings.ts
+ * — see that file's own header for why it's kept apart from this one.
  */
 
 export type BuildingCategory = "residential" | "hospital" | "food" | "school";
@@ -1338,6 +1445,44 @@ export const CITY_LAYOUT: CityLayoutEntry[] = ${JSON.stringify(outEntries, null,
 const layoutPath = join(process.cwd(), "src/data/cityLayout.ts")
 writeFileSync(layoutPath, layoutOutput)
 console.log(`Wrote ${layoutPath}`)
+
+// Decoration buildings get their own output file, deliberately separate from
+// cityLayout.ts — they use the exact same CityLayoutEntry shape (imported,
+// not redefined) but must never be mistaken for real/backend-linked
+// buildings by anything that reads CITY_LAYOUT (DevKioskProgress.tsx's
+// rollover-sequence math, Kiosk.tsx's backend-row join, the exact-count
+// assertion above) — all of those only ever look at cityLayout.ts.
+const decoOutEntries = decoPlaced.map(({ buildingId, variant, category, totalBlocks, x, z }) => ({
+  buildingId, variant, category, totalBlocks, x, z,
+}))
+const decorBuildingsOutput = `/**
+ * Decoration-only buildings — reuse the same 9 real building models
+ * (see buildingGenerators.ts) but are NEVER linked to the backend/QR system
+ * at all: rendered permanently fully-built (completedBlocks === totalBlocks),
+ * exactly like the church/fountain landmarks in staticCityData.ts already
+ * are, just generated in bulk here instead of 2 hand-picked coordinates.
+ *
+ * Added 2026-08-19 so the city doesn't start completely empty of buildings —
+ * user request: give it some already-built scenery from the start, without
+ * fully populating it (still needs to read as "a city under construction").
+ * Placed by a second, lenient pass (see generateCityLayout.ts's "Decoration
+ * buildings" section) over whatever block/shelf capacity is left over after
+ * the real buildings in cityLayout.ts are placed — count isn't guaranteed
+ * exact (a job that doesn't fit is skipped, not fatal), unlike CITY_LAYOUT's
+ * real buildings. buildingId is prefixed \`deco_\` so it can never collide
+ * with a real buildingId, a DB-issued id, or "church"/"fountain".
+ *
+ * Consumed by src/components/city/staticCityData.ts, which builds each entry
+ * into a CityBuilding the same way STATIC_LANDMARKS' buildLandmark() does.
+ */
+
+import type { CityLayoutEntry } from "./cityLayout";
+
+export const DECOR_BUILDINGS: CityLayoutEntry[] = ${JSON.stringify(decoOutEntries, null, 2)};
+`
+const decorBuildingsPath = join(process.cwd(), "src/data/cityDecorBuildings.ts")
+writeFileSync(decorBuildingsPath, decorBuildingsOutput)
+console.log(`Wrote ${decorBuildingsPath}`)
 
 // ── Decor: parks, lakes, park-interior trees ─────────────────────────────
 
@@ -1528,18 +1673,28 @@ console.log(`Wrote ${furniturePath}`)
 // output in any way; verified by an empty git diff on cityLayout.ts/
 // cityRoads.ts/cityDecor.ts/cityFurniture.ts after regenerating.
 
-const CITY_EDGE       = 350  // terrain floor — see measured-correction note above
-const BUFFER_OUTER    = 640  // grass/park buffer:      CITY_EDGE → BUFFER_OUTER
-const HILLS_INNER     = 640
-const HILLS_RAMP_IN   = 840  // hill height reaches full weight by here
-const HILLS_RAMP_OUT  = 920  // hill height starts fading out from here
-const HILLS_OUTER     = 1150 // rolling hills:          HILLS_INNER → HILLS_OUTER
-const MOUNTAIN_INNER  = 1350
-const MOUNTAIN_OUTER  = 1550 // distant mountains:      MOUNTAIN_INNER → MOUNTAIN_OUTER
-const GROUND_RADIUS   = 2000 // ground disc rim (fades to fog color — see decor.ts)
+// Re-tuned 2026-08-19 for the bigger city (CITY_RADIUS 280->400 + decoration
+// buildings): re-running this script with the old CITY_EDGE=350 threw with a
+// measured envelope of 438.1 (real geometry — building corners, road
+// endpoints, trees — now reaches noticeably further out, as expected from
+// ~roughly doubling total on-map building count). New CITY_EDGE=450 keeps
+// the same ~2% headroom ratio the original 350/343.6 had over ITS measured
+// envelope; every other band below is scaled by the same ratio (450/350 =
+// 1.2857x) to preserve today's relative band widths exactly, then rounded —
+// same re-tuning process the original "World terrain" work used, just
+// applied outward instead of guessed from scratch.
+const CITY_EDGE       = 450  // terrain floor — see measured-correction note above
+const BUFFER_OUTER    = 825  // grass/park buffer:      CITY_EDGE → BUFFER_OUTER
+const HILLS_INNER     = 825
+const HILLS_RAMP_IN   = 1080 // hill height reaches full weight by here
+const HILLS_RAMP_OUT  = 1185 // hill height starts fading out from here
+const HILLS_OUTER     = 1480 // rolling hills:          HILLS_INNER → HILLS_OUTER
+const MOUNTAIN_INNER  = 1735
+const MOUNTAIN_OUTER  = 1995 // distant mountains:      MOUNTAIN_INNER → MOUNTAIN_OUTER
+const GROUND_RADIUS   = 2570 // ground disc rim (fades to fog color — see decor.ts)
 
-const FOG_NEAR = 800
-const FOG_FAR  = 2400
+const FOG_NEAR = 1030
+const FOG_FAR  = 3085
 
 const HILL_CELL   = 12 // world units per column footprint
 const HILL_STEP   = 3  // world units per height level
@@ -1873,7 +2028,13 @@ function measureCityEnvelope(): number {
   let maxR = 0
   const consider = (x: number, z: number) => { maxR = Math.max(maxR, Math.hypot(x, z)) }
 
-  for (const b of placed) {
+  // Includes decoPlaced (decoration buildings), not just placed (real ones)
+  // — both draw from the same BUILDING_SPECS/DECORATION_SPECS width/depth
+  // shapes and the same buildable-leaf pool, so either can extend the city's
+  // real envelope; using BUILDING_SPECS to look up width/depth is still
+  // correct for decoration entries since DECORATION_SPECS reuses the exact
+  // same per-variant footprint sizes (see its own comment).
+  for (const b of [...placed, ...decoPlaced]) {
     const spec = BUILDING_SPECS.find((s) => s.variant === b.variant)
     const halfDiag = spec ? Math.hypot(spec.width / 2, spec.depth / 2) : 10
     maxR = Math.max(maxR, Math.hypot(b.x, b.z) + halfDiag)

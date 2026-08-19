@@ -2,14 +2,15 @@ import { useMemo, useRef } from "react";
 import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, CityDecor } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
-import { STATIC_CITY_DECOR, STATIC_LANDMARKS } from "../../components/city/staticCityData";
+import { STATIC_CITY_DECOR, STATIC_LANDMARKS, STATIC_DECOR_BUILDINGS } from "../../components/city/staticCityData";
 import { CITY_LAYOUT } from "../../data/cityLayout";
 import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
-// Dev-only preview of the full Phase 2/3 static layout: all 158 buildings
-// (src/data/cityLayout.ts) placed inside a block grid, fully built, at their
-// generated positions, plus the full decor/terrain and the two hand-placed
-// landmarks (church, fountain) — src/components/city/staticCityData.ts,
+// Dev-only preview of the full Phase 2/3 static layout: all 160 real
+// buildings (src/data/cityLayout.ts) placed inside a block grid, fully
+// built, at their generated positions, plus the decoration-only buildings
+// (src/data/cityDecorBuildings.ts), the full decor/terrain, and the two
+// hand-placed landmarks (church, fountain) — src/components/city/staticCityData.ts,
 // shared with the live kiosk (2026-08-13) so both render the exact same
 // city. Purely client-side, never touches the real backend/DB, never
 // reachable in a production build (see main.tsx).
@@ -26,7 +27,7 @@ export default function DevCityPreview() {
       completedBlocks: entry.totalBlocks,
     }));
 
-    return [...realBuildings, ...STATIC_LANDMARKS];
+    return [...realBuildings, ...STATIC_LANDMARKS, ...STATIC_DECOR_BUILDINGS];
   }, []);
 
   const decor: CityDecor = STATIC_CITY_DECOR;

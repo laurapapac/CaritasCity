@@ -3,7 +3,7 @@ import { pool } from '../db.js';
 
 export const buildingsRouter = Router();
 
-// Powers the kiosk's live 3D city — ALL 158 buildings (2026-08-13, widened
+// Powers the kiosk's live 3D city — ALL 160 buildings (2026-08-13, widened
 // from "just the in_progress one per category" so the kiosk can render the
 // full static city layout with real per-building progress, matching
 // /dev/city). Position never lived here and still doesn't — the frontend

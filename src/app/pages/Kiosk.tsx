@@ -14,7 +14,7 @@ import {
 import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, ConstructionQueue } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
-import { STATIC_CITY_DECOR, STATIC_LANDMARKS } from "../../components/city/staticCityData";
+import { STATIC_CITY_DECOR, STATIC_LANDMARKS, STATIC_DECOR_BUILDINGS } from "../../components/city/staticCityData";
 import { CITY_LAYOUT } from "../../data/cityLayout";
 import {
   MONTAGE_BLOCK_COUNT,
@@ -247,7 +247,7 @@ export default function Kiosk() {
         for (const row of rows) {
           if (row.status === "in_progress") queue[row.category] = row.id;
         }
-        setCityData({ rows, buildings: [...buildings, ...STATIC_LANDMARKS], queue });
+        setCityData({ rows, buildings: [...buildings, ...STATIC_LANDMARKS, ...STATIC_DECOR_BUILDINGS], queue });
         setState({ phase: "entry" });
       })
       .catch(() => setState({ phase: "load_error" }));
@@ -259,7 +259,7 @@ export default function Kiosk() {
   // completedBlocks is also > 0, but it isn't the active building for its
   // category anymore, so addBlock(category) wouldn't touch it anyway;
   // filtering here just avoids redundant no-op calls for every completed
-  // building once all 158 rows are loaded instead of just the active 4.
+  // building once all 160 rows are loaded instead of just the active 4.
   useEffect(() => {
     if (!cityData || revealedOnLoad.current) return;
     revealedOnLoad.current = true;

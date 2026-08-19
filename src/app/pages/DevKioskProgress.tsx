@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
-import { STATIC_CITY_DECOR, STATIC_LANDMARKS } from "../../components/city/staticCityData";
+import { STATIC_CITY_DECOR, STATIC_LANDMARKS, STATIC_DECOR_BUILDINGS } from "../../components/city/staticCityData";
 import { CITY_LAYOUT, type CityLayoutEntry } from "../../data/cityLayout";
 import type { BuildingCategory } from "../../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -11,7 +11,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
 
-// Dev-only: renders the exact real 158-building city (same layout/decor as
+// Dev-only: renders the exact real 160-building city (same layout/decor as
 // /kiosk) but replaces QR scanning/code-entry/school-picking with sliders
 // that scrub the whole city's construction state directly — for seeing how
 // the finished city will look as it fills in, without a single real
@@ -96,11 +96,13 @@ export default function DevKioskProgress() {
   // interaction doesn't fire a wave of redundant "set to 0" calls.
   const appliedRef = useRef(new Map<string, number>(CITY_LAYOUT.map((e) => [e.buildingId, 0])));
 
-  // Built once — full 158-building layout + landmarks, all starting empty.
-  // Sliders drive the scene afterward purely via the imperative
-  // setVisibleCount (same pattern DevPreview.tsx uses for its single-building
-  // slider) — React state here only tracks what the UI displays, never what
-  // the scene renders.
+  // Built once — full 160-building layout + landmarks + decoration
+  // buildings, all real buildings starting empty (decoration buildings and
+  // landmarks always render fully-built, see staticCityData.ts). Sliders
+  // drive the scene afterward purely via the imperative setVisibleCount
+  // (same pattern DevPreview.tsx uses for its single-building slider) —
+  // React state here only tracks what the UI displays, never what the scene
+  // renders.
   const initialBuildings = useMemo<CityBuilding[]>(
     () => [
       ...CITY_LAYOUT.map(
@@ -114,6 +116,7 @@ export default function DevKioskProgress() {
         })
       ),
       ...STATIC_LANDMARKS,
+      ...STATIC_DECOR_BUILDINGS,
     ],
     []
   );
@@ -195,7 +198,7 @@ export default function DevKioskProgress() {
         <CardHeader>
           <CardTitle>Whole-city build progress</CardTitle>
           <CardDescription>
-            Dev-only — scrubs the real 158-building city&apos;s construction state directly.
+            Dev-only — scrubs the real 160-building city&apos;s construction state directly.
             Doesn&apos;t touch the database.
           </CardDescription>
         </CardHeader>
