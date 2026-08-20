@@ -123,19 +123,11 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
-    "x": -190,
-    "z": -161
-  },
-  {
-    "buildingId": "school_13",
-    "variant": "school",
-    "category": "school",
-    "totalBlocks": 5000,
     "x": 160,
     "z": 62
   },
   {
-    "buildingId": "school_14",
+    "buildingId": "school_13",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -143,7 +135,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -390
   },
   {
-    "buildingId": "school_15",
+    "buildingId": "school_14",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -151,7 +143,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 159
   },
   {
-    "buildingId": "school_16",
+    "buildingId": "school_15",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -159,7 +151,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -13
   },
   {
-    "buildingId": "school_17",
+    "buildingId": "school_16",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -167,7 +159,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 174
   },
   {
-    "buildingId": "school_18",
+    "buildingId": "school_17",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -175,7 +167,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -211
   },
   {
-    "buildingId": "school_19",
+    "buildingId": "school_18",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -183,7 +175,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 258
   },
   {
-    "buildingId": "school_20",
+    "buildingId": "school_19",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -191,7 +183,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -141
   },
   {
-    "buildingId": "school_21",
+    "buildingId": "school_20",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -199,7 +191,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -319
   },
   {
-    "buildingId": "school_22",
+    "buildingId": "school_21",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -207,7 +199,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -56
   },
   {
-    "buildingId": "school_23",
+    "buildingId": "school_22",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
@@ -215,12 +207,20 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -341
   },
   {
-    "buildingId": "school_24",
+    "buildingId": "school_23",
     "variant": "school",
     "category": "school",
     "totalBlocks": 5000,
     "x": 115,
     "z": -100
+  },
+  {
+    "buildingId": "school_24",
+    "variant": "school",
+    "category": "school",
+    "totalBlocks": 5000,
+    "x": 62,
+    "z": -6
   },
   {
     "buildingId": "food_bank_0",
@@ -891,19 +891,11 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -264,
-    "z": -160
-  },
-  {
-    "buildingId": "house_26",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
     "x": 172,
     "z": -35
   },
   {
-    "buildingId": "house_27",
+    "buildingId": "house_26",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -911,7 +903,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 160
   },
   {
-    "buildingId": "house_28",
+    "buildingId": "house_27",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -919,12 +911,20 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 260
   },
   {
-    "buildingId": "house_29",
+    "buildingId": "house_28",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
     "x": -116,
     "z": 217
+  },
+  {
+    "buildingId": "house_29",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": -259,
+    "z": -70
   },
   {
     "buildingId": "house_30",
@@ -939,27 +939,19 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -301,
-    "z": -91
+    "x": -250,
+    "z": 267
   },
   {
     "buildingId": "house_32",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -250,
-    "z": 267
+    "x": -301,
+    "z": -132
   },
   {
     "buildingId": "house_33",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
-    "x": -343,
-    "z": -120
-  },
-  {
-    "buildingId": "house_34",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -967,7 +959,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 63
   },
   {
-    "buildingId": "house_35",
+    "buildingId": "house_34",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -975,7 +967,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 350
   },
   {
-    "buildingId": "house_36",
+    "buildingId": "house_35",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -983,7 +975,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 53
   },
   {
-    "buildingId": "house_37",
+    "buildingId": "house_36",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -991,7 +983,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 93
   },
   {
-    "buildingId": "house_38",
+    "buildingId": "house_37",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -999,7 +991,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -305
   },
   {
-    "buildingId": "house_39",
+    "buildingId": "house_38",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1007,12 +999,20 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 43
   },
   {
-    "buildingId": "house_40",
+    "buildingId": "house_39",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
     "x": 226,
     "z": -55
+  },
+  {
+    "buildingId": "house_40",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": -315,
+    "z": -12
   },
   {
     "buildingId": "house_41",
@@ -1059,19 +1059,11 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -388,
-    "z": -12
-  },
-  {
-    "buildingId": "house_47",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
     "x": -89,
     "z": 42
   },
   {
-    "buildingId": "house_48",
+    "buildingId": "house_47",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1079,15 +1071,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -79
   },
   {
-    "buildingId": "house_49",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
-    "x": -208,
-    "z": -140
-  },
-  {
-    "buildingId": "house_50",
+    "buildingId": "house_48",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1095,7 +1079,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -207
   },
   {
-    "buildingId": "house_51",
+    "buildingId": "house_49",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1103,7 +1087,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -111
   },
   {
-    "buildingId": "house_52",
+    "buildingId": "house_50",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1111,7 +1095,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -89
   },
   {
-    "buildingId": "house_53",
+    "buildingId": "house_51",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1119,7 +1103,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 260
   },
   {
-    "buildingId": "house_54",
+    "buildingId": "house_52",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1127,7 +1111,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -210
   },
   {
-    "buildingId": "house_55",
+    "buildingId": "house_53",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1135,7 +1119,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 156
   },
   {
-    "buildingId": "house_56",
+    "buildingId": "house_54",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1143,7 +1127,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -12
   },
   {
-    "buildingId": "house_57",
+    "buildingId": "house_55",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1151,7 +1135,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -348
   },
   {
-    "buildingId": "house_58",
+    "buildingId": "house_56",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1159,7 +1143,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -285
   },
   {
-    "buildingId": "house_59",
+    "buildingId": "house_57",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1167,7 +1151,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -147
   },
   {
-    "buildingId": "house_60",
+    "buildingId": "house_58",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1175,15 +1159,15 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -140
   },
   {
-    "buildingId": "house_61",
+    "buildingId": "house_59",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -315,
+    "x": -388,
     "z": -12
   },
   {
-    "buildingId": "house_62",
+    "buildingId": "house_60",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1191,7 +1175,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -55
   },
   {
-    "buildingId": "house_63",
+    "buildingId": "house_61",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1199,15 +1183,15 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 288
   },
   {
-    "buildingId": "house_64",
+    "buildingId": "house_62",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 44,
+    "x": 104,
     "z": -5
   },
   {
-    "buildingId": "house_65",
+    "buildingId": "house_63",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1215,7 +1199,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -217
   },
   {
-    "buildingId": "house_66",
+    "buildingId": "house_64",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1223,7 +1207,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -340
   },
   {
-    "buildingId": "house_67",
+    "buildingId": "house_65",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1231,7 +1215,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 43
   },
   {
-    "buildingId": "house_68",
+    "buildingId": "house_66",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1239,7 +1223,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 101
   },
   {
-    "buildingId": "house_69",
+    "buildingId": "house_67",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1247,7 +1231,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 106
   },
   {
-    "buildingId": "house_70",
+    "buildingId": "house_68",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1255,7 +1239,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -160
   },
   {
-    "buildingId": "house_71",
+    "buildingId": "house_69",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1263,7 +1247,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 115
   },
   {
-    "buildingId": "house_72",
+    "buildingId": "house_70",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1271,7 +1255,7 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": -190
   },
   {
-    "buildingId": "house_73",
+    "buildingId": "house_71",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1279,12 +1263,28 @@ export const CITY_LAYOUT: CityLayoutEntry[] = [
     "z": 238
   },
   {
-    "buildingId": "house_74",
+    "buildingId": "house_72",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
     "x": 6,
     "z": -308
+  },
+  {
+    "buildingId": "house_73",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": 303,
+    "z": -13
+  },
+  {
+    "buildingId": "house_74",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": 85,
+    "z": -55
   },
   {
     "buildingId": "tall_apartment_0",

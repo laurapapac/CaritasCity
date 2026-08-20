@@ -175,7 +175,21 @@ const RESERVED_ZONES: ReservedZone[] = [
   { id: "central_park", kind: "park", x: 173, z: 198, radius: 28 },
   { id: "central_lake", kind: "lake", x: 223, z: 198, radius: 20 },
   { id: "park_north",   kind: "park", x: -198, z: 198, radius: 20 },
-  { id: "park_south",   kind: "park", x: -198, z: -198, radius: 18 },
+  // park_south enlarged/shifted 2026-08-20 (user: grass should cover the
+  // ground under the trees scattered in the same block) — its own leaf's
+  // immediate SW neighbor was already a permanently zone-excluded, no-build
+  // leaf (generateZoneBufferTrees was already decorating it with trees) but
+  // never got real overlap with park_south's circle, so it never rendered as
+  // park grass, just bare ground with trees on it. Found the exact
+  // neighboring leaf via temporary debug logging of keptLeaves, then
+  // grid-searched (x, z, radius) combinations against the four real leaves
+  // in play: comfortable overlap fraction with the empty SW leaf and the two
+  // already-park leaves, while keeping the permissive rectIntersectsZone
+  // test (not just the fraction test) FALSE against both further neighbors —
+  // the leaf just south (which holds two real buildings, restaurant_0 and
+  // house_7 — swallowing it would delete real QR-linked buildings, not
+  // asked for) and the leaf just west (a real building block).
+  { id: "park_south",   kind: "park", x: -235, z: -210, radius: 43 },
   { id: "lake_east",    kind: "lake", x: 198, z: -198, radius: 15 },
   // Landmark zones (2026-08-19) — church/fountain are hand-placed OUTSIDE
   // this script entirely (see CHURCH_POSITION's own comment below, and
@@ -514,7 +528,15 @@ function insetParkTiles(tiles: Rect[], keptLeaves: Rect[]): Rect[] {
 // without needing a real noise function). No sharp jumps between neighboring
 // vertices since sine is continuous — reads as a natural blob, not a
 // polygon with random spikes.
-function sampleBlobPolygon(rng: RNG, cx: number, cz: number, baseRadius: number, segments = 20): Point[] {
+// `rotation` (2026-08-21, user: lakes overflow their block slightly, rotate
+// them to fit) rigidly spins the whole wobbly outline around its own center:
+// the wobble is still sampled at the original, unrotated theta (so the same
+// seed always produces the same "personality" of bulges/pinches), only the
+// OUTPUT angle gets `+ rotation` added, which is exactly the rotation-matrix
+// identity r*cos/sin(theta+rotation) == rotating r*cos/sin(theta) by
+// `rotation` — so picking a rotation just chooses which direction each bulge
+// points, without changing the bulge shape/sizes themselves.
+function sampleBlobPolygon(rng: RNG, cx: number, cz: number, baseRadius: number, rotation = 0, segments = 20): Point[] {
   const freq1 = 2 + Math.floor(rng.next() * 2) // 2-3
   const freq2 = 5 + Math.floor(rng.next() * 3) // 5-7
   const phase1 = rng.next() * Math.PI * 2
@@ -524,7 +546,8 @@ function sampleBlobPolygon(rng: RNG, cx: number, cz: number, baseRadius: number,
     const theta = (i / segments) * Math.PI * 2
     const wobble = 1 + 0.22 * Math.sin(freq1 * theta + phase1) + 0.12 * Math.sin(freq2 * theta + phase2)
     const r = baseRadius * wobble
-    points.push({ x: Math.round((cx + r * Math.cos(theta)) * 10) / 10, z: Math.round((cz + r * Math.sin(theta)) * 10) / 10 })
+    const outTheta = theta + rotation
+    points.push({ x: Math.round((cx + r * Math.cos(outTheta)) * 10) / 10, z: Math.round((cz + r * Math.sin(outTheta)) * 10) / 10 })
   }
   return points
 }
@@ -1361,13 +1384,44 @@ function visualLakeCircle(zone: ReservedZone): Circle {
   return { ...base, radius: base.radius * LAKE_WOBBLE_CLEARANCE_MULT }
 }
 
+// Picks whichever of `steps` evenly-spaced rotations keeps a lake's rendered
+// polygon most inside `bounds` (2026-08-21, user: both lakes overflow their
+// block slightly) — tried empirically rather than solved analytically since
+// the wobble's exact bulge directions depend on the per-lake RNG seed, and
+// the containing block's shape/available margin differs lake to lake.
+// `margin` insets `bounds` first so the picked polygon sits comfortably
+// inside the real edge (a road or beach boundary), not touching it exactly.
+function polygonMaxOverflow(points: Point[], bounds: Rect, margin: number): number {
+  let overflow = -Infinity
+  for (const p of points) {
+    overflow = Math.max(
+      overflow,
+      (bounds.x0 + margin) - p.x, p.x - (bounds.x1 - margin),
+      (bounds.z0 + margin) - p.z, p.z - (bounds.z1 - margin),
+    )
+  }
+  return overflow
+}
+function pickBestRotation(sample: (rotation: number) => Point[], bounds: Rect, margin: number, steps = 72): Point[] {
+  let best: { points: Point[]; overflow: number } | undefined
+  for (let i = 0; i < steps; i++) {
+    const points = sample((i / steps) * Math.PI * 2)
+    const overflow = polygonMaxOverflow(points, bounds, margin)
+    if (!best || overflow < best.overflow) best = { points, overflow }
+  }
+  return best!.points
+}
+
 const lakeShapes = lakeZones.map((zone) => {
-  if (zone.id === "lake_east" && lakeEastCenter) {
+  if (zone.id === "lake_east" && lakeEastCenter && beachRect) {
     return {
       id: zone.id,
-      points: sampleEllipticalBlob(
-        new RNG(SEED + 8 + zone.id.length), lakeEastCenter.x, lakeEastCenter.z,
-        LAKE_EAST_ELLIPSE.radiusX, LAKE_EAST_ELLIPSE.radiusZ, LAKE_EAST_ELLIPSE.rotation
+      points: pickBestRotation(
+        (rotation) => sampleEllipticalBlob(
+          new RNG(SEED + 8 + zone.id.length), lakeEastCenter!.x, lakeEastCenter!.z,
+          LAKE_EAST_ELLIPSE.radiusX, LAKE_EAST_ELLIPSE.radiusZ, rotation
+        ),
+        beachRect, 2,
       ),
     }
   }
@@ -1375,10 +1429,13 @@ const lakeShapes = lakeZones.map((zone) => {
   const cx = override?.center.x ?? zone.x
   const cz = override?.center.z ?? zone.z
   const radius = override?.radius ?? zone.radius
-  return {
-    id: zone.id,
-    points: sampleBlobPolygon(new RNG(SEED + 8 + zone.id.length), cx, cz, radius),
-  }
+  const containingTile = parkTilesById.get("central_park")?.find(
+    (t) => cx >= t.x0 && cx <= t.x1 && cz >= t.z0 && cz <= t.z1
+  )
+  const points = containingTile
+    ? pickBestRotation((rotation) => sampleBlobPolygon(new RNG(SEED + 8 + zone.id.length), cx, cz, radius, rotation), containingTile, 2)
+    : sampleBlobPolygon(new RNG(SEED + 8 + zone.id.length), cx, cz, radius)
+  return { id: zone.id, points }
 })
 
 // Beach: a plain rect (like a park tile), filling the block minus road
