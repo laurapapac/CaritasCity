@@ -333,21 +333,44 @@ function tilesAreAdjacent(a: Rect, b: Rect): boolean {
 }
 
 // A park's rendered shape is its FULL connected island of reserved territory
-// — every kept leaf that rectIntersectsAnyZone already permanently excludes
-// from buildings, reachable by walking leaf-to-leaf adjacency from the
-// zone's own best-overlapping tile (rectOverlapFraction picks that seed, so
-// a park's circle never reaches across a real gap into an unrelated zone's
-// island — see zonesAreAdjacent/ZONE_PAIRING_MARGIN for why two DIFFERENT
-// parks' islands can still merge on purpose when explicitly paired, e.g.
-// central_park+central_lake). Earlier versions only rendered the single
-// best-fraction tile (or every tile clearing a fraction threshold), which
-// under-claimed real neighboring reserved leaves whenever a zone's circle
-// happened to cover more of one leaf than another even though BOTH are
-// equally, permanently building-free — this flood-fill includes all of them,
-// matching "fill the space between the roads that circle it" (2026-08-11
-// follow-up) exactly, since a leaf that's excluded from buildableLeaves is
-// also excluded from ever contributing its own road edges (leavesToRoads),
-// so its unclaimed portion was already invisible dead space, not a road.
+// — every kept leaf that THIS ZONE'S OWN GROUP (itself + any explicitly
+// paired zone, see zonesAreAdjacent/ZONE_PAIRING_MARGIN) excludes from
+// buildings, reachable by walking leaf-to-leaf adjacency from the zone's own
+// best-overlapping tile (rectOverlapFraction picks that seed, so a park's
+// circle never reaches across a real gap into an unrelated zone's island).
+// Earlier versions only rendered the single best-fraction tile (or every
+// tile clearing a fraction threshold), which under-claimed real neighboring
+// reserved leaves whenever a zone's circle happened to cover more of one
+// leaf than another even though BOTH are equally, permanently
+// building-free — this flood-fill includes all of them, matching "fill the
+// space between the roads that circle it" (2026-08-11 follow-up) exactly,
+// since a leaf that's excluded from buildableLeaves is also excluded from
+// ever contributing its own road edges (leavesToRoads), so its unclaimed
+// portion was already invisible dead space, not a road.
+//
+// Bug found 2026-08-20 (city rebalance to 400-radius/depth-7 BSP grid): the
+// pool of leaves the flood-fill was allowed to grow through used to be EVERY
+// leaf excluded by ANY RESERVED_ZONES entry (rectIntersectsAnyZone), not
+// just this zone's own group. With the smaller/sparser original grid that
+// never mattered — no chain of zone-excluded leaves happened to connect two
+// unrelated zones. The denser post-rebalance grid did chain them: park_south
+// and central_park ended up flood-filling the exact same connected
+// component (merging into one huge park spanning nearly the whole city),
+// and lake_east's own excluded leaf got swept into that same island even
+// though it's never actually paired with any park — which is also why trees
+// were landing on top of lake_east's water (generateParkTreesInTiles's
+// per-zone `avoid` list only excludes a zone's OWN paired lakes, not a lake
+// that leaked in via this flood-fill bug). Fix: constrain the flood-fill's
+// candidate pool to leaves excluded by a zone in THIS zone's own group —
+// and, since a lone huge outskirts leaf can still register as "touching" a
+// small zone circle at nothing more than a corner graze (rectIntersectsZone
+// is a permissive closest-point test, by design, for the building-exclusion
+// pass elsewhere in this file — see rectOverlapFraction's own doc comment
+// for the same over-claiming failure mode this caused once before, for
+// park_north/church), the pool uses the same fraction test `candidates`
+// already does rather than the raw intersects test, so a leaf only counts as
+// real zone territory once a real chunk of it (not just a grazed corner)
+// actually falls inside the circle.
 function parkTilesFor(zone: ReservedZone, keptLeaves: Rect[]): Rect[] {
   const group = [zone, ...RESERVED_ZONES.filter((z) => z !== zone && zonesAreAdjacent(zone, z))]
   const candidates = keptLeaves
@@ -356,7 +379,7 @@ function parkTilesFor(zone: ReservedZone, keptLeaves: Rect[]): Rect[] {
     .sort((a, b) => b.frac - a.frac)
   if (candidates.length === 0) return []
 
-  const zoneExcludedLeaves = keptLeaves.filter((r) => rectIntersectsAnyZone(r))
+  const zoneExcludedLeaves = keptLeaves.filter((r) => group.some((z) => rectOverlapFraction(r, z) > 0))
   const included = [candidates[0].rect]
   let grew = true
   while (grew) {
@@ -918,8 +941,13 @@ function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[], excludeLeaves: Re
       const x = x0 + rng.next() * width
       const z = z0 + rng.next() * depth
       const insideAZone = RESERVED_ZONES.some((zone) => {
-        const dx = zone.x - x, dz = zone.z - z
-        const clearance = zone.radius + 3
+        // Lakes render at a shifted/enlarged visual position (LAKE_VISUAL_OVERRIDES),
+        // not the raw RESERVED_ZONES circle — avoiding the raw circle here let trees
+        // spawn in the gap between "no longer raw-zone-excluded" and "still visually
+        // underwater" (found 2026-08-20: 3 trees inside central_lake's rendered blob).
+        const effective = zone.kind === "lake" ? visualLakeCircle(zone) : zone
+        const dx = effective.x - x, dz = effective.z - z
+        const clearance = effective.radius + 3
         return dx * dx + dz * dz < clearance * clearance
       })
       if (insideAZone) continue
@@ -1297,12 +1325,21 @@ if (lakeEastLeaf) {
 }
 
 // Same visual-vs-zone split as LAKE_VISUAL_OVERRIDES — anything that needs to
-// avoid overlapping a lake (park benches, park trees) should avoid where the
-// lake is actually RENDERED, not its smaller/differently-positioned real
-// RESERVED_ZONES circle.
+// avoid overlapping a lake (park benches, park trees, zone-buffer trees)
+// should avoid where the lake is actually RENDERED, not its smaller/
+// differently-positioned real RESERVED_ZONES circle. The returned radius is
+// inflated by LAKE_WOBBLE_CLEARANCE_MULT (sampleBlobPolygon's own documented
+// worst case, "1 + 0.22 + 0.12" — see MEADOW_MAX_WOBBLE's identical
+// reasoning below) since this circle is only ever used for avoidance/
+// clearance, never for the lake's own rendered shape (that's still the
+// exact base radius, via LAKE_VISUAL_OVERRIDES/sampleBlobPolygon directly) —
+// a plain circle at the base radius let two trees land inside central_lake's
+// actual wobbly outline, which can bulge up to 34% past that circle.
+const LAKE_WOBBLE_CLEARANCE_MULT = 1.34
 function visualLakeCircle(zone: ReservedZone): Circle {
   const override = LAKE_VISUAL_OVERRIDES[zone.id]
-  return override ? { x: override.center.x, z: override.center.z, radius: override.radius } : { x: zone.x, z: zone.z, radius: zone.radius }
+  const base = override ? { x: override.center.x, z: override.center.z, radius: override.radius } : { x: zone.x, z: zone.z, radius: zone.radius }
+  return { ...base, radius: base.radius * LAKE_WOBBLE_CLEARANCE_MULT }
 }
 
 const lakeShapes = lakeZones.map((zone) => {

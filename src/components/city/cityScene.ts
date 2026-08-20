@@ -703,14 +703,13 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
   // ── Ground ───────────────────────────────────────────────────────────────
   // Replaces the old flat PlaneGeometry(800,800) + square GridHelper
-  // (2026-08-13) — a grey inner disc (radius 360, comfortably covers the
-  // city's measured ~344 envelope) plus a large gradient ring fading
+  // (2026-08-13) — a grey inner disc (sized off decor.bands.cityEdge, see
+  // decor.ts's buildGroundGroup) plus a large gradient ring fading
   // grey→grass→haze→fog-color out to radius 2000, so there's no rectangular
   // edge and no visible outer boundary at any camera angle. GridHelper is
   // dropped entirely, not just resized — its own square boundary was part
-  // of what read as "the rectangular edge" in the first place. See
-  // decor.ts's buildGroundGroup for the full rationale.
-  const groundGroup = buildGroundGroup()
+  // of what read as "the rectangular edge" in the first place.
+  const groundGroup = buildGroundGroup(decor?.terrain.bands.cityEdge)
   scene.add(groundGroup)
 
   // ── Decor (parks, lakes, roads, trees, world terrain) — static, built once

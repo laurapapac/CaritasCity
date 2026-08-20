@@ -469,42 +469,62 @@ const GROUND_HAZY       = new THREE.Color(0x9dbcc9)
 // world's outer rim is rendered as sky-colored rather than merely faded by
 // distance fog (which alone can't hide a flat edge from an oblique/top-down
 // angle where the edge itself isn't far from the camera — the actual
-// lesson from the rejected mountain-ring attempt).
-function groundColorAt(radius: number, out: THREE.Color): THREE.Color {
-  if (radius < 380) return out.copy(GROUND_GREY).lerp(GROUND_GRASS_EDGE, smoothstep(355, 380, radius))
-  if (radius < 900) return out.copy(GROUND_GRASS_EDGE).lerp(GROUND_GRASS_FULL, smoothstep(380, 450, radius))
+// lesson from the rejected mountain-ring attempt). blendStart/blendEnd are
+// the grey-disc-relative offsets (see buildGroundGroup) — the later bands
+// (900/1300/2000) are pure distant-terrain aesthetics, unrelated to the
+// city's own size, so they stay fixed.
+function groundColorAt(radius: number, blendStart: number, blendEnd: number, out: THREE.Color): THREE.Color {
+  if (radius < blendEnd) return out.copy(GROUND_GREY).lerp(GROUND_GRASS_EDGE, smoothstep(blendStart, blendEnd, radius))
+  if (radius < 900) return out.copy(GROUND_GRASS_EDGE).lerp(GROUND_GRASS_FULL, smoothstep(blendEnd, 450, radius))
   if (radius < 1300) return out.copy(GROUND_GRASS_FULL).lerp(GROUND_HAZY, smoothstep(900, 1300, radius))
   return out.copy(GROUND_HAZY).lerp(FOG_TINT_COLOR, smoothstep(1300, 2000, radius))
 }
 
 // Replaces cityScene.ts's old flat PlaneGeometry(800,800) + square
-// GridHelper: an inner grey disc (radius 360, same color/material as the
-// old ground — the city's own ground literally doesn't change) plus a
-// large gradient ring (355→2000) carrying the radial color fade above.
-// GridHelper is dropped entirely rather than shrunk — its own square
-// boundary was part of what read as "the rectangular edge" in the first
-// place (confirmed with user), and roads/parks/plazas/terrain already give
-// plenty of spatial reference without it.
-export function buildGroundGroup(): THREE.Group {
+// GridHelper: an inner grey disc (same color/material as the old ground —
+// the city's own ground literally doesn't change) plus a large gradient
+// ring carrying the radial color fade above. GridHelper is dropped
+// entirely rather than shrunk — its own square boundary was part of what
+// read as "the rectangular edge" in the first place (confirmed with user),
+// and roads/parks/plazas/terrain already give plenty of spatial reference
+// without it.
+//
+// `cityEdge` (TERRAIN_BANDS.cityEdge from cityTerrain.ts, passed in by the
+// caller) is the generator's own verified city boundary — the disc radius
+// is derived from it (+10, the same margin the original hardcoded 360 had
+// over the old cityEdge of 350) rather than hardcoded, so this can't go
+// stale again the way it did in the 2026-08-19 city-expansion rebalance:
+// cityEdge grew 350→450 but this disc stayed a literal 360, leaving real
+// building/tree geometry (measured extent up to ~390) poking out past the
+// concrete onto bare grass.
+const GROUND_DISC_MARGIN = 10
+const GROUND_BLEND_MARGIN = 5
+const GROUND_BLEND_WIDTH = 25
+
+export function buildGroundGroup(cityEdge = 450): THREE.Group {
   const group = new THREE.Group()
   group.name = "ground"
 
-  const innerGeo = new THREE.CircleGeometry(360, 96)
+  const discRadius = cityEdge + GROUND_DISC_MARGIN
+  const blendStart = cityEdge + GROUND_BLEND_MARGIN
+  const blendEnd = blendStart + GROUND_BLEND_WIDTH
+
+  const innerGeo = new THREE.CircleGeometry(discRadius, 96)
   const innerMat = new THREE.MeshLambertMaterial({ color: GROUND_GREY })
   const inner = new THREE.Mesh(innerGeo, innerMat)
   inner.rotation.x = -Math.PI / 2
   group.add(inner)
 
-  const ringGeo = new THREE.RingGeometry(355, 2000, 128, 48)
+  const ringGeo = new THREE.RingGeometry(blendStart, 2000, 128, 48)
   ringGeo.rotateX(-Math.PI / 2)
-  const avgCircumference = 2 * Math.PI * ((355 + 2000) / 2)
-  scaleUV(ringGeo, avgCircumference / TEXTURE_TILE_UNITS.grass, (2000 - 355) / TEXTURE_TILE_UNITS.grass)
+  const avgCircumference = 2 * Math.PI * ((blendStart + 2000) / 2)
+  scaleUV(ringGeo, avgCircumference / TEXTURE_TILE_UNITS.grass, (2000 - blendStart) / TEXTURE_TILE_UNITS.grass)
 
   const pos = ringGeo.attributes.position
   const colors = new Float32Array(pos.count * 3)
   const c = new THREE.Color()
   for (let i = 0; i < pos.count; i++) {
-    groundColorAt(Math.hypot(pos.getX(i), pos.getZ(i)), c)
+    groundColorAt(Math.hypot(pos.getX(i), pos.getZ(i)), blendStart, blendEnd, c)
     colors[i * 3] = c.r
     colors[i * 3 + 1] = c.g
     colors[i * 3 + 2] = c.b
