@@ -160,35 +160,23 @@ interface ReservedZone {
 // together near the middle (not too big), two smaller parks on the outskirts
 // kept apart from each other, one smaller-than-the-first lake on the outskirts
 // by itself. Positioned by hand (not algorithmically) since this is a design
-// choice, same as the building-counts table — angularly spread ~90-150° apart
-// so the three outskirts features don't end up near one another either.
+// choice, same as the building-counts table.
 //
-// Reverted 2026-08-11 (parks/lakes follow-up): central_park and central_lake
-// were briefly merged into one bigger central_park zone so the lake could be
-// "derived" as sitting inside the park, but that merge over-excluded BSP
-// tiles compared to the original two-separate-circles footprint, silently
-// removing a whole block of buildings+roads from the generated city. Reverted
-// central_park/central_lake back to two independent zones (values recovered
-// by pixel-measuring the pre-merge screenshot against the 3 zones that were
-// never touched — see the "park-tile over-claiming" status entries in
-// plans/qr-backend-todo.md for the full story) — this restores the exact
-// original building layout. The "lake in the park" look now comes from
-// parkTilesFor pulling in a nearby lake zone's tiles too (see
-// zonesAreAdjacent), not from deriving the lake's position from the park.
-//
-// Reverted again same day: a follow-up pass enlarged park_north/park_south/
-// lake_east to make parks look bigger and lakes match a reference image, but
-// that excluded even more buildings than before — user asked to get the
-// exact original building layout back first and deal with park/lake
-// aesthetics separately. All 5 values below are back to the exact recovered
-// originals (pixel-measured from the pre-merge screenshot), matching the
-// building layout in that screenshot exactly.
+// Moved 2026-08-20 (user: all 3 parks + both lakes read as too clustered near
+// the center) — kept every zone's own radius and the central_park/
+// central_lake pair's relative offset (50 units apart on x) exactly as
+// before, just translated each zone (or the pair, as a rigid unit) out to
+// roughly 70% of CITY_RADIUS, one per compass quadrant (NE/NW/SW/SE) so
+// they're both far from center AND far from each other — center-to-center
+// distance between any two clusters is now ~400 units, versus at most ~250
+// before. central_park/central_lake keep their "central_" ids (just
+// identifiers, not user-facing) despite no longer sitting near the middle.
 const RESERVED_ZONES: ReservedZone[] = [
-  { id: "central_park", kind: "park", x: -25, z: 0, radius: 28 },
-  { id: "central_lake", kind: "lake", x: 25, z: 0, radius: 20 },
-  { id: "park_north",   kind: "park", x: -40, z: 175, radius: 20 },
-  { id: "park_south",   kind: "park", x: -70, z: -165, radius: 18 },
-  { id: "lake_east",    kind: "lake", x: 185, z: 40, radius: 15 },
+  { id: "central_park", kind: "park", x: 173, z: 198, radius: 28 },
+  { id: "central_lake", kind: "lake", x: 223, z: 198, radius: 20 },
+  { id: "park_north",   kind: "park", x: -198, z: 198, radius: 20 },
+  { id: "park_south",   kind: "park", x: -198, z: -198, radius: 18 },
+  { id: "lake_east",    kind: "lake", x: 198, z: -198, radius: 15 },
   // Landmark zones (2026-08-19) — church/fountain are hand-placed OUTSIDE
   // this script entirely (see CHURCH_POSITION's own comment below, and
   // staticCityData.ts's CHURCH_POSITION/FOUNTAIN_POSITION, which these must
@@ -962,7 +950,16 @@ function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[], excludeLeaves: Re
 // Walks each (straight) road segment, dropping a pair of trees every
 // TREE_SPACING units, skipping the first/last TREE_MARGIN so trees don't
 // crowd an intersection.
-function generateRoadTrees(roads: RoadSegment[]): Point[] {
+//
+// `avoidLakes` (visual, wobble-inflated lake circles — see visualLakeCircle)
+// added 2026-08-20: a road running along the real border of an excluded
+// lake leaf can put a road-offset tree just inside the lake's actual rendered
+// (organic, wobbly) outline even though the tree sits outside the lake's
+// plain base-radius circle — found live after moving the parks/lakes out
+// toward the outskirts, which put a couple of roads close enough to graze a
+// lake's edge for the first time (previously nothing in this function
+// checked zone/lake overlap at all — it got lucky before, not fixed).
+function generateRoadTrees(roads: RoadSegment[], avoidLakes: Circle[] = []): Point[] {
   const trees: Point[] = []
   for (const seg of roads) {
     const dx = seg.x2 - seg.x1, dz = seg.z2 - seg.z1
@@ -973,8 +970,16 @@ function generateRoadTrees(roads: RoadSegment[]): Point[] {
 
     for (let t = TREE_MARGIN; t <= length - TREE_MARGIN; t += TREE_SPACING) {
       const cx = seg.x1 + ux * t, cz = seg.z1 + uz * t
-      trees.push({ x: Math.round(cx + px * TREE_OFFSET), z: Math.round(cz + pz * TREE_OFFSET) })
-      trees.push({ x: Math.round(cx - px * TREE_OFFSET), z: Math.round(cz - pz * TREE_OFFSET) })
+      for (const cand of [
+        { x: Math.round(cx + px * TREE_OFFSET), z: Math.round(cz + pz * TREE_OFFSET) },
+        { x: Math.round(cx - px * TREE_OFFSET), z: Math.round(cz - pz * TREE_OFFSET) },
+      ]) {
+        const blocked = avoidLakes.some((a) => {
+          const ddx = a.x - cand.x, ddz = a.z - cand.z, clearance = a.radius + 3
+          return ddx * ddx + ddz * ddz < clearance * clearance
+        })
+        if (!blocked) trees.push(cand)
+      }
     }
   }
   return trees
@@ -1260,8 +1265,22 @@ parkTilesById.set("park_north", dropParkNorthEastExtension(parkTilesById.get("pa
 // nudged toward its own containing tile's centroid, stays entirely inside
 // already-excluded park territory (no building/road ever placed there) so
 // it's a purely visual change.
+//
+// Computed as an offset from the real zone (not a hardcoded absolute point):
+// found 2026-08-20 that a prior version hardcoded this as the OLD central_lake
+// position's absolute coordinates, so when the zone was later moved out
+// toward the outskirts, the lake kept rendering at its old spot — no longer
+// anywhere near the excluded territory that was supposed to contain it,
+// leaving ordinary city trees free to spawn right on top of the stale
+// lake's visual polygon. Deriving the override from the zone's own
+// x/z/radius means it always stays correctly nudged relative to wherever
+// the zone actually is.
+const centralLakeZone = RESERVED_ZONES.find((z) => z.id === "central_lake")!
 const LAKE_VISUAL_OVERRIDES: Record<string, { radius: number; center: Point }> = {
-  central_lake: { radius: 22, center: { x: 20, z: 1 } },
+  central_lake: {
+    radius: centralLakeZone.radius + 2,
+    center: { x: centralLakeZone.x - 5, z: centralLakeZone.z + 1 },
+  },
 }
 
 // lake_east's own BSP leaf (2026-08-12, user request: center the lake in its
@@ -1606,7 +1625,7 @@ console.log(`Wrote ${decorPath}`)
 
 // ── Roads: block-grid edges (see module doc comment) ────────────────────
 
-const roadTrees = generateRoadTrees(roadSegments)
+const roadTrees = generateRoadTrees(roadSegments, lakeZones.map(visualLakeCircle))
 console.log(`Roads: ${roadSegments.length} segments, ${roadTrees.length} roadside trees`)
 
 const roadsOutput = `/**
