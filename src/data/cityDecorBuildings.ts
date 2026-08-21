@@ -587,19 +587,11 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
-    "x": 1,
-    "z": 217
-  },
-  {
-    "buildingId": "deco_short_apartment_13",
-    "variant": "short_apartment",
-    "category": "residential",
-    "totalBlocks": 4000,
     "x": 313,
     "z": -175
   },
   {
-    "buildingId": "deco_short_apartment_14",
+    "buildingId": "deco_short_apartment_13",
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
@@ -607,7 +599,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 9
   },
   {
-    "buildingId": "deco_short_apartment_15",
+    "buildingId": "deco_short_apartment_14",
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
@@ -615,7 +607,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -189
   },
   {
-    "buildingId": "deco_short_apartment_16",
+    "buildingId": "deco_short_apartment_15",
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
@@ -623,12 +615,20 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 61
   },
   {
-    "buildingId": "deco_short_apartment_17",
+    "buildingId": "deco_short_apartment_16",
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
     "x": 88,
     "z": -35
+  },
+  {
+    "buildingId": "deco_short_apartment_17",
+    "variant": "short_apartment",
+    "category": "residential",
+    "totalBlocks": 4000,
+    "x": 68,
+    "z": 181
   },
   {
     "buildingId": "deco_short_apartment_18",
@@ -643,8 +643,8 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
-    "x": -239,
-    "z": 58
+    "x": -89,
+    "z": 216
   },
   {
     "buildingId": "deco_house_0",
@@ -779,7 +779,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -212,
+    "x": -242,
     "z": 59
   },
   {
@@ -795,7 +795,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -92,
+    "x": -62,
     "z": 217
   },
   {
@@ -931,19 +931,11 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 28,
-    "z": 218
-  },
-  {
-    "buildingId": "deco_house_36",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
     "x": 327,
     "z": -13
   },
   {
-    "buildingId": "deco_house_37",
+    "buildingId": "deco_house_36",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -951,7 +943,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 10
   },
   {
-    "buildingId": "deco_house_38",
+    "buildingId": "deco_house_37",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -959,7 +951,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -305
   },
   {
-    "buildingId": "deco_house_39",
+    "buildingId": "deco_house_38",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -967,7 +959,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -147
   },
   {
-    "buildingId": "deco_house_40",
+    "buildingId": "deco_house_39",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -975,7 +967,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -12
   },
   {
-    "buildingId": "deco_house_41",
+    "buildingId": "deco_house_40",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -983,7 +975,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 288
   },
   {
-    "buildingId": "deco_house_42",
+    "buildingId": "deco_house_41",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -991,7 +983,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -34
   },
   {
-    "buildingId": "deco_house_43",
+    "buildingId": "deco_house_42",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -999,7 +991,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -190
   },
   {
-    "buildingId": "deco_house_44",
+    "buildingId": "deco_house_43",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1007,7 +999,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -174
   },
   {
-    "buildingId": "deco_house_45",
+    "buildingId": "deco_house_44",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1015,7 +1007,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 79
   },
   {
-    "buildingId": "deco_house_46",
+    "buildingId": "deco_house_45",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1023,7 +1015,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 260
   },
   {
-    "buildingId": "deco_house_47",
+    "buildingId": "deco_house_46",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1031,7 +1023,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -89
   },
   {
-    "buildingId": "deco_house_48",
+    "buildingId": "deco_house_47",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1039,12 +1031,20 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -138
   },
   {
+    "buildingId": "deco_house_48",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": 95,
+    "z": 182
+  },
+  {
     "buildingId": "deco_house_49",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 65,
-    "z": 182
+    "x": -26,
+    "z": -286
   },
   {
     "buildingId": "deco_tall_apartment_0",
@@ -1435,23 +1435,23 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -266,
-    "z": 81
+    "x": -218,
+    "z": 59
   },
   {
     "buildingId": "deco_fill_house_39",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -242,
-    "z": 81
+    "x": -194,
+    "z": 59
   },
   {
     "buildingId": "deco_fill_house_40",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -218,
+    "x": -266,
     "z": 81
   },
   {
@@ -1459,7 +1459,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -194,
+    "x": -242,
     "z": 81
   },
   {
@@ -1467,23 +1467,23 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -166,
-    "z": 32
+    "x": -218,
+    "z": 81
   },
   {
     "buildingId": "deco_fill_house_43",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -142,
-    "z": 32
+    "x": -194,
+    "z": 81
   },
   {
     "buildingId": "deco_fill_house_44",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -118,
+    "x": -166,
     "z": 32
   },
   {
@@ -1491,16 +1491,16 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -89,
-    "z": 10
+    "x": -142,
+    "z": 32
   },
   {
     "buildingId": "deco_fill_house_46",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -65,
-    "z": 10
+    "x": -118,
+    "z": 32
   },
   {
     "buildingId": "deco_fill_house_47",
@@ -1508,7 +1508,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "category": "residential",
     "totalBlocks": 1080,
     "x": -89,
-    "z": 64
+    "z": 10
   },
   {
     "buildingId": "deco_fill_house_48",
@@ -1516,7 +1516,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "category": "residential",
     "totalBlocks": 1080,
     "x": -65,
-    "z": 64
+    "z": 10
   },
   {
     "buildingId": "deco_fill_house_49",
@@ -1524,7 +1524,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "category": "residential",
     "totalBlocks": 1080,
     "x": -89,
-    "z": 86
+    "z": 64
   },
   {
     "buildingId": "deco_fill_house_50",
@@ -1532,10 +1532,26 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "category": "residential",
     "totalBlocks": 1080,
     "x": -65,
-    "z": 86
+    "z": 64
   },
   {
     "buildingId": "deco_fill_house_51",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": -89,
+    "z": 86
+  },
+  {
+    "buildingId": "deco_fill_house_52",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": -65,
+    "z": 86
+  },
+  {
+    "buildingId": "deco_fill_house_53",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -1543,27 +1559,11 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 153
   },
   {
-    "buildingId": "deco_fill_house_52",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
-    "x": -68,
-    "z": 217
-  },
-  {
-    "buildingId": "deco_fill_house_53",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
-    "x": -116,
-    "z": 239
-  },
-  {
     "buildingId": "deco_fill_house_54",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -92,
+    "x": -116,
     "z": 239
   },
   {
@@ -1571,7 +1571,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -68,
+    "x": -92,
     "z": 239
   },
   {
@@ -1579,15 +1579,15 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -116,
-    "z": 261
+    "x": -68,
+    "z": 239
   },
   {
     "buildingId": "deco_fill_house_57",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -92,
+    "x": -116,
     "z": 261
   },
   {
@@ -1595,7 +1595,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -68,
+    "x": -92,
     "z": 261
   },
   {
@@ -1603,15 +1603,15 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -116,
-    "z": 310
+    "x": -68,
+    "z": 261
   },
   {
     "buildingId": "deco_fill_house_60",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -92,
+    "x": -116,
     "z": 310
   },
   {
@@ -1619,7 +1619,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -68,
+    "x": -92,
     "z": 310
   },
   {
@@ -1627,8 +1627,8 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -26,
-    "z": -286
+    "x": -68,
+    "z": 310
   },
   {
     "buildingId": "deco_fill_house_63",
@@ -2223,35 +2223,11 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 15
   },
   {
-    "buildingId": "deco_fill_short_apartment_6",
-    "variant": "short_apartment",
-    "category": "residential",
-    "totalBlocks": 4000,
-    "x": -23,
-    "z": 239
-  },
-  {
-    "buildingId": "deco_fill_short_apartment_7",
-    "variant": "short_apartment",
-    "category": "residential",
-    "totalBlocks": 4000,
-    "x": 7,
-    "z": 239
-  },
-  {
-    "buildingId": "deco_fill_short_apartment_8",
-    "variant": "short_apartment",
-    "category": "residential",
-    "totalBlocks": 4000,
-    "x": 37,
-    "z": 239
-  },
-  {
     "buildingId": "deco_fill_house_131",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 89,
+    "x": 119,
     "z": 182
   },
   {
@@ -2259,23 +2235,23 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 113,
-    "z": 182
+    "x": 22,
+    "z": 260
   },
   {
     "buildingId": "deco_fill_house_133",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 22,
-    "z": 260
+    "x": -26,
+    "z": 282
   },
   {
     "buildingId": "deco_fill_house_134",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -26,
+    "x": -2,
     "z": 282
   },
   {
@@ -2283,7 +2259,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -2,
+    "x": 22,
     "z": 282
   },
   {
@@ -2291,15 +2267,15 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 22,
-    "z": 282
+    "x": -26,
+    "z": 304
   },
   {
     "buildingId": "deco_fill_house_137",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -26,
+    "x": -2,
     "z": 304
   },
   {
@@ -2307,7 +2283,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -2,
+    "x": 22,
     "z": 304
   },
   {
@@ -2315,19 +2291,11 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": 22,
-    "z": 304
-  },
-  {
-    "buildingId": "deco_fill_house_140",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
     "x": -26,
     "z": 326
   },
   {
-    "buildingId": "deco_fill_house_141",
+    "buildingId": "deco_fill_house_140",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2335,7 +2303,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 326
   },
   {
-    "buildingId": "deco_fill_house_142",
+    "buildingId": "deco_fill_house_141",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2343,7 +2311,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 326
   },
   {
-    "buildingId": "deco_fill_house_143",
+    "buildingId": "deco_fill_house_142",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2351,7 +2319,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 282
   },
   {
-    "buildingId": "deco_fill_house_144",
+    "buildingId": "deco_fill_house_143",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2359,7 +2327,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 282
   },
   {
-    "buildingId": "deco_fill_house_145",
+    "buildingId": "deco_fill_house_144",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2367,7 +2335,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 282
   },
   {
-    "buildingId": "deco_fill_house_146",
+    "buildingId": "deco_fill_house_145",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2375,7 +2343,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 308
   },
   {
-    "buildingId": "deco_fill_house_147",
+    "buildingId": "deco_fill_house_146",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2383,7 +2351,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 308
   },
   {
-    "buildingId": "deco_fill_house_148",
+    "buildingId": "deco_fill_house_147",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2391,7 +2359,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 308
   },
   {
-    "buildingId": "deco_fill_house_149",
+    "buildingId": "deco_fill_house_148",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2399,11 +2367,19 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": 308
   },
   {
-    "buildingId": "deco_fill_house_150",
+    "buildingId": "deco_fill_house_149",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
     "x": -264,
+    "z": -153
+  },
+  {
+    "buildingId": "deco_fill_house_150",
+    "variant": "house",
+    "category": "residential",
+    "totalBlocks": 1080,
+    "x": -240,
     "z": -153
   },
   {
@@ -2411,15 +2387,15 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -240,
-    "z": -153
+    "x": -264,
+    "z": -131
   },
   {
     "buildingId": "deco_fill_house_152",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -264,
+    "x": -240,
     "z": -131
   },
   {
@@ -2427,15 +2403,15 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -240,
-    "z": -131
+    "x": -208,
+    "z": -155
   },
   {
     "buildingId": "deco_fill_house_154",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -208,
+    "x": -184,
     "z": -155
   },
   {
@@ -2443,7 +2419,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -184,
+    "x": -160,
     "z": -155
   },
   {
@@ -2451,19 +2427,11 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
-    "x": -160,
-    "z": -155
-  },
-  {
-    "buildingId": "deco_fill_house_157",
-    "variant": "house",
-    "category": "residential",
-    "totalBlocks": 1080,
     "x": -208,
     "z": -133
   },
   {
-    "buildingId": "deco_fill_house_158",
+    "buildingId": "deco_fill_house_157",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2471,7 +2439,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -133
   },
   {
-    "buildingId": "deco_fill_house_159",
+    "buildingId": "deco_fill_house_158",
     "variant": "house",
     "category": "residential",
     "totalBlocks": 1080,
@@ -2479,7 +2447,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -133
   },
   {
-    "buildingId": "deco_fill_short_apartment_9",
+    "buildingId": "deco_fill_short_apartment_6",
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,
@@ -2487,7 +2455,7 @@ export const DECOR_BUILDINGS: CityLayoutEntry[] = [
     "z": -112
   },
   {
-    "buildingId": "deco_fill_short_apartment_10",
+    "buildingId": "deco_fill_short_apartment_7",
     "variant": "short_apartment",
     "category": "residential",
     "totalBlocks": 4000,

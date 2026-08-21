@@ -40,15 +40,18 @@ import {
 // generateCityLayout.ts since a park/lake zone overlaps it, so it's open
 // ground with nothing else placed there), safely clear of park_north's own
 // circle (center -40,175, radius 20; distance from the church's center is
-// ~41). Fountain: south of the church within the same buffer leaf, clear of
-// the church's own footprint, the leaf's real roads on every side, and the
-// zone-buffer/road tree clearances. Moved north (z 110->130, 2026-08-21,
-// user request) closer to the church, freeing up the leaf's own south part
-// for a hand-placed plaza (generateCityLayout.ts's churchBlockPlaza) — MUST
-// stay in sync with generateCityLayout.ts's fountain_zone (RESERVED_ZONES),
-// which this script's own comment reiterates.
-const CHURCH_POSITION = { x: 0, z: 165 }
-const FOUNTAIN_POSITION = { x: 25, z: 130 }
+// ~40). Moved slightly north (z 165->170, 2026-08-21, second follow-up user
+// request) — still comfortably inside the leaf. Fountain: east of the
+// church's own footprint (nave+tower span x -9.5..9.5; fountain sits at
+// x=25, unaffected by any of this — every fountain move so far has only
+// ever changed z/"y axis", never x, per explicit user request), within the
+// same buffer leaf, clear of the leaf's real roads and the zone-buffer/road
+// tree clearances. Moved north twice now (z 110->130 first follow-up,
+// ->140 here) to sit right next to the church's new southern edge — MUST
+// stay in sync with generateCityLayout.ts's church_zone/fountain_zone
+// (RESERVED_ZONES), which that script's own comments reiterate.
+const CHURCH_POSITION = { x: 0, z: 170 }
+const FOUNTAIN_POSITION = { x: 25, z: 140 }
 
 function buildLandmark(variant: string, id: string, position: { x: number; z: number }): CityBuilding {
   const blueprint = blueprintForVariant(variant, "school", 0)

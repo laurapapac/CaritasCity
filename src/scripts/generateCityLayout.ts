@@ -204,15 +204,23 @@ const RESERVED_ZONES: ReservedZone[] = [
   // render on top of it. Radii sized generously to cover each landmark's
   // full footprint (church: 20x36 nave + 8x8 tower; fountain: small) from its
   // anchor point, not just the single BSP leaf containing that point.
-  { id: "church_zone",   kind: "landmark", x: 0,  z: 165, radius: 35 },
-  // Moved north (110->130, 2026-08-21, user request) to sit closer to the
-  // church and free up the south part of its own leaf for a hand-placed
-  // plaza (see churchBlockPlaza below) — still comfortably inside the same
-  // leaf (z range ~103.3-148.8) and clear of the church's own southernmost
-  // point (tower front, ~z=143), so this move needed no other zone/leaf
-  // geometry changes, just keeping staticCityData.ts's FOUNTAIN_POSITION in
-  // sync (see its own comment).
-  { id: "fountain_zone", kind: "landmark", x: 25, z: 130, radius: 15 },
+  // Moved slightly north (165->170, 2026-08-21, user request, second
+  // follow-up) — still comfortably inside the same buffer leaf (z range
+  // ~92.8-195.3; new footprint spans ~150.5-189.5, see CHURCH_POSITION's own
+  // comment below for the exact nave+tower math) and still far outside
+  // park_north's own circle (center -40,175, r20 — distance from the new
+  // center is ~40.3, barely different from before).
+  { id: "church_zone",   kind: "landmark", x: 0,  z: 170, radius: 35 },
+  // Moved north twice now (110->130 first follow-up, ->140 here, 2026-08-21,
+  // user request: "next to the church," x unchanged — only ever the z/"y
+  // axis" moves) to sit right up against the church's new southern edge
+  // (~150.5, see CHURCH_POSITION's comment) with a small walking gap, still
+  // well clear of the church's footprint in x (nave+tower span -9.5 to 9.5;
+  // fountain at x=25 sits 15.5 units east of that wall regardless of z) —
+  // still comfortably inside the same leaf (z range ~103.3-148.8-ish; see
+  // fountainLeaf below, computed live, not hardcoded). Keep
+  // staticCityData.ts's FOUNTAIN_POSITION in sync (see its own comment).
+  { id: "fountain_zone", kind: "landmark", x: 25, z: 140, radius: 15 },
 ]
 
 // ── Roads: recursive block subdivision (BSP), not a curve or a graph over
@@ -974,11 +982,23 @@ const ZONE_BUFFER_SQ_UNITS_PER_TREE = 100
 // technique as generateParkTreesInTiles but over the leaf's rectangle and
 // skipping points inside any zone's own circle (+3 margin) so trees don't
 // crowd the park/lake edge.
-// Matches DevCityPreview.tsx's CHURCH_POSITION — that building is hand-placed
+// Matches staticCityData.ts's CHURCH_POSITION — that building is hand-placed
 // outside this script entirely (see its own comment for why), but this
 // script still needs to know roughly where it sits so zone-buffer trees don't
 // crowd it. Keep these two values in sync if the church ever moves.
-const CHURCH_POSITION: Point = { x: 0, z: 165 }
+//
+// The church's real footprint (generateChurch, buildingGenerators.ts):
+// nave z0=0/depth=36 (voxel range 0..35) + tower z0=-4/depth=8 (voxel range
+// -4..3), so its full local z-extent is -4..35, centered (processBlueprint
+// centers every blueprint on its own bounding box) at (−4+35)/2=15.5 — i.e.
+// CHURCH_SOUTH_EDGE_OFFSET below (south edge minus that center) is a fixed
+// -19.5 regardless of where CHURCH_POSITION itself sits. Re-derive by hand
+// again (or import generateChurch — blocked by utils.ts's makeBlockTexture
+// touching `document` at module scope, browser-only, tried and reverted)
+// if the church's own shape/dimensions ever change.
+const CHURCH_POSITION: Point = { x: 0, z: 170 }
+const CHURCH_SOUTH_EDGE_OFFSET = -19.5
+const CHURCH_SOUTH_EDGE = CHURCH_POSITION.z + CHURCH_SOUTH_EDGE_OFFSET
 const CHURCH_TREE_CLEARANCE = 24
 
 // True when `point` falls inside leaf `r` — used to find the one BSP leaf a
@@ -1744,22 +1764,33 @@ const benches = generateBenches(new RNG(SEED + 4), blocks)
 // Hand-placed plaza for the church block's south part (2026-08-21, user
 // request) — generatePlazas only ever looks at `blocks` (buildable leaves),
 // and the fountain's own leaf is zone-excluded, so it'd never get one
-// automatically. Moving fountain_zone north opened up real room south of it
-// within the same leaf (down to the leaf's own z0 edge); sized to fit that
-// gap exactly rather than reusing generatePlazas' fixed MIN_PLAZA_AREA/0.8
-// formula, which assumes a leftover shelf rect roughly as wide as it is deep
-// — this gap is much wider than it is deep.
+// automatically. sized to fit the leaf's own depth exactly rather than
+// reusing generatePlazas' fixed MIN_PLAZA_AREA/0.8 formula, which assumes a
+// leftover shelf rect roughly as wide as it is deep — this gap is much wider
+// than it is deep.
+//
+// Enlarged (2026-08-21, same day, follow-up user request) — the fountain
+// moving right up next to the church (fountain_zone's own comment) left most
+// of this leaf's depth open, not just a sliver south of the fountain, so the
+// plaza's north edge now reaches CHURCH_SOUTH_EDGE_OVERLAP past the church's
+// own south edge (its entrance) instead of stopping short of the fountain —
+// explicitly fine per the user ("the edge of the plaza circle can be near
+// the church entrance, that is not a problem"). The fountain itself ends up
+// inside/on the plaza's own footprint now (a fountain-in-a-plaza is the more
+// natural reading anyway), not excluded from it.
 const fountainLeaf = keptLeaves.find((r) => leafContainsPoint(r, { x: fountainZone.x, z: fountainZone.z }))
-const CHURCH_BLOCK_PLAZA_CLEARANCE = 10 // gap kept clear between the fountain and the plaza
+const CHURCH_BLOCK_PLAZA_SOUTH_MARGIN = 3 // gap kept clear from the leaf's own south edge
+const CHURCH_SOUTH_EDGE_OVERLAP = 2 // how far past the church's entrance edge the plaza is allowed to reach
 const churchBlockPlaza = fountainLeaf ? (() => {
-  const southEdge = fountainZone.z - CHURCH_BLOCK_PLAZA_CLEARANCE
-  const availableDepth = southEdge - fountainLeaf.z0
+  const southEdge = fountainLeaf.z0 + CHURCH_BLOCK_PLAZA_SOUTH_MARGIN
+  const northEdge = CHURCH_SOUTH_EDGE + CHURCH_SOUTH_EDGE_OVERLAP
+  const availableDepth = northEdge - southEdge
   if (availableDepth < 8) return [] // not enough room to bother
-  const radius = Math.round(Math.min(availableDepth, fountainLeaf.x1 - fountainLeaf.x0) / 2 * 0.8)
+  const radius = Math.round(Math.min(availableDepth, fountainLeaf.x1 - fountainLeaf.x0) / 2)
   return [{
     id: "plaza_church_block",
     x: Math.round((fountainLeaf.x0 + fountainLeaf.x1) / 2),
-    z: Math.round((fountainLeaf.z0 + southEdge) / 2),
+    z: Math.round((southEdge + northEdge) / 2),
     radius,
   }]
 })() : []
