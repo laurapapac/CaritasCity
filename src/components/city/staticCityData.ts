@@ -42,9 +42,13 @@ import {
 // circle (center -40,175, radius 20; distance from the church's center is
 // ~41). Fountain: south of the church within the same buffer leaf, clear of
 // the church's own footprint, the leaf's real roads on every side, and the
-// zone-buffer/road tree clearances.
+// zone-buffer/road tree clearances. Moved north (z 110->130, 2026-08-21,
+// user request) closer to the church, freeing up the leaf's own south part
+// for a hand-placed plaza (generateCityLayout.ts's churchBlockPlaza) — MUST
+// stay in sync with generateCityLayout.ts's fountain_zone (RESERVED_ZONES),
+// which this script's own comment reiterates.
 const CHURCH_POSITION = { x: 0, z: 165 }
-const FOUNTAIN_POSITION = { x: 25, z: 110 }
+const FOUNTAIN_POSITION = { x: 25, z: 130 }
 
 function buildLandmark(variant: string, id: string, position: { x: number; z: number }): CityBuilding {
   const blueprint = blueprintForVariant(variant, "school", 0)

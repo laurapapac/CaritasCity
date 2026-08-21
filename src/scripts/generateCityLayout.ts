@@ -205,7 +205,14 @@ const RESERVED_ZONES: ReservedZone[] = [
   // full footprint (church: 20x36 nave + 8x8 tower; fountain: small) from its
   // anchor point, not just the single BSP leaf containing that point.
   { id: "church_zone",   kind: "landmark", x: 0,  z: 165, radius: 35 },
-  { id: "fountain_zone", kind: "landmark", x: 25, z: 110, radius: 15 },
+  // Moved north (110->130, 2026-08-21, user request) to sit closer to the
+  // church and free up the south part of its own leaf for a hand-placed
+  // plaza (see churchBlockPlaza below) — still comfortably inside the same
+  // leaf (z range ~103.3-148.8) and clear of the church's own southernmost
+  // point (tower front, ~z=143), so this move needed no other zone/leaf
+  // geometry changes, just keeping staticCityData.ts's FOUNTAIN_POSITION in
+  // sync (see its own comment).
+  { id: "fountain_zone", kind: "landmark", x: 25, z: 130, radius: 15 },
 ]
 
 // ── Roads: recursive block subdivision (BSP), not a curve or a graph over
@@ -891,6 +898,54 @@ function assignAndPlace(jobs: Job[], blocks: BlockState[], opts: { strict?: bool
   return placed
 }
 
+// Tops up whatever shelf room is STILL left in each block after every other
+// pass (real buildings, the fixed-count DECORATION_SPECS pass) has already
+// run — deliberately NOT gated by MAX_BUILDINGS_PER_BLOCK (that cap exists so
+// real buildings' shelf-packing doesn't waste space on mixed widths, per its
+// own comment; decoration buildings are cosmetic-only and, per user request
+// 2026-08-21, "have no limit"). Calls tryShelfPlace directly (not
+// assignAndPlace) so the cap never applies here, and loops per block until
+// EVERY variant in `palette` fails to fit — not just one — since a block
+// that can't fit a wide food_bank might still have room for one more house.
+// Smallest-footprint variant tried FIRST each attempt (shuffled, then
+// stable-sorted by area — the shuffle only randomizes the order between
+// same-area ties, e.g. short_apartment/hospital_small) so a slot never gets
+// claimed by a large building when a small one (with room to spare
+// afterward) would pack the same leftover space more densely — matches "fill
+// every available slot, at least one more building" literally: exhaust the
+// small end of the palette before giving up on a block.
+function fillBlocksToCapacity(
+  blocks: BlockState[], rng: RNG, palette: BuildingSpec[], idPrefix: string
+): PlacedBuilding[] {
+  const placed: PlacedBuilding[] = []
+  const nextIndex = new Map<string, number>()
+  for (const block of blocks) {
+    for (let guard = 0; guard < 200; guard++) {
+      const order = [...palette]
+        .sort(() => rng.next() - 0.5)
+        .sort((a, b) => a.width * a.depth - b.width * b.depth)
+      let placedOne = false
+      for (const spec of order) {
+        const i = nextIndex.get(spec.variant) ?? 0
+        const job: Job = {
+          buildingId: `${idPrefix}${spec.variant}_${i}`,
+          variant: spec.variant, category: spec.category, totalBlocks: spec.totalBlocks,
+          width: spec.width, depth: spec.depth,
+        }
+        const result = tryShelfPlace(block, job)
+        if (result) {
+          placed.push(result)
+          nextIndex.set(spec.variant, i + 1)
+          placedOne = true
+          break
+        }
+      }
+      if (!placedOne) break
+    }
+  }
+  return placed
+}
+
 function verifyNoOverlaps(placed: PlacedBuilding[]): void {
   for (let i = 0; i < placed.length; i++) {
     for (let j = i + 1; j < placed.length; j++) {
@@ -970,6 +1025,41 @@ function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[], excludeLeaves: Re
   return trees
 }
 
+// Standard ray-casting point-in-polygon test, plus a small margin via
+// distance-to-nearest-edge — used by generateRoadTrees' `avoidPolygons`
+// (lake_east specifically, see its own comment there) to avoid a lake's
+// ACTUAL rendered outline instead of a bounding circle sized to its largest
+// possible wobble.
+function pointInPolygon(px: number, pz: number, polygon: Point[]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, zi = polygon[i].z
+    const xj = polygon[j].x, zj = polygon[j].z
+    const intersect = (zi > pz) !== (zj > pz) &&
+      px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+function pointToSegmentDistanceSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax, dz = bz - az
+  const lenSq = dx * dx + dz * dz
+  let t = lenSq > 0 ? ((px - ax) * dx + (pz - az) * dz) / lenSq : 0
+  t = Math.max(0, Math.min(1, t))
+  const cx = ax + t * dx, cz = az + t * dz
+  const ddx = px - cx, ddz = pz - cz
+  return ddx * ddx + ddz * ddz
+}
+function nearPolygon(px: number, pz: number, polygon: Point[], margin: number): boolean {
+  if (pointInPolygon(px, pz, polygon)) return true
+  const marginSq = margin * margin
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i], b = polygon[(i + 1) % polygon.length]
+    if (pointToSegmentDistanceSq(px, pz, a.x, a.z, b.x, b.z) < marginSq) return true
+  }
+  return false
+}
+
 // Walks each (straight) road segment, dropping a pair of trees every
 // TREE_SPACING units, skipping the first/last TREE_MARGIN so trees don't
 // crowd an intersection.
@@ -982,7 +1072,22 @@ function generateZoneBufferTrees(rng: RNG, keptLeaves: Rect[], excludeLeaves: Re
 // toward the outskirts, which put a couple of roads close enough to graze a
 // lake's edge for the first time (previously nothing in this function
 // checked zone/lake overlap at all — it got lucky before, not fixed).
-function generateRoadTrees(roads: RoadSegment[], avoidLakes: Circle[] = []): Point[] {
+//
+// `avoidPolygons` (2026-08-21, lake_east specifically): visualLakeCircle's
+// wobble-padded circle (radius ~51 for lake_east's wide ellipse) reaches
+// clean across lake_east's own ~81x86 block and blocked over half its
+// roadside tree candidates (measured: 26/46) even on edges nowhere near the
+// water — the block's own beach rect already keeps the actual lake polygon
+// >=7 units from every road (LAKE_EAST_ROAD_CLEARANCE=5 plus
+// pickBestRotation's own >=2-unit fit margin), so a tree candidate ~4 units
+// in from the road (TREE_OFFSET) is already safely clear of the real water
+// by construction — checking the real rendered polygon (+ a small margin)
+// instead of a bounding circle sized for the worst-case wobble direction
+// fixes this without touching central_lake's existing (smaller, working)
+// circle-based avoidance at all.
+function generateRoadTrees(
+  roads: RoadSegment[], avoidLakes: Circle[] = [], avoidPolygons: { polygon: Point[]; margin: number }[] = []
+): Point[] {
   const trees: Point[] = []
   for (const seg of roads) {
     const dx = seg.x2 - seg.x1, dz = seg.z2 - seg.z1
@@ -1000,7 +1105,7 @@ function generateRoadTrees(roads: RoadSegment[], avoidLakes: Circle[] = []): Poi
         const blocked = avoidLakes.some((a) => {
           const ddx = a.x - cand.x, ddz = a.z - cand.z, clearance = a.radius + 3
           return ddx * ddx + ddz * ddz < clearance * clearance
-        })
+        }) || avoidPolygons.some((p) => nearPolygon(cand.x, cand.z, p.polygon, p.margin))
         if (!blocked) trees.push(cand)
       }
     }
@@ -1366,6 +1471,50 @@ if (lakeEastLeaf) {
   LAKE_VISUAL_OVERRIDES.lake_east = { radius: LAKE_EAST_ELLIPSE.radiusX, center: lakeEastCenter }
 }
 
+// Church's own leaf only ever excluded ITSELF (leafContainsPoint on the exact
+// anchor) from zone-buffer trees — but church_zone's radius (35) reaches past
+// that single leaf into its southern neighbor (which also holds the fountain,
+// itself never excluded either), so that neighbor kept getting bare-ground
+// buffer trees scattered on it right up to the church's own leaf edge, same
+// "one leaf tracked, zone actually spans two" gap park_south had (see
+// parkSouthConcreteLeaves below). User request (2026-08-21): every non-road
+// tree gone from the whole church block, not just its exact anchor leaf — so
+// exclude every leaf the church's circle actually touches, not just the one
+// containing its center point. fountain_zone (its own separate landmark,
+// sharing that same southern neighbor leaf) gets the same treatment — at the
+// time this was found (fountain_zone centered z=110), its circle (radius 15,
+// reaching to z=95) touched a THIRD leaf south of the fountain's own that
+// church_zone's (bottoming out at z=130) never reached, so both landmarks'
+// circles — not just church's — genuinely mattered here. fountain_zone
+// later moved north (z=110->130, see its own RESERVED_ZONES comment) and no
+// longer reaches that third leaf at all (130-15=115, north of it) — this
+// still computes both dynamically via rectIntersectsZone rather than a
+// hardcoded leaf list, so it stays correct either way without needing
+// another update if the fountain moves again.
+const churchZone = RESERVED_ZONES.find((z) => z.id === "church_zone")!
+const fountainZone = RESERVED_ZONES.find((z) => z.id === "fountain_zone")!
+const churchZoneLeaves = keptLeaves.filter(
+  (r) => rectIntersectsZone(r, churchZone) || rectIntersectsZone(r, fountainZone)
+)
+
+// park_south's zone circle (radius 43) clips the SW corner of two leaves
+// directly north of its own rendered tiles just enough to zone-exclude them
+// (rectIntersectsZone, a raw circle touch) without ever registering a real
+// overlap fraction (rectOverlapFraction, sampled) high enough to join
+// parkTilesFor's flood-fill — so they render as bare "concrete" ground
+// (zone-excluded from roads/buildable, but not park-tiled either) scattered
+// with the same buffer trees as any other zone-adjacent gap, right on top of
+// park_south's own grass with no road between them (both zone-excluded, so
+// neither contributes a shared edge) — reading as one block split
+// grass-south/bare-north. User request (2026-08-21): strip this bare half's
+// trees (except road-following ones) and put a few decoration buildings on
+// it instead — see the dedicated placement pass below (parkSouthDecoBlocks).
+const parkSouthZone = RESERVED_ZONES.find((z) => z.id === "park_south")!
+const parkSouthTilesRaw = parkTilesFor(parkSouthZone, keptLeaves)
+const parkSouthConcreteLeaves = keptLeaves.filter(
+  (r) => rectIntersectsZone(r, parkSouthZone) && !parkSouthTilesRaw.includes(r)
+)
+
 // Same visual-vs-zone split as LAKE_VISUAL_OVERRIDES — anything that needs to
 // avoid overlapping a lake (park benches, park trees, zone-buffer trees)
 // should avoid where the lake is actually RENDERED, not its smaller/
@@ -1492,19 +1641,129 @@ console.log(`Buildings per block: min ${blockSizes[0]}, max ${blockSizes[blockSi
 // many random() calls the real-building pass happened to consume.
 const decoJobs = buildInterleavedJobs(new RNG(SEED + 7), DECORATION_SPECS, "deco_")
 const decoPlaced: PlacedBuilding[] = assignAndPlace(decoJobs, blocks, { strict: false })
+
+// A few decoration buildings for park_south's own bare "concrete" leaves
+// (see parkSouthConcreteLeaves above) — user request (2026-08-21): instead of
+// just clearing its trees, give it a handful of non-buildable houses/short
+// apartments, the same "permanently fully-built, never backend-linked"
+// treatment every other decoration building already gets. These two leaves
+// are zone-excluded (never in buildableLeaves/`blocks` to begin with, since
+// park_south's circle clips them), so they need their own tiny
+// assignAndPlace pass rather than joining the shared `blocks` pass above —
+// same shelf-packing/zone-overlap safety this file already relies on for
+// every other building placement applies here too (tryShelfPlace's own
+// overlapsAnyZone check still guards the corner that actually touches
+// park_south's circle).
+// tryShelfPlace's shelf cursor starts at the block's own rect.z0 and only
+// ever advances forward — never retried at a different starting row on
+// rejection (assignAndPlace treats a null result as "this block can't take
+// this job," not "try further in"), so a block whose z0 edge is the one
+// actually touching park_south's circle would reject every job forever, its
+// cursor permanently stuck at the first (always-rejected) row. Both leaves
+// here touch the zone only near their own z0 edge (that's the corner
+// rectIntersectsZone caught them on to begin with) — nudging the starting
+// row north first clears it.
+//
+// A flat 25-unit margin worked but was overly conservative (a guess, not
+// derived) — user asked for a 3rd row (2026-08-21), which needs every spare
+// unit of depth these leaves actually have. safeStartZ scans upward from the
+// leaf's own z0 in 1-unit steps, at whichever single x-coordinate inside the
+// leaf sits closest to the zone's own center (the true worst case — for
+// park_south specifically that's an interior x, not an edge, since the
+// zone's center x falls inside both leaves' x-ranges), stopping at the first
+// z a representative PROBE_DEPTH-deep row clears park_south's padded circle
+// (overlapsAnyZone already adds ROAD_GAP on top of the zone's raw radius,
+// same margin every other placement in this file respects). PROBE_DEPTH
+// matches house's own depth (12, deeper than short_apartment's 10) so the
+// result is safe for either variant the fill pass might place first.
+const PROBE_DEPTH = 12
+function safeStartZ(rect: Rect, zone: ReservedZone): number {
+  const worstX = Math.max(rect.x0, Math.min(zone.x, rect.x1))
+  let z = rect.z0 + PLACEMENT_GAP / 2
+  const limit = rect.z1 - PLACEMENT_GAP / 2
+  while (z < limit && overlapsAnyZone(worstX, z + PROBE_DEPTH / 2, 1, PROBE_DEPTH)) z += 1
+  return z
+}
+const parkSouthDecoBlocks: BlockState[] = parkSouthConcreteLeaves.map((rect) => ({
+  rect,
+  usableWidth: rect.x1 - rect.x0 - PLACEMENT_GAP,
+  usableDepth: rect.z1 - rect.z0 - PLACEMENT_GAP,
+  jobCount: 0,
+  cursorX: rect.x0 + PLACEMENT_GAP / 2,
+  rowZ: safeStartZ(rect, parkSouthZone),
+  rowDepth: 0,
+}))
+// Fill pass (2026-08-21, user request) — tops up EVERY block (the normal
+// citywide `blocks`, continuing on from wherever the fixed-count pass above
+// left each one's shelf cursor, AND park_south's own concrete-leaf blocks,
+// starting fresh) with as many more decoration buildings as still physically
+// fit — decoration buildings are cosmetic-only and "have no limit," per the
+// same user request that also asked park_south's own leaves not to steal
+// from the citywide DECORATION_SPECS budget (buildInterleavedJobs above):
+// this pass never touches that budget or its jobs at all, it only spends
+// shelf space nothing else claimed. Same idPrefix scheme as every other deco
+// pass (deco_fill_<variant>_<i>) — guaranteed never to collide with
+// deco_<variant>_<i> (the fixed pass) since the prefixes differ.
+//
+// Palette deliberately narrower than DECORATION_SPECS's full 9 variants —
+// found live: fillBlocksToCapacity's smallest-footprint-first packing picked
+// tall_apartment almost everywhere (16x10=160 sq units, the single smallest
+// footprint of all 9, even smaller than house's 14x12=168) despite it being
+// a literal 8,000-block skyscraper, not a small filler — first run stuffed
+// ~150 towers into ordinary house-sized gaps citywide. Restricted to house
+// and short_apartment, matching the original park_south ask ("houses and
+// short apartments") — both genuinely small/low buildings, so packing by
+// footprint area no longer fights against packing by visual footprint too.
+const FILL_PALETTE: BuildingSpec[] = DECORATION_SPECS.filter(
+  (s) => s.variant === "house" || s.variant === "short_apartment"
+)
+const fillPlaced = fillBlocksToCapacity(
+  [...blocks, ...parkSouthDecoBlocks], new RNG(SEED + 12), FILL_PALETTE, "deco_fill_"
+)
+decoPlaced.push(...fillPlaced)
+console.log(`Fill pass: ${fillPlaced.length} additional decoration buildings placed into leftover shelf space`)
+
 verifyNoOverlaps([...placed, ...decoPlaced])
 const decoByVariant = new Map<string, number>()
 for (const p of decoPlaced) decoByVariant.set(p.variant, (decoByVariant.get(p.variant) ?? 0) + 1)
-console.log(`Decoration buildings: ${decoPlaced.length}/${decoJobs.length} placed — ` +
-  DECORATION_SPECS.map((s) => `${s.variant} ${decoByVariant.get(s.variant) ?? 0}/${s.count}`).join(", "))
+console.log(`Decoration buildings: ${decoPlaced.length} total — ` +
+  DECORATION_SPECS.map((s) => `${s.variant} ${decoByVariant.get(s.variant) ?? 0}`).join(", "))
 
-const bushes = generateBushes(new RNG(SEED + 2), blocks)
+// Bushes temporarily disabled (2026-08-21, user request) — the fill pass
+// above now claims leftover shelf space (blockLeftoverRect) that bushes used
+// to scatter into; removing bushes avoids them competing/overlapping with
+// filler buildings for that same space. Re-enable once the fill density is
+// tuned to taste.
+const bushes: Point[] = []
 const churchLeaf = keptLeaves.find((r) => leafContainsPoint(r, CHURCH_POSITION))
 const churchLeafLamps = churchLeaf ? generateLeafBorderLamps(churchLeaf, roadSegments) : []
 const lakeEastLeafLamps = lakeEastLeaf ? generateLeafBorderLamps(lakeEastLeaf, roadSegments) : []
 const lampPosts = [...generateLampPosts(new RNG(SEED + 3), blocks), ...churchLeafLamps, ...lakeEastLeafLamps]
 const benches = generateBenches(new RNG(SEED + 4), blocks)
-const plazas = generatePlazas(blocks)
+
+// Hand-placed plaza for the church block's south part (2026-08-21, user
+// request) — generatePlazas only ever looks at `blocks` (buildable leaves),
+// and the fountain's own leaf is zone-excluded, so it'd never get one
+// automatically. Moving fountain_zone north opened up real room south of it
+// within the same leaf (down to the leaf's own z0 edge); sized to fit that
+// gap exactly rather than reusing generatePlazas' fixed MIN_PLAZA_AREA/0.8
+// formula, which assumes a leftover shelf rect roughly as wide as it is deep
+// — this gap is much wider than it is deep.
+const fountainLeaf = keptLeaves.find((r) => leafContainsPoint(r, { x: fountainZone.x, z: fountainZone.z }))
+const CHURCH_BLOCK_PLAZA_CLEARANCE = 10 // gap kept clear between the fountain and the plaza
+const churchBlockPlaza = fountainLeaf ? (() => {
+  const southEdge = fountainZone.z - CHURCH_BLOCK_PLAZA_CLEARANCE
+  const availableDepth = southEdge - fountainLeaf.z0
+  if (availableDepth < 8) return [] // not enough room to bother
+  const radius = Math.round(Math.min(availableDepth, fountainLeaf.x1 - fountainLeaf.x0) / 2 * 0.8)
+  return [{
+    id: "plaza_church_block",
+    x: Math.round((fountainLeaf.x0 + fountainLeaf.x1) / 2),
+    z: Math.round((fountainLeaf.z0 + southEdge) / 2),
+    radius,
+  }]
+})() : []
+const plazas = [...generatePlazas(blocks), ...churchBlockPlaza]
 console.log(`Furniture: ${bushes.length} bushes, ${lampPosts.length} lamp posts ` +
   `(${churchLeafLamps.length} along the church's block, ${lakeEastLeafLamps.length} along lake_east's), ` +
   `${benches.length} benches, ${plazas.length} plazas`)
@@ -1601,7 +1860,7 @@ console.log(`Wrote ${decorBuildingsPath}`)
 
 const zoneBufferTrees = generateZoneBufferTrees(
   new RNG(SEED + 6), keptLeaves,
-  [churchLeaf, lakeEastLeaf].filter((l): l is Rect => l !== undefined)
+  [...churchZoneLeaves, lakeEastLeaf, ...parkSouthConcreteLeaves].filter((l): l is Rect => l !== undefined)
 )
 const parkTreesFromTiles = parkZones.flatMap((zone) => {
   const tiles = parkTilesById.get(zone.id) ?? []
@@ -1682,8 +1941,14 @@ console.log(`Wrote ${decorPath}`)
 
 // ── Roads: block-grid edges (see module doc comment) ────────────────────
 
-const roadTrees = generateRoadTrees(roadSegments, lakeZones.map(visualLakeCircle))
+const lakeEastShape = lakeShapes.find((s) => s.id === "lake_east")
+const roadTreeAvoidCircles = lakeZones
+  .filter((z) => z.id !== "lake_east" || !lakeEastShape)
+  .map(visualLakeCircle)
+const roadTreeAvoidPolygons = lakeEastShape ? [{ polygon: lakeEastShape.points, margin: 4 }] : []
+const roadTrees = generateRoadTrees(roadSegments, roadTreeAvoidCircles, roadTreeAvoidPolygons)
 console.log(`Roads: ${roadSegments.length} segments, ${roadTrees.length} roadside trees`)
+
 
 const roadsOutput = `/**
  * Static road network: every edge of every kept BSP block (see
