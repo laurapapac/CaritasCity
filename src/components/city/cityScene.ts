@@ -42,7 +42,16 @@ const DEFAULT_CAMERA_TARGET = { x: 0, y: 10, z: 0 }
 // How far from a block's center the close-up camera sits, along its exposed face's
 // outward normal. Far enough to show neighboring blocks on the same wall, not just
 // the single target block filling the frame.
-const FOCUS_OFFSET = 22
+//
+// Tightened 22->14.7 (2026-08-25, user request: "increase the zoom by about
+// 50%" once PAN_LIMIT's fix let the framing actually land on the target
+// again) — dividing by 1.5 is what actually delivers "50% more zoom": apparent
+// size scales with 1/distance, so a 1.5x zoom increase needs a 1/1.5x
+// distance. Feeds every downstream distance in focusOnBlock (both branches
+// share this one constant) and both offset-pickers' own tree-clearance
+// candidate positions, so the tighter shot and its tree-dodge math stay
+// self-consistent automatically — no other constant needed updating.
+const FOCUS_OFFSET = 22 / 1.5
 
 // Top-view framing tilt (2026-08-17): a floor/ceiling-completing block used to be
 // framed dead straight overhead (phi=0), which read fine before decor existed but
@@ -55,7 +64,14 @@ const FOCUS_OFFSET = 22
 // more steep") — still enough tilt to show a side face, closer to overhead than the
 // first pass. This is now specifically the tilt used once a block is above nearby
 // tree height — see TOP_VIEW_TILT_LOW_DEG below for how low blocks differ.
-const TOP_VIEW_TILT_DEG = 22
+//
+// Relaxed 22->40 (2026-08-25, user request: "less bird's eye view, more
+// normal perspective but still angled slightly") — 22° off vertical is 68°
+// above the horizon, essentially a straight-down aerial shot; 40° (50° above
+// the horizon) keeps a clear "looking down at the roof/floor" read without
+// the extreme overhead angle. Tune by feel, same as every prior pass on
+// this constant.
+const TOP_VIEW_TILT_DEG = 40
 
 // A low block (still at/below TREE_CANOPY_TOP_Y) shot from TOP_VIEW_TILT_DEG's
 // steep, near-overhead angle reads as disconnected from the ground — user
@@ -66,7 +82,13 @@ const TOP_VIEW_TILT_DEG = 22
 // transition — noticeably more horizontal than TOP_VIEW_TILT_DEG, short of
 // going all the way to a wall-shot's fully horizontal framing. Starting
 // point for live tuning via /dev/kiosk-progress, not a derived value.
-const TOP_VIEW_TILT_LOW_DEG = 55
+//
+// Relaxed 55->68 (2026-08-25, same "less bird's eye, more normal
+// perspective" request as TOP_VIEW_TILT_DEG above) — 68° off vertical is 22°
+// above the horizon, a clearly normal/eye-level-ish read with just enough
+// downward tilt to still show the block's top face, rather than 55°'s more
+// pronounced 35°-above-horizon look-down.
+const TOP_VIEW_TILT_LOW_DEG = 68
 
 // Interpolates (smoothstep, matching maxDistanceForPhi's own angle-based
 // interpolation below) from TOP_VIEW_TILT_LOW_DEG at cy=0 up to
