@@ -182,13 +182,30 @@ function pickTopViewOffset(
   // (common: buildings sit only a few units from the nearest road tree)
   // otherwise reads as "clear" purely because it's far from the camera end
   // of the shot, even though it's squarely in front of what's being framed.
-  const clearanceOf = ([ox, , oz]: [number, number, number]): number => {
+  //
+  // Combined with vertical clearance above the canopy (2026-08-25 bug fix —
+  // this used to be pure XZ distance, which meant a tree within
+  // TREE_CLEARANCE_RADIUS of the TARGET itself capped every candidate's
+  // clearance at roughly that same small distance regardless of tilt,
+  // since every candidate's sightline starts at the same (cx,cz) point next
+  // to the tree — mathematically no azimuth or tilt could ever cross the
+  // threshold. Steepening toward overhead is real progress (the camera
+  // genuinely rises above the canopy and gets an unobstructed look-down),
+  // but the old formula never credited that height at all. Mirrors
+  // pickLateralOffset's own camY/TREE_CANOPY_TOP_Y treatment. Found live via
+  // /dev/kiosk-progress: house_0's very first foundation block sits ~1.6
+  // units from a road tree, and the camera stared straight into its canopy
+  // no matter which of the 16 candidates scored "best.")
+  const clearanceOf = ([ox, oy, oz]: [number, number, number]): number => {
     if (nearby.length === 0) return Infinity
     const camX = cx + ox * FOCUS_OFFSET
+    const camY = cy + oy * FOCUS_OFFSET
     const camZ = cz + oz * FOCUS_OFFSET
+    const verticalClearance = Math.max(0, camY - TREE_CANOPY_TOP_Y)
     let nearest = Infinity
     for (const t of nearby) {
-      const d = pointToSegmentDistanceXZ(t.x, t.z, camX, camZ, cx, cz)
+      const xzDist = pointToSegmentDistanceXZ(t.x, t.z, camX, camZ, cx, cz)
+      const d = Math.hypot(xzDist, verticalClearance)
       if (d < nearest) nearest = d
     }
     return nearest
@@ -989,18 +1006,25 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         ? pickTopViewOffset(cx, cy, cz, topViewTrees)
         : pickLateralOffset(cx, cy, cz, nx, nz, topViewTrees)
 
-      // Lateral shots only: don't let FOCUS_OFFSET's fixed distance fly the
-      // camera past the real (often much narrower, ~ROAD_GAP=8) gap to a
-      // neighboring building into its already-built geometry — pull the
-      // camera in instead of letting a nearer building cover the target
-      // block. Vertical shots skip this: their horizontal displacement is
-      // only sin(TOP_VIEW_TILT_DEG)*FOCUS_OFFSET (~8 units), comfortably
-      // inside typical building gaps already.
+      // Don't let FOCUS_OFFSET's fixed distance fly the camera past the real
+      // (often much narrower, ~ROAD_GAP=8) gap to a neighboring building into
+      // its already-built geometry — pull the camera in instead of letting a
+      // nearer building cover the target block.
+      //
+      // Applied to BOTH branches (2026-08-25 bug fix — previously vertical/
+      // top-view shots were exempted on the reasoning that their horizontal
+      // displacement, sin(TOP_VIEW_TILT_DEG)*FOCUS_OFFSET ≈ 8 units at the
+      // original fixed 22° tilt, was comfortably inside typical building
+      // gaps. That reasoning silently broke when TOP_VIEW_TILT_LOW_DEG=55°
+      // was added (2026-08-18) for low blocks: sin(55°)*22 ≈ 18 units of
+      // horizontal reach, nearly double ROAD_GAP=8, which could fly the
+      // camera straight into a neighboring building's solid geometry —
+      // found live via /dev/kiosk-progress (food_bank_0's second block
+      // rendered as an extreme close-up of a neighboring building's dark
+      // interior wall, not the target at all).
       let dist = FOCUS_OFFSET
-      if (!isVertical) {
-        const entry = nearestOccupiedNeighborEntryDistance(nodes, buildingId, cx, cz, ox, oz)
-        if (entry < FOCUS_OFFSET) dist = Math.max(controls.minDistance, entry - NEIGHBOR_CLEARANCE_MARGIN)
-      }
+      const entry = nearestOccupiedNeighborEntryDistance(nodes, buildingId, cx, cz, ox, oz)
+      if (entry < FOCUS_OFFSET) dist = Math.max(controls.minDistance, entry - NEIGHBOR_CLEARANCE_MARGIN)
 
       camera.position.set(cx + ox * dist, cy + oy * dist, cz + oz * dist)
       controls.target.set(cx, cy, cz)
