@@ -107,6 +107,15 @@ export interface CityHandle {
     staggerMs: number,
     onComplete?: () => void
   ): void
+  /** Ambient decoration-building construction loop. See CitySceneHandle. */
+  playAmbientCycle(
+    buildingId: string,
+    count: number,
+    staggerMs: number,
+    onComplete?: () => void
+  ): void
+  /** Cancels a building's pending ambient cycle, if any. */
+  stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
   focusOnBlock(buildingId: string, blockIndex: number, opts?: { highlight?: boolean }): void
   /** Snap the camera back to the wide establishing shot. */
@@ -189,6 +198,14 @@ export const City = forwardRef<CityHandle, CityProps>(function City(
 
     playConstructionMontage(buildingId, count, staggerMs, onComplete) {
       rendererRef.current?.playConstructionMontage(buildingId, count, staggerMs, onComplete)
+    },
+
+    playAmbientCycle(buildingId, count, staggerMs, onComplete) {
+      rendererRef.current?.playAmbientCycle(buildingId, count, staggerMs, onComplete)
+    },
+
+    stopAmbientCycle(buildingId) {
+      rendererRef.current?.stopAmbientCycle(buildingId)
     },
 
     focusOnBlock(buildingId, blockIndex, opts) {

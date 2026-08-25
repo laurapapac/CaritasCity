@@ -15,6 +15,7 @@ import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, ConstructionQueue } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
 import { STATIC_CITY_DECOR, STATIC_LANDMARKS, STATIC_DECOR_BUILDINGS } from "../../components/city/staticCityData";
+import { useAmbientDecorConstruction } from "../../components/city/useAmbientDecorConstruction";
 import { CITY_LAYOUT } from "../../data/cityLayout";
 import {
   MONTAGE_BLOCK_COUNT,
@@ -269,6 +270,11 @@ export default function Kiosk() {
       }
     }
   }, [cityData]);
+
+  // Purely cosmetic "the city feels alive" effect — cycles a small local
+  // cluster of decoration buildings through construction forever, entirely
+  // client-side. See useAmbientDecorConstruction's own doc comment.
+  useAmbientDecorConstruction(cityRef, STATIC_DECOR_BUILDINGS, cityData !== null);
 
   function handleEnter(code: string) {
     enterCode(code)

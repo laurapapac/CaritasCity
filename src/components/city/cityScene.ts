@@ -669,6 +669,23 @@ export interface CitySceneHandle {
     onComplete?: () => void
   ): void
   /**
+   * Ambient decoration-building construction loop — same rewind-then-replay
+   * shape as playConstructionMontage (no highlight, just pops to final
+   * color), but tracks its own per-building timer instead of
+   * playConstructionMontage's single shared one, so any number of these can
+   * run concurrently with each other AND with a real user's own placement
+   * montage without canceling one another. Purely cosmetic — never touches
+   * completedBlocks. Calls onComplete once the replay finishes.
+   */
+  playAmbientCycle(
+    buildingId: string,
+    count: number,
+    staggerMs: number,
+    onComplete?: () => void
+  ): void
+  /** Cancels a building's pending ambient cycle, if any. */
+  stopAmbientCycle(buildingId: string): void
+  /**
    * Snap the camera close to and facing a specific already-placed block (no
    * animation — an instant cut), optionally re-triggering the same yellow
    * highlight fade used when a block is first revealed. Deterministic: same
@@ -964,6 +981,13 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // Tracks the montage's pending timer so a new montage (or dispose) can cancel it.
   let montageTimeoutId: ReturnType<typeof setTimeout> | undefined
 
+  // Per-building pending timers for playAmbientCycle — deliberately a Map
+  // keyed by buildingId rather than a single shared variable like
+  // montageTimeoutId above, so multiple ambient cycles (and a real user's
+  // own placement montage) can all be in flight at once without one
+  // canceling another. See playAmbientCycle's own doc comment.
+  const ambientTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
   // ── Handle ────────────────────────────────────────────────────────────────
   const handle: CitySceneHandle = {
 
@@ -1058,6 +1082,37 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       step()
     },
 
+    playAmbientCycle(buildingId, count, staggerMs, onComplete) {
+      const existing = ambientTimeouts.get(buildingId)
+      if (existing) clearTimeout(existing)
+
+      const node = nodes.get(buildingId)
+      if (!node) { onComplete?.(); return }
+
+      const target = node.visibleCount
+      const rewindTo = Math.max(0, target - count)
+      if (rewindTo >= target) { onComplete?.(); return }
+
+      rebuildNode(node, rewindTo)
+
+      let i = rewindTo
+      const step = () => {
+        revealBlockAt(node, i, { highlight: false })
+        i++
+        if (i >= target) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
+        ambientTimeouts.set(buildingId, setTimeout(step, staggerMs))
+      }
+      step()
+    },
+
+    stopAmbientCycle(buildingId) {
+      const existing = ambientTimeouts.get(buildingId)
+      if (existing) {
+        clearTimeout(existing)
+        ambientTimeouts.delete(buildingId)
+      }
+    },
+
     focusOnBlock(buildingId, blockIndex, opts) {
       const node = nodes.get(buildingId)
       if (!node) return
@@ -1124,6 +1179,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
     dispose() {
       clearTimeout(montageTimeoutId)
+      for (const t of ambientTimeouts.values()) clearTimeout(t)
+      ambientTimeouts.clear()
       cancelAnimationFrame(rafId)
       ro.disconnect()
       controls.dispose()
