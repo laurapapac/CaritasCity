@@ -71,7 +71,12 @@ const FOCUS_OFFSET = 22 / 1.5
 // the horizon) keeps a clear "looking down at the roof/floor" read without
 // the extreme overhead angle. Tune by feel, same as every prior pass on
 // this constant.
-const TOP_VIEW_TILT_DEG = 40
+//
+// Relaxed further 40->55 (2026-08-25, same day follow-up — user tried the
+// 40° pass live and said it "still too bird's eye-ish"). 55° off vertical is
+// 35° above the horizon — a genuinely normal-reading elevated angle, not
+// just a softened aerial one.
+const TOP_VIEW_TILT_DEG = 55
 
 // A low block (still at/below TREE_CANOPY_TOP_Y) shot from TOP_VIEW_TILT_DEG's
 // steep, near-overhead angle reads as disconnected from the ground — user
@@ -88,7 +93,13 @@ const TOP_VIEW_TILT_DEG = 40
 // above the horizon, a clearly normal/eye-level-ish read with just enough
 // downward tilt to still show the block's top face, rather than 55°'s more
 // pronounced 35°-above-horizon look-down.
-const TOP_VIEW_TILT_LOW_DEG = 68
+//
+// Relaxed further 68->78 (2026-08-25, same follow-up as TOP_VIEW_TILT_DEG
+// above) — 78° off vertical is only 12° above the horizon, about as close to
+// true eye-level as this branch can get while still tilting down enough to
+// show the block's top face at all (the whole reason this is a "top-view"
+// branch rather than the lateral one).
+const TOP_VIEW_TILT_LOW_DEG = 78
 
 // Interpolates (smoothstep, matching maxDistanceForPhi's own angle-based
 // interpolation below) from TOP_VIEW_TILT_LOW_DEG at cy=0 up to
