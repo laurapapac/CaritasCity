@@ -204,23 +204,43 @@ const RESERVED_ZONES: ReservedZone[] = [
   // render on top of it. Radii sized generously to cover each landmark's
   // full footprint (church: 20x36 nave + 8x8 tower; fountain: small) from its
   // anchor point, not just the single BSP leaf containing that point.
-  // Moved slightly north (165->170, 2026-08-21, user request, second
-  // follow-up) — still comfortably inside the same buffer leaf (z range
-  // ~92.8-195.3; new footprint spans ~150.5-189.5, see CHURCH_POSITION's own
-  // comment below for the exact nave+tower math) and still far outside
-  // park_north's own circle (center -40,175, r20 — distance from the new
-  // center is ~40.3, barely different from before).
-  { id: "church_zone",   kind: "landmark", x: 0,  z: 170, radius: 35 },
-  // Moved north twice now (110->130 first follow-up, ->140 here, 2026-08-21,
-  // user request: "next to the church," x unchanged — only ever the z/"y
-  // axis" moves) to sit right up against the church's new southern edge
-  // (~150.5, see CHURCH_POSITION's comment) with a small walking gap, still
-  // well clear of the church's footprint in x (nave+tower span -9.5 to 9.5;
-  // fountain at x=25 sits 15.5 units east of that wall regardless of z) —
-  // still comfortably inside the same leaf (z range ~103.3-148.8-ish; see
-  // fountainLeaf below, computed live, not hardcoded). Keep
-  // staticCityData.ts's FOUNTAIN_POSITION in sync (see its own comment).
-  { id: "fountain_zone", kind: "landmark", x: 25, z: 140, radius: 15 },
+  //
+  // Radius shrunk 35->25 (2026-08-21, sixth follow-up — real bug fix, not a
+  // stylistic tweak). The church's actual footprint (nave+tower, see
+  // CHURCH_POSITION's own comment) only ever needs a circle of
+  // sqrt(19.5²+9.5²)≈21.7 to fully contain it from its own center, in any
+  // direction, regardless of where CHURCH_POSITION sits — 35 was always far
+  // more generous than that. That extra generosity became a real problem
+  // once the church moved far enough north: at z>=172.057, a 35-radius
+  // circle starts reaching PAST this leaf's own north edge (z=207.057) into
+  // the NEXT leaf north of it — which then excludes that leaf too
+  // (rectIntersectsZone doesn't care why a leaf touches the circle), so it
+  // stops contributing its own road edge (leavesToRoads skips any
+  // zone-excluded leaf), and the real nearest road jumps a further ~42 units
+  // out to z=249 instead. Found live (2026-08-21) after the user reported a
+  // screenshot showing far more empty space behind the church than the
+  // "~1.6 unit clearance" this file had claimed — that number was computed
+  // against the z=207.057 road, which by then no longer actually existed.
+  // 25 (still well above the ~21.7 minimum, so the real footprint is always
+  // fully covered) stays under 207.057-182=25.057, so it no longer reaches
+  // the next leaf at all — restoring the real road at 207.057 as the actual
+  // nearest one, matching what CHURCH_ONLY_SHIFT's clearance math assumed.
+  // Moved north three times now (165->170 second follow-up, ->178 third,
+  // ->182 here, all 2026-08-21) — MUST match CHURCH_POSITION_BASE_Z+
+  // CHURCH_FOUNTAIN_SHIFT+CHURCH_ONLY_SHIFT below (170+8+4=182). Still far
+  // outside park_north's own circle (center -40,175, r20 — distance from the
+  // new center is ~42).
+  { id: "church_zone",   kind: "landmark", x: 0,  z: 182, radius: 25 },
+  // Moved north twice now (110->130 first follow-up, ->148 second, both
+  // 2026-08-21, x unchanged — only ever the z/"y axis" moves) — the church's
+  // third move (above, same day) was explicitly church-only ("push the
+  // church north," fountain not mentioned), so this deliberately did NOT
+  // move again to match; the gap between them is real again. Still well
+  // clear of the church's footprint in x (nave+tower span -9.5 to 9.5;
+  // fountain at x=25 sits 15.5 units east of that wall regardless of z).
+  // Keep staticCityData.ts's FOUNTAIN_POSITION in sync (see its own
+  // comment).
+  { id: "fountain_zone", kind: "landmark", x: 25, z: 148, radius: 15 },
 ]
 
 // ── Roads: recursive block subdivision (BSP), not a curve or a graph over
@@ -996,9 +1016,38 @@ const ZONE_BUFFER_SQ_UNITS_PER_TREE = 100
 // again (or import generateChurch — blocked by utils.ts's makeBlockTexture
 // touching `document` at module scope, browser-only, tried and reverted)
 // if the church's own shape/dimensions ever change.
-const CHURCH_POSITION: Point = { x: 0, z: 170 }
+//
+// CHURCH_POSITION_BASE_Z/CHURCH_FOUNTAIN_SHIFT (2026-08-21, fourth
+// follow-up) — user asked to nudge church+fountain+plaza further north as
+// one rigid group, WITHOUT the plaza growing the way it did last time (that
+// growth was a side effect of the plaza's north edge tracking the church's
+// position while its south edge stayed pinned to the fixed leaf boundary —
+// moving the church north just stretched the gap between them bigger).
+// Fixed by keeping the *_BASE_Z constants as the original, pre-shift
+// reference the plaza's own size is still computed from (see
+// churchBlockPlaza below), then adding CHURCH_FOUNTAIN_SHIFT once to every
+// final z (church, fountain, plaza alike) — a true rigid translation, size
+// unchanged.
+//
+// CHURCH_ONLY_SHIFT (2026-08-21, fifth follow-up) — user asked to push the
+// church alone closer to the road/trees behind it (less empty space north
+// of it), fountain/plaza NOT mentioned this time and left where they are —
+// so this adds on top of the shared CHURCH_FOUNTAIN_SHIFT for CHURCH_POSITION
+// only, not fountain_zone or churchBlockPlaza. The real constraint (measured
+// live): the church's own leaf ends at z=207.057 (keptLeaves, fixed by the
+// seed), with a real road + road trees/lamps TREE_OFFSET=4 in from it, i.e.
+// an obstacle line at ~203.057. Church back wall = position+19.5. At the
+// combined 170+8+4=182, that's 182+19.5=201.5 — a real ~1.6 unit clearance
+// to the actual trees/lamps, deliberately tight (this request explicitly
+// wants it close), stopping just short of touching rather than at a
+// comfortable distance.
+const CHURCH_POSITION_BASE_Z = 170
+const CHURCH_FOUNTAIN_SHIFT = 8
+const CHURCH_ONLY_SHIFT = 4
+const CHURCH_POSITION: Point = { x: 0, z: CHURCH_POSITION_BASE_Z + CHURCH_FOUNTAIN_SHIFT + CHURCH_ONLY_SHIFT }
 const CHURCH_SOUTH_EDGE_OFFSET = -19.5
 const CHURCH_SOUTH_EDGE = CHURCH_POSITION.z + CHURCH_SOUTH_EDGE_OFFSET
+const CHURCH_SOUTH_EDGE_BASE = CHURCH_POSITION_BASE_Z + CHURCH_SOUTH_EDGE_OFFSET
 const CHURCH_TREE_CLEARANCE = 24
 
 // True when `point` falls inside leaf `r` — used to find the one BSP leaf a
@@ -1769,28 +1818,40 @@ const benches = generateBenches(new RNG(SEED + 4), blocks)
 // leftover shelf rect roughly as wide as it is deep — this gap is much wider
 // than it is deep.
 //
-// Enlarged (2026-08-21, same day, follow-up user request) — the fountain
-// moving right up next to the church (fountain_zone's own comment) left most
-// of this leaf's depth open, not just a sliver south of the fountain, so the
-// plaza's north edge now reaches CHURCH_SOUTH_EDGE_OVERLAP past the church's
-// own south edge (its entrance) instead of stopping short of the fountain —
-// explicitly fine per the user ("the edge of the plaza circle can be near
-// the church entrance, that is not a problem"). The fountain itself ends up
-// inside/on the plaza's own footprint now (a fountain-in-a-plaza is the more
-// natural reading anyway), not excluded from it.
+// Enlarged (2026-08-21, follow-up user request) — the fountain moving right
+// up next to the church left most of this leaf's depth open, not just a
+// sliver south of the fountain, so the plaza's north edge reached
+// CHURCH_SOUTH_EDGE_OVERLAP past the church's own south edge (its entrance)
+// instead of stopping short of the fountain — explicitly fine per the user
+// ("the edge of the plaza circle can be near the church entrance, that is
+// not a problem"). The fountain ends up inside/on the plaza's own footprint
+// (a fountain-in-a-plaza is the more natural reading anyway).
+//
+// Sized from *_BASE, positioned with CHURCH_FOUNTAIN_SHIFT added after
+// (2026-08-21, fourth follow-up) — an earlier version computed size AND
+// position together straight from the (already-shifted) church/leaf
+// geometry, so every time the church moved further north the plaza grew
+// instead of just translating — its north edge chased the church while its
+// south edge stayed pinned to the fixed leaf boundary. User asked for a pure
+// move this time, size unchanged: radius/center are computed once from the
+// ORIGINAL pre-shift geometry (CHURCH_SOUTH_EDGE_BASE, fountainLeaf.z0 —
+// the leaf boundary itself never moves regardless of shift), giving the
+// exact same size as the last commit, and CHURCH_FOUNTAIN_SHIFT is added
+// only to the final z — a rigid translation matching the church/fountain's
+// own move, not a resize.
 const fountainLeaf = keptLeaves.find((r) => leafContainsPoint(r, { x: fountainZone.x, z: fountainZone.z }))
 const CHURCH_BLOCK_PLAZA_SOUTH_MARGIN = 3 // gap kept clear from the leaf's own south edge
 const CHURCH_SOUTH_EDGE_OVERLAP = 2 // how far past the church's entrance edge the plaza is allowed to reach
 const churchBlockPlaza = fountainLeaf ? (() => {
   const southEdge = fountainLeaf.z0 + CHURCH_BLOCK_PLAZA_SOUTH_MARGIN
-  const northEdge = CHURCH_SOUTH_EDGE + CHURCH_SOUTH_EDGE_OVERLAP
+  const northEdge = CHURCH_SOUTH_EDGE_BASE + CHURCH_SOUTH_EDGE_OVERLAP
   const availableDepth = northEdge - southEdge
   if (availableDepth < 8) return [] // not enough room to bother
   const radius = Math.round(Math.min(availableDepth, fountainLeaf.x1 - fountainLeaf.x0) / 2)
   return [{
     id: "plaza_church_block",
     x: Math.round((fountainLeaf.x0 + fountainLeaf.x1) / 2),
-    z: Math.round((southEdge + northEdge) / 2),
+    z: Math.round((southEdge + northEdge) / 2) + CHURCH_FOUNTAIN_SHIFT,
     radius,
   }]
 })() : []

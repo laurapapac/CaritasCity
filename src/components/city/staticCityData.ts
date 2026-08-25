@@ -36,22 +36,27 @@ import {
 // — purely aesthetic landmarks, not among the 160 real QR-linked buildings,
 // so they're hand-placed here rather than through cityLayout.ts. Church:
 // positioned in the buffer leaf just east of park_north (rect roughly
-// x:[-26.6,45.3] z:[92.8,195.3] — excluded from both buildings and roads by
+// x:[-38,53] z:[149,207] — measured live, not the ~92.8-195.3 an earlier
+// version of this comment guessed; excluded from both buildings and roads by
 // generateCityLayout.ts since a park/lake zone overlaps it, so it's open
 // ground with nothing else placed there), safely clear of park_north's own
-// circle (center -40,175, radius 20; distance from the church's center is
-// ~40). Moved slightly north (z 165->170, 2026-08-21, second follow-up user
-// request) — still comfortably inside the leaf. Fountain: east of the
+// circle (center -40,175, radius 20). Moved north three times now (z
+// 165->170 second follow-up, ->178 third, ->182 here, all 2026-08-21) — the
+// last move was church-only, explicitly pushed close to the leaf's own north
+// road/trees (~207) to cut the empty space behind it, leaving a real but
+// deliberately tight ~1.6 unit clearance (see generateCityLayout.ts's
+// CHURCH_ONLY_SHIFT for the exact measurement). Fountain: east of the
 // church's own footprint (nave+tower span x -9.5..9.5; fountain sits at
 // x=25, unaffected by any of this — every fountain move so far has only
 // ever changed z/"y axis", never x, per explicit user request), within the
 // same buffer leaf, clear of the leaf's real roads and the zone-buffer/road
 // tree clearances. Moved north twice now (z 110->130 first follow-up,
-// ->140 here) to sit right next to the church's new southern edge — MUST
-// stay in sync with generateCityLayout.ts's church_zone/fountain_zone
+// ->148 second) — NOT moved to match the church's third move (that request
+// was church-only), so the gap between them has reopened again. MUST stay
+// in sync with generateCityLayout.ts's church_zone/fountain_zone
 // (RESERVED_ZONES), which that script's own comments reiterate.
-const CHURCH_POSITION = { x: 0, z: 170 }
-const FOUNTAIN_POSITION = { x: 25, z: 140 }
+const CHURCH_POSITION = { x: 0, z: 182 }
+const FOUNTAIN_POSITION = { x: 25, z: 148 }
 
 function buildLandmark(variant: string, id: string, position: { x: number; z: number }): CityBuilding {
   const blueprint = blueprintForVariant(variant, "school", 0)

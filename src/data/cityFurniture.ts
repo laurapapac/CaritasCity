@@ -1474,7 +1474,7 @@ export const PLAZAS: DecorZone[] = [
   {
     "id": "plaza_church_block",
     "x": 7,
-    "z": 129,
+    "z": 137,
     "radius": 23
   }
 ];
