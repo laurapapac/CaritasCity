@@ -182,21 +182,41 @@ function pickTopViewOffset(
   // (common: buildings sit only a few units from the nearest road tree)
   // otherwise reads as "clear" purely because it's far from the camera end
   // of the shot, even though it's squarely in front of what's being framed.
-  //
-  // Combined with vertical clearance above the canopy (2026-08-25 bug fix —
-  // this used to be pure XZ distance, which meant a tree within
-  // TREE_CLEARANCE_RADIUS of the TARGET itself capped every candidate's
-  // clearance at roughly that same small distance regardless of tilt,
-  // since every candidate's sightline starts at the same (cx,cz) point next
-  // to the tree — mathematically no azimuth or tilt could ever cross the
-  // threshold. Steepening toward overhead is real progress (the camera
-  // genuinely rises above the canopy and gets an unobstructed look-down),
-  // but the old formula never credited that height at all. Mirrors
-  // pickLateralOffset's own camY/TREE_CANOPY_TOP_Y treatment. Found live via
-  // /dev/kiosk-progress: house_0's very first foundation block sits ~1.6
-  // units from a road tree, and the camera stared straight into its canopy
-  // no matter which of the 16 candidates scored "best.")
-  const clearanceOf = ([ox, oy, oz]: [number, number, number]): number => {
+  // Pure XZ on purpose — this is the PRIMARY score below, used to pick among
+  // both tilt levels exactly like before 2026-08-25 (see clearanceHeightAware
+  // for why height is deliberately NOT blended in here).
+  const clearanceXZ = ([ox, , oz]: [number, number, number]): number => {
+    if (nearby.length === 0) return Infinity
+    const camX = cx + ox * FOCUS_OFFSET
+    const camZ = cz + oz * FOCUS_OFFSET
+    let nearest = Infinity
+    for (const t of nearby) {
+      const d = pointToSegmentDistanceXZ(t.x, t.z, camX, camZ, cx, cz)
+      if (d < nearest) nearest = d
+    }
+    return nearest
+  }
+
+  // Same idea, but also credits camera elevation above the canopy — mirrors
+  // pickLateralOffset's own camY/TREE_CANOPY_TOP_Y treatment. Used ONLY as a
+  // last-resort re-score (see below), not blended into the primary formula:
+  // an earlier version of this fix (2026-08-25) applied it to every
+  // candidate uniformly, which gave every steep candidate a large constant
+  // clearance bonus (steep's camY ≈ 21 vs low tilt's ≈ 13, both well above
+  // TREE_CANOPY_TOP_Y=6) — steep then out-scored low tilt any time even a
+  // distant, barely-relevant tree was in range, silently defeating
+  // TOP_VIEW_TILT_LOW_DEG's whole purpose (2026-08-18: low blocks should
+  // frame close to the ground). Found live: most early-construction blocks
+  // in a tree-lined city have SOME tree within TREE_SEARCH_RADIUS, so nearly
+  // every low block was getting yanked into a steep, near-overhead "empty
+  // floor" shot instead of the intended ground-level framing. Gating the
+  // height credit behind a real fallback (primary XZ pick fails outright)
+  // keeps that regression from recurring while still fixing the one case
+  // this credit exists for: a tree within TREE_CLEARANCE_RADIUS of the
+  // TARGET itself, which caps every candidate's pure-XZ clearance near that
+  // same small distance regardless of azimuth or tilt (found live:
+  // house_0's very first block, a tree ~1.6 units from the target).
+  const clearanceHeightAware = ([ox, oy, oz]: [number, number, number]): number => {
     if (nearby.length === 0) return Infinity
     const camX = cx + ox * FOCUS_OFFSET
     const camY = cy + oy * FOCUS_OFFSET
@@ -218,7 +238,10 @@ function pickTopViewOffset(
       candidates.push([ax * horizontal, vertical, az * horizontal])
     }
   }
-  return pickClearestOffset(candidates, clearanceOf)
+
+  const primary = pickClearestOffset(candidates, clearanceXZ)
+  if (clearanceXZ(primary) >= TREE_CLEARANCE_RADIUS) return primary
+  return pickClearestOffset(candidates, clearanceHeightAware)
 }
 
 // Shortest distance from point (px,pz) to the segment (ax,az)-(bx,bz), in the
@@ -352,15 +375,33 @@ function pickLateralOffset(
 // Soft world boundary (2026-08-13, tightened twice same day — first pass
 // (350, matching CITY_EDGE's full measured envelope including sparse edge
 // roads/trees) still let a right-drag pan noticeably past what reads as
-// "the city," so pulled in further to 280 — matching CITY_RADIUS
-// (generateCityLayout.ts), the tighter "core" city boundary rather than
-// its outermost edge decor) — how far controls.target may be panned from
-// the origin. OrbitControls has no built-in pan-distance clamp
+// "the city," so pulled in further to 280 — matching CITY_RADIUS as it
+// stood then (generateCityLayout.ts)) — how far controls.target may be
+// panned from the origin. OrbitControls has no built-in pan-distance clamp
 // (min/maxDistance only bound zoom/dolly), so this is enforced by hand in
-// animate() below. The terrain past this point is still visible (it's
-// what keeps the world from feeling boxed in) — the user just can't
-// navigate the camera's own focal point out into it.
-const PAN_LIMIT = 280
+// animate() below, unconditionally, every frame — not just during a user
+// drag gesture.
+//
+// Raised 280→450 (2026-08-25 bug fix, real regression, not a tuning pass) —
+// CITY_RADIUS was expanded 280→400 during the 2026-08-19 160-building
+// rebalance, but this separate constant was never updated to match, and
+// nobody live-tested block placement again until this session. Since this
+// clamp runs every frame regardless of *why* controls.target was set, it
+// was silently dragging focusOnBlock's programmatic target back inside a
+// 280-unit circle for any building placed beyond it — which by 2026-08-19
+// was most of the city (real building positions now range up to ~x=-388,
+// z=-390, radius ~399 — confirmed live: house_0 and hospital_small_0 both
+// sit around radius ~387-399, both well outside the stale 280 limit).
+// Reported as "camera pointing at the empty floor, not even near the
+// building" — exactly this: a correctly-computed target silently yanked
+// toward the origin one frame after being set. 450 matches CITY_EDGE
+// (generateCityLayout.ts's own terrain boundary, sized with margin to fully
+// contain every real building/road/tree) rather than CITY_RADIUS itself, so
+// every real building position stays safely inside the pan limit even
+// though CITY_RADIUS is only the BSP leaf-center filter, not city's true
+// measured extent (same center-vs-envelope gap the terrain code already
+// had to account for once before, 2026-08-13).
+const PAN_LIMIT = 450
 
 // Angle-dependent max zoom-out (2026-08-13, same day, third camera pass) —
 // a flat controls.maxDistance can only be exactly right at one tilt: how
