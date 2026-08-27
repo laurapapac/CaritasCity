@@ -299,6 +299,26 @@ export default function Kiosk() {
     placeBlock(code, schoolId)
       .then((res) => {
         setState({ phase: "constructing" });
+        // Catch this kiosk's local scene up to the server's authoritative
+        // pre-placement count before doing anything else (2026-08-27, real
+        // bug: two kiosks placing into the same actively-building building
+        // around the same time — e.g. two different QR codes in the same
+        // category — each still had the OTHER's local `node.visibleCount`
+        // sitting stale, since neither had polled since the other's
+        // placement. playConstructionMontage/addBlock both reveal blocks
+        // starting from that local count, not from the server-confirmed
+        // blockIndex this response just gave us, so both kiosks' montages
+        // played out ending at the SAME (stale, no longer next-available)
+        // index instead of their own real, distinct one — visually placing
+        // the new block in the same spot on both screens, even though the
+        // DB had correctly serialized two different block_index rows the
+        // whole time (confirmed correct on reload, which does a full sync).
+        // A silent, instant setVisibleCount to blockIndex (never higher —
+        // this is the count BEFORE this block, so any block this kiosk
+        // missed from the other placement pops in with no animation, but
+        // the montage/highlight below then lands on the right one) fixes
+        // it without touching the server, which was never the problem.
+        cityRef.current?.setVisibleCount(res.block.buildingId, res.block.blockIndex);
         // Frame the block *before* the montage starts, not after — otherwise the
         // staggered reveal plays out at the wide establishing shot, where
         // individual voxels are sub-pixel and the stagger is imperceptible.
