@@ -669,17 +669,28 @@ export interface CitySceneHandle {
     onComplete?: () => void
   ): void
   /**
-   * Ambient decoration-building construction loop — same rewind-then-replay
-   * shape as playConstructionMontage (no highlight, just pops to final
-   * color), but tracks its own per-building timer instead of
-   * playConstructionMontage's single shared one, so any number of these can
-   * run concurrently with each other AND with a real user's own placement
-   * montage without canceling one another. Purely cosmetic — never touches
-   * completedBlocks. Calls onComplete once the replay finishes.
+   * Ambient decoration-building construction loop. This building is already
+   * fully built, so — same mechanism as playConstructionMontage — it
+   * truncates the building down to a randomized point partway up (a
+   * percentage of the building's OWN block count, not a fixed number, so the
+   * gap reads as real on a big building and not just a house) and rebuilds
+   * it back up to the true top, highlighted (there's no camera-follow to
+   * make an unhighlighted change legible). The truncation always reaches the
+   * real roof — never an isolated mid-building window — because a hidden
+   * band left floating below an intact roof is invisible from the kiosk's
+   * normal elevated camera angle (2026-08-27 root cause; see the long
+   * comment in the implementation). `ticks` controls how many staggerMs
+   * steps the reveal takes (duration), not the block count — multiple
+   * blocks reveal per tick when the truncated span is larger than `ticks`.
+   * Tracks its own per-building timer instead of playConstructionMontage's
+   * single shared one, so any number of these can run concurrently with
+   * each other AND with a real user's own placement montage without
+   * canceling one another. Purely cosmetic — never touches completedBlocks.
+   * Calls onComplete once the reveal finishes.
    */
   playAmbientCycle(
     buildingId: string,
-    count: number,
+    ticks: number,
     staggerMs: number,
     onComplete?: () => void
   ): void
@@ -988,6 +999,20 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // canceling another. See playAmbientCycle's own doc comment.
   const ambientTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
+  // How much of a building's own blocks playAmbientCycle truncates-then-
+  // rebuilds, as a fraction of its total (2026-08-27, root-caused: see the
+  // long comment in playAmbientCycle for why this must always be a
+  // contiguous suffix reaching the true top of the blueprint, never an
+  // isolated mid-building window). Bigger than the original 5-9% window,
+  // since a suffix anchored at the roof needs to be a substantial fraction
+  // to read as "still under construction" rather than "just the last couple
+  // of roof shingles" (the exact complaint that motivated the 2026-08-26
+  // "middle third" change this replaces). Floored at AMBIENT_REVEAL_MIN_BLOCKS
+  // for small buildings.
+  const AMBIENT_REVEAL_PCT_MIN = 0.15
+  const AMBIENT_REVEAL_PCT_MAX = 0.35
+  const AMBIENT_REVEAL_MIN_BLOCKS = 40
+
   // ── Handle ────────────────────────────────────────────────────────────────
   const handle: CitySceneHandle = {
 
@@ -1082,20 +1107,65 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       step()
     },
 
-    playAmbientCycle(buildingId, count, staggerMs, onComplete) {
+    // `ticks` controls duration (how many staggerMs steps the cycle takes —
+    // the caller's REVEAL_COUNT_MIN/MAX), not the number of blocks hidden.
+    // How many blocks actually get hidden is computed below as a percentage
+    // of this specific building's own size (see AMBIENT_REVEAL_PCT_MIN/MAX)
+    // so the gap reads as a real gap on an 8,000-block hospital and not just
+    // a 1,080-block house — a fixed block count made it proportionally
+    // invisible on anything bigger than a house. When the resulting span is
+    // larger than `ticks`, multiple blocks reveal per tick so the cycle's
+    // visible duration still matches `ticks`, not the raw block count.
+    playAmbientCycle(buildingId, ticks, staggerMs, onComplete) {
       const existing = ambientTimeouts.get(buildingId)
       if (existing) clearTimeout(existing)
 
       const node = nodes.get(buildingId)
       if (!node) { onComplete?.(); return }
 
-      const target = node.visibleCount
-      const rewindTo = Math.max(0, target - count)
-      if (rewindTo >= target) { onComplete?.(); return }
+      const total = node.blocks.length
+      const pct = AMBIENT_REVEAL_PCT_MIN + Math.random() * (AMBIENT_REVEAL_PCT_MAX - AMBIENT_REVEAL_PCT_MIN)
+      const span = Math.min(total, Math.max(AMBIENT_REVEAL_MIN_BLOCKS, Math.round(total * pct)))
+      if (span <= 0) { onComplete?.(); return }
 
-      rebuildNode(node, rewindTo)
+      // The truncated-then-rebuilt region MUST reach the true top of the
+      // blueprint (start..total), never an isolated mid-building window
+      // (2026-08-27 root cause, found via direct A/B screenshot comparison
+      // at eye level vs. the kiosk's normal elevated background-city angle):
+      // hideBlockAt/revealBlockAt's per-instance hide (tried as both
+      // zero-scale and translate-far-away — both independently confirmed via
+      // live GPU instance-matrix readback to be genuinely, correctly hidden)
+      // is visually real and reproducible up close, but from the kiosk's
+      // actual default elevated viewing angle a hidden BAND left in the
+      // middle of a building's height is optically bridged by the roof's own
+      // silhouette overhanging it — the roof and the foundation visually
+      // connect in screen space even though there's a real gap between them
+      // in world space, so the building reads as fully built from exactly
+      // the angle real users actually see it from. A gap that instead
+      // reaches the true top has no floating roof to hide behind — the
+      // silhouette itself is genuinely short, which is visible from any
+      // angle including steep overhead ones (the same reason real
+      // in-progress buildings, built via this same rebuildNode prefix
+      // truncation, have never had this problem). Confirmed live: identical
+      // pixels hidden vs. revealed for a mid-building window at the kiosk's
+      // normal camera angle; an obvious, unmistakable hole for a
+      // top-reaching truncation at the same angle.
+      //
+      // `start` still gets randomized (not fixed at total-span) so the
+      // amount "already built" below the visible activity varies cycle to
+      // cycle — reusing playConstructionMontage's own proven rebuildNode
+      // prefix-truncation mechanism, just starting from a random partway
+      // point instead of always 0 (see AMBIENT_REVEAL_PCT_MIN/MAX above for
+      // why this needs to be a much bigger fraction than the old isolated
+      // window: a suffix anchored at the roof needs real size to read as
+      // "still under construction" rather than "the last few roof shingles"
+      // — the 2026-08-26 complaint this whole redesign is fixing).
+      const start = Math.max(0, total - span)
 
-      let i = rewindTo
+      rebuildNode(node, start)
+
+      const perTick = Math.max(1, Math.ceil(span / Math.max(1, ticks)))
+      let i = start
       const step = () => {
         // Unlike playConstructionMontage's replay steps (highlight off — the
         // real per-block reveal is a throwaway lead-up to the one block that
@@ -1104,9 +1174,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         // is highlighted: this effect has no camera-follow to make it
         // legible, so the yellow pop-then-fade is the only cue a viewer
         // scanning the city gets that something's under construction here.
-        revealBlockAt(node, i)
-        i++
-        if (i >= target) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
+        for (let k = 0; k < perTick && i < total; k++, i++) revealBlockAt(node, i)
+        if (i >= total) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
         ambientTimeouts.set(buildingId, setTimeout(step, staggerMs))
       }
       step()
