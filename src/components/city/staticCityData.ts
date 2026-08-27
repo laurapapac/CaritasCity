@@ -50,13 +50,21 @@ import {
 // x=25, unaffected by any of this — every fountain move so far has only
 // ever changed z/"y axis", never x, per explicit user request), within the
 // same buffer leaf, clear of the leaf's real roads and the zone-buffer/road
-// tree clearances. Moved north twice now (z 110->130 first follow-up,
-// ->148 second) — NOT moved to match the church's third move (that request
-// was church-only), so the gap between them has reopened again. MUST stay
-// in sync with generateCityLayout.ts's church_zone/fountain_zone
-// (RESERVED_ZONES), which that script's own comments reiterate.
+// tree clearances. Moved north four times now (z 110->130 first follow-up,
+// ->148 second, ->160 third, ->163 fourth — all 2026-08-27 same-day
+// follow-ups, user request: move ONLY the fountain north, explicitly not
+// the church and not the church-block plaza's own size/position — see
+// generateCityLayout.ts's FOUNTAIN_ANCHOR, which keeps that plaza's
+// geometry frozen at the fountain's pre-move position specifically so a
+// fountain-only move like this one can't accidentally resize/reposition it
+// too). 163 (not the requested +8/168) is deliberately the largest z that
+// changes nothing except the fountain's own position — see
+// generateCityLayout.ts's fountain_zone comment for the live-swept
+// measurements behind that cutoff. MUST stay in sync with
+// generateCityLayout.ts's church_zone/fountain_zone (RESERVED_ZONES), which
+// that script's own comments reiterate.
 const CHURCH_POSITION = { x: 0, z: 182 }
-const FOUNTAIN_POSITION = { x: 25, z: 148 }
+const FOUNTAIN_POSITION = { x: 25, z: 163 }
 
 function buildLandmark(variant: string, id: string, position: { x: number; z: number }): CityBuilding {
   const blueprint = blueprintForVariant(variant, "school", 0)

@@ -231,16 +231,27 @@ const RESERVED_ZONES: ReservedZone[] = [
   // outside park_north's own circle (center -40,175, r20 — distance from the
   // new center is ~42).
   { id: "church_zone",   kind: "landmark", x: 0,  z: 182, radius: 25 },
-  // Moved north twice now (110->130 first follow-up, ->148 second, both
-  // 2026-08-21, x unchanged — only ever the z/"y axis" moves) — the church's
-  // third move (above, same day) was explicitly church-only ("push the
-  // church north," fountain not mentioned), so this deliberately did NOT
-  // move again to match; the gap between them is real again. Still well
-  // clear of the church's footprint in x (nave+tower span -9.5 to 9.5;
-  // fountain at x=25 sits 15.5 units east of that wall regardless of z).
-  // Keep staticCityData.ts's FOUNTAIN_POSITION in sync (see its own
-  // comment).
-  { id: "fountain_zone", kind: "landmark", x: 25, z: 148, radius: 15 },
+  // Moved north four times now (110->130 first follow-up, ->148 second,
+  // ->160 third, ->163 fourth, all 2026-08-27 same-day follow-ups — user
+  // request: move ONLY the fountain north, explicitly not the church and not
+  // churchBlockPlaza's own size/position (see churchBlockPlaza's own comment,
+  // further down, for how it stays frozen at its pre-move geometry despite
+  // this). x unchanged — only ever the z/"y axis" moves. Still well clear of
+  // the church's footprint in x (nave+tower span -9.5 to 9.5; fountain at
+  // x=25 sits 15.5 units east of that wall regardless of z).
+  //
+  // 163 (not the requested +8/168) is deliberately the LARGEST z that still
+  // changes nothing except the fountain's own position — swept every integer
+  // z from 160 to 168 live: 160-163 reproduce the exact pre-move BSP/
+  // decoration/road counts (93 buildable, 305 decoration buildings, 335 road
+  // segments), 164+ flips one previously-excluded BSP leaf to buildable
+  // elsewhere in the city (94 buildable, 308-309 decoration buildings, 338
+  // road segments) — a real, if minor and cosmetic-only, ripple the user
+  // asked to avoid once flagged (real 160 QR-linked buildings are unaffected
+  // at every z tested; this is purely about the never-backend-linked
+  // decoration/fill buildings and their roads). Push past 163 again only
+  // with the user's explicit sign-off on that ripple.
+  { id: "fountain_zone", kind: "landmark", x: 25, z: 163, radius: 15 },
 ]
 
 // ── Roads: recursive block subdivision (BSP), not a curve or a graph over
@@ -1839,7 +1850,21 @@ const benches = generateBenches(new RNG(SEED + 4), blocks)
 // exact same size as the last commit, and CHURCH_FOUNTAIN_SHIFT is added
 // only to the final z — a rigid translation matching the church/fountain's
 // own move, not a resize.
-const fountainLeaf = keptLeaves.find((r) => leafContainsPoint(r, { x: fountainZone.x, z: fountainZone.z }))
+//
+// Anchored to the fountain's ORIGINAL position, not its live one (2026-08-27,
+// user request: move only the fountain, explicitly not this plaza's size or
+// position). Previously looked up fountainLeaf from the live fountainZone.x/z
+// — harmless while the fountain and this plaza moved together, but a real
+// coupling bug once they're asked to move independently: pushing the fountain
+// far enough north crosses it into a different BSP leaf (the church's own),
+// which would silently resize/reposition this plaza as a side effect of a
+// fountain-only move. FOUNTAIN_ANCHOR freezes the leaf lookup at the
+// fountain's pre-2026-08-27 position (25, 148) — not a live reference to
+// fountainZone — so this plaza's geometry can never change no matter where
+// fountain_zone itself moves. Update FOUNTAIN_ANCHOR by hand (not
+// fountainZone) if the plaza is ever deliberately asked to move again.
+const FOUNTAIN_ANCHOR: Point = { x: 25, z: 148 }
+const fountainLeaf = keptLeaves.find((r) => leafContainsPoint(r, FOUNTAIN_ANCHOR))
 const CHURCH_BLOCK_PLAZA_SOUTH_MARGIN = 3 // gap kept clear from the leaf's own south edge
 const CHURCH_SOUTH_EDGE_OVERLAP = 2 // how far past the church's entrance edge the plaza is allowed to reach
 const churchBlockPlaza = fountainLeaf ? (() => {
