@@ -110,7 +110,6 @@ export interface CityHandle {
   /** Ambient decoration-building construction loop. See CitySceneHandle. */
   playAmbientCycle(
     buildingId: string,
-    count: number,
     staggerMs: number,
     onComplete?: () => void
   ): void
@@ -200,8 +199,8 @@ export const City = forwardRef<CityHandle, CityProps>(function City(
       rendererRef.current?.playConstructionMontage(buildingId, count, staggerMs, onComplete)
     },
 
-    playAmbientCycle(buildingId, count, staggerMs, onComplete) {
-      rendererRef.current?.playAmbientCycle(buildingId, count, staggerMs, onComplete)
+    playAmbientCycle(buildingId, staggerMs, onComplete) {
+      rendererRef.current?.playAmbientCycle(buildingId, staggerMs, onComplete)
     },
 
     stopAmbientCycle(buildingId) {

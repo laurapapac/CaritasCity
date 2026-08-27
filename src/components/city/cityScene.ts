@@ -686,11 +686,16 @@ export interface CitySceneHandle {
    * single shared one, so any number of these can run concurrently with
    * each other AND with a real user's own placement montage without
    * canceling one another. Purely cosmetic — never touches completedBlocks.
+   * Reveals exactly one block per staggerMs tick (2026-08-27, user request —
+   * an earlier version took a caller-supplied tick count and batched
+   * multiple blocks per tick to hit it, which read as "a handful of blocks
+   * per second" once the truncated span grew large enough to be visible;
+   * duration is now simply span seconds, so bigger buildings take
+   * proportionally longer, which reads as reasonable rather than rushed).
    * Calls onComplete once the reveal finishes.
    */
   playAmbientCycle(
     buildingId: string,
-    ticks: number,
     staggerMs: number,
     onComplete?: () => void
   ): void
@@ -1116,7 +1121,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     // invisible on anything bigger than a house. When the resulting span is
     // larger than `ticks`, multiple blocks reveal per tick so the cycle's
     // visible duration still matches `ticks`, not the raw block count.
-    playAmbientCycle(buildingId, ticks, staggerMs, onComplete) {
+    playAmbientCycle(buildingId, staggerMs, onComplete) {
       const existing = ambientTimeouts.get(buildingId)
       if (existing) clearTimeout(existing)
 
@@ -1164,7 +1169,12 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
       rebuildNode(node, start)
 
-      const perTick = Math.max(1, Math.ceil(span / Math.max(1, ticks)))
+      // Exactly one block per tick (2026-08-27, user request — batching
+      // multiple blocks per tick to hit a caller-supplied duration read as
+      // "a handful of blocks per second" once span grew large enough to be
+      // visible; see this method's own doc comment). Duration is simply
+      // span seconds — bigger buildings take proportionally longer, which
+      // reads as reasonable rather than rushed.
       let i = start
       const step = () => {
         // Unlike playConstructionMontage's replay steps (highlight off — the
@@ -1174,7 +1184,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         // is highlighted: this effect has no camera-follow to make it
         // legible, so the yellow pop-then-fade is the only cue a viewer
         // scanning the city gets that something's under construction here.
-        for (let k = 0; k < perTick && i < total; k++, i++) revealBlockAt(node, i)
+        revealBlockAt(node, i)
+        i++
         if (i >= total) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
         ambientTimeouts.set(buildingId, setTimeout(step, staggerMs))
       }

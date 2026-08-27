@@ -56,22 +56,22 @@ const POOL_SIZE = 65
 // 50 wasn't reachable before this change.
 const MIN_SEPARATION = 60
 
-// One block per second (user request). REVEAL_COUNT controls DURATION (how
-// many staggerMs ticks the visible activity lasts), not how many blocks get
-// truncated — cityScene.ts's playAmbientCycle sizes the actual truncated
-// span as a percentage of each building's own block count (so it reads as a
-// real gap on an 8,000-block hospital and not just a 1,080-block house),
-// batching multiple blocks into a tick when that span is bigger than
-// REVEAL_COUNT, so duration stays consistent across building sizes
-// regardless of how big the span ends up being. The truncation always
-// reaches the true top of the blueprint (never an isolated mid-building
-// window — see cityScene.ts's playAmbientCycle for why that doesn't render
-// visibly from the kiosk's normal camera angle), with the truncation point
-// randomized so the amount "already built" below the activity varies cycle
-// to cycle instead of always starting from 0.
+// One block per second, literally (user request, 2026-08-27 — an earlier
+// version took a caller-supplied duration and had cityScene.ts batch
+// multiple blocks into a tick to hit it, which read as "a handful of blocks
+// per second" once the truncated span grew large enough to be visible; see
+// cityScene.ts's playAmbientCycle doc comment). cityScene.ts sizes the
+// truncated span as a percentage of each building's own block count (so it
+// reads as a real gap on an 8,000-block hospital and not just a 1,080-block
+// house) and reveals it strictly one block per STAGGER_MS, so duration is
+// simply span seconds — bigger buildings now take proportionally longer to
+// "finish," rather than being sped up to fit a fixed window. The truncation
+// always reaches the true top of the blueprint (never an isolated
+// mid-building window — see cityScene.ts's playAmbientCycle for why that
+// doesn't render visibly from the kiosk's normal camera angle), with the
+// truncation point randomized so the amount "already built" below the
+// activity varies cycle to cycle instead of always starting from 0.
 const STAGGER_MS = 1000
-const REVEAL_COUNT_MIN = 20
-const REVEAL_COUNT_MAX = 45
 
 // Pause after a cycle completes, before that site hands off to the next
 // building — long enough to read as "finished," not so long the rotation
@@ -142,8 +142,7 @@ export function useAmbientDecorConstruction(
 
     function startCycle(building: CityBuilding) {
       if (cancelled) return
-      const count = Math.round(randBetween(REVEAL_COUNT_MIN, REVEAL_COUNT_MAX))
-      cityRef.current?.playAmbientCycle(building.id, count, STAGGER_MS, () => {
+      cityRef.current?.playAmbientCycle(building.id, STAGGER_MS, () => {
         if (cancelled) return
         const t = setTimeout(() => {
           if (cancelled) return
