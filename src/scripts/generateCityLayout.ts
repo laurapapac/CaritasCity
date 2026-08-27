@@ -231,23 +231,16 @@ const RESERVED_ZONES: ReservedZone[] = [
   // outside park_north's own circle (center -40,175, r20 — distance from the
   // new center is ~42).
   { id: "church_zone",   kind: "landmark", x: 0,  z: 182, radius: 25 },
-  // Moved north three times now (110->130 first follow-up, ->148 second,
-  // ->154 third — 2026-08-27, user request: "next to the church." The
-  // church's own third move, above in file order but same day as the
-  // fountain's first two, was explicitly church-only and this deliberately
-  // did NOT follow it then, so the gap had grown back to a real 34 units
-  // before this move closed most of it back up. x unchanged — only ever the
-  // z/"y axis" moves. 154 keeps a real ~3 unit clearance to the church's true south
-  // (entrance) wall at 162.5 (CHURCH_POSITION.z=182 + CHURCH_SOUTH_EDGE_OFFSET
-  // -19.5, see CHURCH_POSITION's own comment below) once the fountain's own
-  // ~5.5-unit basin radius (generateFountain, R=5 + 0.5 voxel-center margin)
-  // is accounted for — deliberately tight, matching this project's established
-  // "next to" precedent (CHURCH_ONLY_SHIFT below left a similar ~1.6 unit
-  // gap), not overlapping. Still well clear of the church's footprint in x
-  // (nave+tower span -9.5 to 9.5; fountain at x=25 sits 15.5 units east of
-  // that wall regardless of z). Keep staticCityData.ts's FOUNTAIN_POSITION in
-  // sync (see its own comment).
-  { id: "fountain_zone", kind: "landmark", x: 25, z: 154, radius: 15 },
+  // Moved north twice now (110->130 first follow-up, ->148 second, both
+  // 2026-08-21, x unchanged — only ever the z/"y axis" moves) — the church's
+  // third move (above, same day) was explicitly church-only ("push the
+  // church north," fountain not mentioned), so this deliberately did NOT
+  // move again to match; the gap between them is real again. Still well
+  // clear of the church's footprint in x (nave+tower span -9.5 to 9.5;
+  // fountain at x=25 sits 15.5 units east of that wall regardless of z).
+  // Keep staticCityData.ts's FOUNTAIN_POSITION in sync (see its own
+  // comment).
+  { id: "fountain_zone", kind: "landmark", x: 25, z: 148, radius: 15 },
 ]
 
 // ── Roads: recursive block subdivision (BSP), not a curve or a graph over
@@ -1025,13 +1018,16 @@ const ZONE_BUFFER_SQ_UNITS_PER_TREE = 100
 // if the church's own shape/dimensions ever change.
 //
 // CHURCH_POSITION_BASE_Z/CHURCH_FOUNTAIN_SHIFT (2026-08-21, fourth
-// follow-up) — user asked to nudge church+fountain further north as one
-// rigid group. CHURCH_POSITION_BASE_Z is the pre-shift reference;
-// CHURCH_FOUNTAIN_SHIFT is added once to get the real current position.
-// (Historical note: this pair also used to anchor churchBlockPlaza's own
-// sizing, to keep the plaza a fixed size across this and later shifts — that
-// approach was replaced 2026-08-27 with a direct churchLeaf/CHURCH_SOUTH_EDGE
-// computation instead, see churchBlockPlaza's own comment for why.)
+// follow-up) — user asked to nudge church+fountain+plaza further north as
+// one rigid group, WITHOUT the plaza growing the way it did last time (that
+// growth was a side effect of the plaza's north edge tracking the church's
+// position while its south edge stayed pinned to the fixed leaf boundary —
+// moving the church north just stretched the gap between them bigger).
+// Fixed by keeping the *_BASE_Z constants as the original, pre-shift
+// reference the plaza's own size is still computed from (see
+// churchBlockPlaza below), then adding CHURCH_FOUNTAIN_SHIFT once to every
+// final z (church, fountain, plaza alike) — a true rigid translation, size
+// unchanged.
 //
 // CHURCH_ONLY_SHIFT (2026-08-21, fifth follow-up) — user asked to push the
 // church alone closer to the road/trees behind it (less empty space north
@@ -1051,6 +1047,7 @@ const CHURCH_ONLY_SHIFT = 4
 const CHURCH_POSITION: Point = { x: 0, z: CHURCH_POSITION_BASE_Z + CHURCH_FOUNTAIN_SHIFT + CHURCH_ONLY_SHIFT }
 const CHURCH_SOUTH_EDGE_OFFSET = -19.5
 const CHURCH_SOUTH_EDGE = CHURCH_POSITION.z + CHURCH_SOUTH_EDGE_OFFSET
+const CHURCH_SOUTH_EDGE_BASE = CHURCH_POSITION_BASE_Z + CHURCH_SOUTH_EDGE_OFFSET
 const CHURCH_TREE_CLEARANCE = 24
 
 // True when `point` falls inside leaf `r` — used to find the one BSP leaf a
@@ -1353,58 +1350,6 @@ function generatePlazas(blocks: BlockState[]): (Point & { id: string; radius: nu
 }
 
 interface Circle { x: number; z: number; radius: number }
-
-// Ring of lamps + a few benches around the church-block plaza (2026-08-27,
-// user request alongside moving the fountain closer to the church — see
-// fountain_zone's own comment, above, in RESERVED_ZONES). Same "small
-// dedicated generator" pattern as churchLeafLamps/churchBlockPlaza further
-// down, since this plaza sits on a zone-excluded leaf that
-// generateLampPosts/generateBenches (which only ever look at `blocks`, i.e.
-// normal buildable leaves) never reach on their own.
-//
-// Both lamps and benches sit in fixed rings OUTSIDE the plaza's own radius,
-// not scattered inside it — tried an inside/rejection-sampled ring first
-// (avoiding a circle around the fountain), but this plaza is centered on and
-// sized to just contain the fountain itself (radius 6 vs. the fountain's own
-// ~5.5-unit footprint, generateFountain's R=5 + voxel-center margin), so
-// there's barely any real interior floor space left once the fountain's own
-// clearance is excluded — nearly the whole inside-ring circle fell inside
-// that exclusion, and every bench that survived rejection sampling clumped
-// into the one narrow arc that didn't (verified live: 3 benches within a
-// couple units of each other instead of spread around). Two concentric
-// outside rings sidesteps the problem entirely — no exclusion zone needed,
-// since anything outside the plaza radius already clears the fountain by
-// construction. Benches sit on the inner ring (closer to the fountain, more
-// naturally "at the plaza"), lamps on the outer one, and benches are angle-
-// offset from the lamps (not literally under a lamp post).
-const PLAZA_LAMP_COUNT = 6
-const PLAZA_LAMP_RING_MARGIN = 2 // how far outside the plaza's own radius the lamp ring sits
-const PLAZA_BENCH_COUNT = 3
-const PLAZA_BENCH_RING_MARGIN = 1 // how far outside the plaza's own radius the bench ring sits — inside the lamp ring
-
-function generatePlazaRingFurniture(
-  plaza: Point & { radius: number }
-): { lamps: OrientedPoint[]; benches: OrientedPoint[] } {
-  const lamps: OrientedPoint[] = []
-  for (let i = 0; i < PLAZA_LAMP_COUNT; i++) {
-    const theta = (i / PLAZA_LAMP_COUNT) * Math.PI * 2
-    const r = plaza.radius + PLAZA_LAMP_RING_MARGIN
-    const x = plaza.x + Math.sin(theta) * r, z = plaza.z + Math.cos(theta) * r
-    lamps.push({ x: Math.round(x), z: Math.round(z), angle: Math.atan2(plaza.x - x, plaza.z - z) })
-  }
-
-  // Every other lamp angle, offset by half a lamp-spacing, so a bench never
-  // sits directly under a lamp post.
-  const benches: OrientedPoint[] = []
-  const benchStep = PLAZA_LAMP_COUNT / PLAZA_BENCH_COUNT
-  for (let i = 0; i < PLAZA_BENCH_COUNT; i++) {
-    const theta = ((i * benchStep + 0.5) / PLAZA_LAMP_COUNT) * Math.PI * 2
-    const r = plaza.radius + PLAZA_BENCH_RING_MARGIN
-    const x = plaza.x + Math.sin(theta) * r, z = plaza.z + Math.cos(theta) * r
-    benches.push({ x: Math.round(x), z: Math.round(z), angle: Math.atan2(plaza.x - x, plaza.z - z) })
-  }
-  return { lamps, benches }
-}
 
 // Scatter trees across a park's own tile union instead of a disc — matches
 // the park's actual (now block-shaped, not circular) silhouette so trees
@@ -1862,86 +1807,58 @@ const bushes: Point[] = []
 const churchLeaf = keptLeaves.find((r) => leafContainsPoint(r, CHURCH_POSITION))
 const churchLeafLamps = churchLeaf ? generateLeafBorderLamps(churchLeaf, roadSegments) : []
 const lakeEastLeafLamps = lakeEastLeaf ? generateLeafBorderLamps(lakeEastLeaf, roadSegments) : []
+const lampPosts = [...generateLampPosts(new RNG(SEED + 3), blocks), ...churchLeafLamps, ...lakeEastLeafLamps]
+const benches = generateBenches(new RNG(SEED + 4), blocks)
 
 // Hand-placed plaza for the church block's south part (2026-08-21, user
 // request) — generatePlazas only ever looks at `blocks` (buildable leaves),
-// and this whole block is zone-excluded (church_zone/fountain_zone), so it'd
-// never get one automatically.
+// and the fountain's own leaf is zone-excluded, so it'd never get one
+// automatically. sized to fit the leaf's own depth exactly rather than
+// reusing generatePlazas' fixed MIN_PLAZA_AREA/0.8 formula, which assumes a
+// leftover shelf rect roughly as wide as it is deep — this gap is much wider
+// than it is deep.
 //
-// Rebased onto churchLeaf/CHURCH_SOUTH_EDGE directly (2026-08-27, real bug
-// fix, not a stylistic tweak — found while moving the fountain closer to the
-// church per user request). The previous version sized this plaza from
-// fountainLeaf (whichever BSP leaf the fountain's own coordinate happened to
-// fall inside) and a preserved-across-shifts CHURCH_SOUTH_EDGE_BASE
-// reference, on the assumption fountainLeaf would always be a wide-open
-// southern leaf distinct from the church's own. That assumption silently
-// broke the moment the fountain moved north far enough to cross into the
-// SAME leaf the church itself sits in (churchLeaf, z 148.79..207.06,
-// measured live): fountainLeaf became churchLeaf, so fountainLeaf.z0 jumped
-// from ~103 to ~148.79, and CHURCH_SOUTH_EDGE_BASE (150.5, computed from the
-// church's own long-superseded pre-shift position) left less than 1 unit of
-// depth between the two — availableDepth's own `< 8` guard correctly caught
-// this as "not enough room" and returned an empty plaza (verified live via
-// temporary debug logging: `1 plazas` instead of the expected `2`, all
-// church-plaza furniture below silently dropping to 0). Using churchLeaf
-// directly (the real, current leaf both church and fountain now share) and
-// CHURCH_SOUTH_EDGE (the real, current entrance z — not the "_BASE" ghost
-// value that only ever existed to keep this plaza's size constant across the
-// church's OWN past shifts, a concern that no longer applies now this is
-// computed fresh from real current geometry) gives a real, moderately-sized
-// plaza (~radius 6, comfortably fitting between the leaf's own south edge
-// and the entrance) instead of silently vanishing. Deliberately no longer
-// preserves the old (much larger, ~radius 23) size — that size was itself
-// only ever a byproduct of the old fountainLeaf misidentification, not a
-// deliberate design target.
+// Enlarged (2026-08-21, follow-up user request) — the fountain moving right
+// up next to the church left most of this leaf's depth open, not just a
+// sliver south of the fountain, so the plaza's north edge reached
+// CHURCH_SOUTH_EDGE_OVERLAP past the church's own south edge (its entrance)
+// instead of stopping short of the fountain — explicitly fine per the user
+// ("the edge of the plaza circle can be near the church entrance, that is
+// not a problem"). The fountain ends up inside/on the plaza's own footprint
+// (a fountain-in-a-plaza is the more natural reading anyway).
+//
+// Sized from *_BASE, positioned with CHURCH_FOUNTAIN_SHIFT added after
+// (2026-08-21, fourth follow-up) — an earlier version computed size AND
+// position together straight from the (already-shifted) church/leaf
+// geometry, so every time the church moved further north the plaza grew
+// instead of just translating — its north edge chased the church while its
+// south edge stayed pinned to the fixed leaf boundary. User asked for a pure
+// move this time, size unchanged: radius/center are computed once from the
+// ORIGINAL pre-shift geometry (CHURCH_SOUTH_EDGE_BASE, fountainLeaf.z0 —
+// the leaf boundary itself never moves regardless of shift), giving the
+// exact same size as the last commit, and CHURCH_FOUNTAIN_SHIFT is added
+// only to the final z — a rigid translation matching the church/fountain's
+// own move, not a resize.
+const fountainLeaf = keptLeaves.find((r) => leafContainsPoint(r, { x: fountainZone.x, z: fountainZone.z }))
 const CHURCH_BLOCK_PLAZA_SOUTH_MARGIN = 3 // gap kept clear from the leaf's own south edge
 const CHURCH_SOUTH_EDGE_OVERLAP = 2 // how far past the church's entrance edge the plaza is allowed to reach
-const churchBlockPlaza = churchLeaf ? (() => {
-  const southEdge = churchLeaf.z0 + CHURCH_BLOCK_PLAZA_SOUTH_MARGIN
-  const northEdge = CHURCH_SOUTH_EDGE + CHURCH_SOUTH_EDGE_OVERLAP
+const churchBlockPlaza = fountainLeaf ? (() => {
+  const southEdge = fountainLeaf.z0 + CHURCH_BLOCK_PLAZA_SOUTH_MARGIN
+  const northEdge = CHURCH_SOUTH_EDGE_BASE + CHURCH_SOUTH_EDGE_OVERLAP
   const availableDepth = northEdge - southEdge
   if (availableDepth < 8) return [] // not enough room to bother
-  // Centered on the fountain's own x (not the leaf's x-midpoint, ~18 units
-  // west of it — harmless with the old radius-23 plaza, which was big enough
-  // to reach the fountain regardless of where it was centered, but a real
-  // miss now that the radius is realistically sized: a small circle centered
-  // on the leaf's midpoint would render nowhere near the fountain at all).
-  // Width constraint is the fountain's own clearance to the nearer leaf
-  // edge, not the leaf's full width, for the same reason.
-  const widthClearance = Math.min(fountainZone.x - churchLeaf.x0, churchLeaf.x1 - fountainZone.x)
-  const radius = Math.round(Math.min(availableDepth, widthClearance * 2) / 2)
+  const radius = Math.round(Math.min(availableDepth, fountainLeaf.x1 - fountainLeaf.x0) / 2)
   return [{
     id: "plaza_church_block",
-    x: Math.round(fountainZone.x),
-    z: Math.round((southEdge + northEdge) / 2),
+    x: Math.round((fountainLeaf.x0 + fountainLeaf.x1) / 2),
+    z: Math.round((southEdge + northEdge) / 2) + CHURCH_FOUNTAIN_SHIFT,
     radius,
   }]
 })() : []
-
-// Lamps + benches around the church-block plaza itself (2026-08-27, user
-// request alongside moving the fountain closer to the church — see
-// generatePlazaRingFurniture's own doc comment above). Needs churchBlockPlaza
-// to already exist, which is why this whole block was reordered ahead of
-// lampPosts/benches below rather than appended after, like everything else
-// in this file that depends on the plaza (e.g. churchLeafLamps did not need
-// reordering since it only depends on churchLeaf, not the plaza itself).
-const plazaFurniture = churchBlockPlaza.length > 0
-  ? generatePlazaRingFurniture(churchBlockPlaza[0])
-  : { lamps: [], benches: [] }
-
-const lampPosts = [
-  ...generateLampPosts(new RNG(SEED + 3), blocks),
-  ...churchLeafLamps,
-  ...lakeEastLeafLamps,
-  ...plazaFurniture.lamps,
-]
-const benches = [...generateBenches(new RNG(SEED + 4), blocks), ...plazaFurniture.benches]
-
 const plazas = [...generatePlazas(blocks), ...churchBlockPlaza]
 console.log(`Furniture: ${bushes.length} bushes, ${lampPosts.length} lamp posts ` +
-  `(${churchLeafLamps.length} along the church's block, ${lakeEastLeafLamps.length} along lake_east's, ` +
-  `${plazaFurniture.lamps.length} around the plaza), ` +
-  `${benches.length} benches (${plazaFurniture.benches.length} around the plaza), ${plazas.length} plazas`)
+  `(${churchLeafLamps.length} along the church's block, ${lakeEastLeafLamps.length} along lake_east's), ` +
+  `${benches.length} benches, ${plazas.length} plazas`)
 
 verifyNoOverlaps(placed)
 
