@@ -50,13 +50,18 @@ import {
 // x=25, unaffected by any of this — every fountain move so far has only
 // ever changed z/"y axis", never x, per explicit user request), within the
 // same buffer leaf, clear of the leaf's real roads and the zone-buffer/road
-// tree clearances. Moved north twice now (z 110->130 first follow-up,
-// ->148 second) — NOT moved to match the church's third move (that request
-// was church-only), so the gap between them has reopened again. MUST stay
-// in sync with generateCityLayout.ts's church_zone/fountain_zone
-// (RESERVED_ZONES), which that script's own comments reiterate.
+// tree clearances. Moved north three times now (z 110->130 first follow-up,
+// ->148 second, ->154 third — 2026-08-27, user request: "next to the
+// church" — the church's own third move, above, was explicitly church-only and
+// this deliberately did NOT follow it then, so the gap had grown back to a
+// real 34 units before this move closed most of it back up, leaving a real
+// but deliberately tight ~3 unit clearance to the church's south/entrance
+// wall — see generateCityLayout.ts's fountain_zone comment for the exact
+// measurement). MUST stay in sync with generateCityLayout.ts's
+// church_zone/fountain_zone (RESERVED_ZONES), which that script's own
+// comments reiterate.
 const CHURCH_POSITION = { x: 0, z: 182 }
-const FOUNTAIN_POSITION = { x: 25, z: 148 }
+const FOUNTAIN_POSITION = { x: 25, z: 154 }
 
 function buildLandmark(variant: string, id: string, position: { x: number; z: number }): CityBuilding {
   const blueprint = blueprintForVariant(variant, "school", 0)
