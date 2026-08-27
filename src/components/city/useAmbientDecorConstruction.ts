@@ -29,32 +29,40 @@ import type { CityBuilding } from "./types"
 
 // How many decoration buildings are actively mid-cycle at once, and the
 // size of the candidate pool they're drawn from/rotated back into.
-// User-specified (2026-08-26, raised from the original 5/7): 5 concurrent
-// sites were too hard to spot in a city of ~300 buildings. Checked against
-// the real STATIC_DECOR_BUILDINGS data (305 buildings as of this change,
-// up from the 138 at 2026-08-19 — the city's grown since) before picking
-// these: at MIN_SEPARATION=60, a random ordering achieves a spread-out pool
-// of 60-68 citywide in every trial tested, comfortably above POOL_SIZE=65
-// with real margin for CONCURRENT_SITES=50 + a reserve for rotation. This
-// isn't CPU/GPU-bound at these numbers — each site only touches its own
-// building's instance buffer once a second, and mesh count doesn't change
-// with pool size (every building already has a pre-allocated mesh pair
-// regardless of ambient state) — the real ceiling is geometric: how many of
-// the city's decoration buildings can be spread MIN_SEPARATION apart.
-const CONCURRENT_SITES = 50
-const POOL_SIZE = 65
+// Raised a third time (2026-08-27, same-day follow-up, user request: 90
+// concurrent still wasn't noticeable enough) — checked first whether this
+// was even geometrically possible: only 305 decoration buildings exist in
+// the whole city (see the "how many deco buildings" answer earlier this
+// session), and a standalone script running pickPool's exact greedy
+// algorithm found a sharp cliff in the real STATIC_DECOR_BUILDINGS position
+// data right around the buildings' own median nearest-neighbor spacing
+// (~22 units, previously only estimated, now confirmed by the cliff itself):
+// MIN_SEPARATION 23 reliably reached 209-219 over 200 trials, but 22 jumped
+// straight to 286-287 — meaning 22 and below barely enforces separation at
+// all (most of the city's buildings already qualify), so 200+ concurrent
+// sites was reachable but would mean most active/nearby sites sitting right
+// next to each other, defeating the point of a spread-out pool. 180
+// concurrent (this value) fits well inside the real 23-separation ceiling
+// with genuine reserve to spare. Still isn't CPU/GPU-bound at these
+// numbers — each site only touches its own building's instance buffer once
+// a second, and mesh count doesn't change with pool size (every building
+// already has a pre-allocated mesh pair regardless of ambient state) — the
+// real ceiling is geometric: how many of the city's decoration buildings
+// can be spread MIN_SEPARATION apart without exhausting the real 305.
+const CONCURRENT_SITES = 180
+const POOL_SIZE = 200
 
 // User request (2026-08-26): scattered across the whole city, not
 // clustered near one point (see ANCHOR's removal below) — the pool no
 // longer needs each pick to be "a few city blocks" from a shared center,
-// just spread from EACH OTHER. Checked empirically against the real
-// STATIC_DECOR_BUILDINGS data (median nearest-neighbor distance ~22 units)
-// — 60 is comfortably above that, so it actually spreads picks out instead
-// of clustering, while still being loose enough to reach POOL_SIZE=65 (see
-// above). Lower than the original 120, which was tuned for a single
-// point-anchored pool of 7 and was already the reason a citywide pool of
-// 50 wasn't reachable before this change.
-const MIN_SEPARATION = 60
+// just spread from EACH OTHER. Dropped 35->23 (2026-08-27, alongside
+// CONCURRENT_SITES/POOL_SIZE both rising above — see their own comment for
+// the actual measured trial numbers, including the real cliff found right
+// below this value) to fit the bigger pool: 35 only supports ~110-125
+// total, nowhere near the 200 now needed. This is close to the buildings'
+// own real median nearest-neighbor distance, so it's near the practical
+// floor for "still a real separation, not just every building qualifying."
+const MIN_SEPARATION = 23
 
 // One block per second, literally (user request, 2026-08-27 — an earlier
 // version took a caller-supplied duration and had cityScene.ts batch

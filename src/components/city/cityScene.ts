@@ -1129,9 +1129,6 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       if (!node) { onComplete?.(); return }
 
       const total = node.blocks.length
-      const pct = AMBIENT_REVEAL_PCT_MIN + Math.random() * (AMBIENT_REVEAL_PCT_MAX - AMBIENT_REVEAL_PCT_MIN)
-      const span = Math.min(total, Math.max(AMBIENT_REVEAL_MIN_BLOCKS, Math.round(total * pct)))
-      if (span <= 0) { onComplete?.(); return }
 
       // The truncated-then-rebuilt region MUST reach the true top of the
       // blueprint (start..total), never an isolated mid-building window
@@ -1156,16 +1153,33 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       // normal camera angle; an obvious, unmistakable hole for a
       // top-reaching truncation at the same angle.
       //
-      // `start` still gets randomized (not fixed at total-span) so the
-      // amount "already built" below the visible activity varies cycle to
-      // cycle — reusing playConstructionMontage's own proven rebuildNode
-      // prefix-truncation mechanism, just starting from a random partway
-      // point instead of always 0 (see AMBIENT_REVEAL_PCT_MIN/MAX above for
-      // why this needs to be a much bigger fraction than the old isolated
-      // window: a suffix anchored at the roof needs real size to read as
-      // "still under construction" rather than "the last few roof shingles"
-      // — the 2026-08-26 complaint this whole redesign is fixing).
-      const start = Math.max(0, total - span)
+      // Two starting-point modes, ~50/50 by coin flip each cycle (2026-08-27,
+      // user request — with CONCURRENT_SITES raised to 90, having every site
+      // start "near the top" read as too uniform across the whole pool).
+      // Both still truncate all the way through to the true top — the coin
+      // flip only changes WHERE that truncation starts, never re-introduces
+      // an isolated window:
+      //  - "near-top": the original behavior, AMBIENT_REVEAL_PCT_MIN/MAX
+      //    (15-35%) of the building already missing — a substantial, quick
+      //    finish.
+      //  - "near-bottom": starts around block ~200 regardless of building
+      //    size (a real house is 1,080 blocks minimum, so 200 always leaves
+      //    genuine room below it) — reveals nearly the entire building from
+      //    scratch, reading as a site that's still early in construction.
+      //    This is a much longer cycle for a big building (span is total-200,
+      //    e.g. ~7,800 blocks/seconds for an 8,000-block hospital) — accepted
+      //    deliberately, consistent with this project's established "cycle
+      //    duration doesn't matter, only perceived activity does" stance.
+      const useNearBottomStart = Math.random() < 0.5
+      let start: number
+      if (useNearBottomStart) {
+        start = Math.min(total - AMBIENT_REVEAL_MIN_BLOCKS, Math.round(150 + Math.random() * 100))
+      } else {
+        const pct = AMBIENT_REVEAL_PCT_MIN + Math.random() * (AMBIENT_REVEAL_PCT_MAX - AMBIENT_REVEAL_PCT_MIN)
+        const span = Math.min(total, Math.max(AMBIENT_REVEAL_MIN_BLOCKS, Math.round(total * pct)))
+        start = Math.max(0, total - span)
+      }
+      if (start >= total) { onComplete?.(); return }
 
       rebuildNode(node, start)
 
