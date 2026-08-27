@@ -62,6 +62,7 @@
 import * as THREE from "three"
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js"
 import type { CityDecor, MeadowShape, MountainPeak, OrientedMarker, TerrainData } from "./types"
+import { BLOCK_TEX } from "./utils"
 
 const LAKE_COLOR = 0x3a7bd5
 const ROAD_COLOR = 0x555a5e
@@ -208,6 +209,14 @@ function layerOffsets(dy: number, layer: { dx: number; dz: number }[]): { dx: nu
 // ellipsoid) is dropped in favor of shaping its cube stack itself
 // narrower/taller — stretching cubes anisotropically would read as slabs,
 // not blocks.
+//
+// Canopy cubes get BLOCK_TEX (2026-08-27, user request — treetop voxels read
+// as flat solid color next to the buildings' own textured blocks). Same
+// texture/material technique cityScene.ts already uses for building voxels
+// (utils.ts's makeBlockTexture: per-face edge bevel + grain, multiplied with
+// the material's base color) — colors themselves are unchanged, this only
+// adds the map. Trunks are left plain (smooth CylinderGeometry, not a voxel
+// shape, so the "chunky block" texture wouldn't make sense there).
 function buildTreeTypes(): TreeType[] {
   const trunkBrown = new THREE.MeshLambertMaterial({ color: 0x6b4a2f })
   const trunkBirch = new THREE.MeshLambertMaterial({ color: 0xd9d3c1 })
@@ -219,7 +228,7 @@ function buildTreeTypes(): TreeType[] {
         cubeSize: 1.5, baseY: 2.1,
         offsets: [...layerOffsets(0, CROSS_LAYER), ...layerOffsets(1, CROSS_LAYER), { dx: 0, dy: 2, dz: 0 }],
       },
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0x5a9c4a }),
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0x5a9c4a, map: BLOCK_TEX }),
     },
     { // flowering/blossom, soft pink — the "it's spring" tree, same blob shape as deciduous
       trunkGeo: new THREE.CylinderGeometry(0.28, 0.36, 2, 6), trunkMat: trunkBrown, trunkY: 1,
@@ -227,7 +236,7 @@ function buildTreeTypes(): TreeType[] {
         cubeSize: 1.4, baseY: 2.0,
         offsets: [...layerOffsets(0, CROSS_LAYER), ...layerOffsets(1, CROSS_LAYER), { dx: 0, dy: 2, dz: 0 }],
       },
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0xf0b6d2 }),
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0xf0b6d2, map: BLOCK_TEX }),
     },
     { // fresh yellow-green deciduous, smaller/bushier — 2-layer stack, no cap
       trunkGeo: new THREE.CylinderGeometry(0.3, 0.4, 1.8, 6), trunkMat: trunkBrown, trunkY: 0.9,
@@ -235,7 +244,7 @@ function buildTreeTypes(): TreeType[] {
         cubeSize: 1.3, baseY: 2.45,
         offsets: [...layerOffsets(0, CROSS_LAYER), ...layerOffsets(1, CROSS_LAYER)],
       },
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0x9bcf55 }),
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0x9bcf55, map: BLOCK_TEX }),
     },
     { // birch — pale trunk, narrow/tall canopy (narrow via shape, not stretched cubes)
       trunkGeo: new THREE.CylinderGeometry(0.25, 0.3, 2.4, 6), trunkMat: trunkBirch, trunkY: 1.2,
@@ -248,7 +257,7 @@ function buildTreeTypes(): TreeType[] {
           { dx: 0, dy: 3, dz: 0 },
         ],
       },
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0xbadb8e }),
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0xbadb8e, map: BLOCK_TEX }),
     },
     { // conifer — tiered pyramid (wide base tapering to a point), minority type
       trunkGeo: new THREE.CylinderGeometry(0.35, 0.5, 2, 6), trunkMat: trunkBrown, trunkY: 1,
@@ -262,7 +271,7 @@ function buildTreeTypes(): TreeType[] {
           { dx: 0, dy: 2, dz: 0 },
         ],
       },
-      foliageMat: new THREE.MeshLambertMaterial({ color: 0x3a7a3f }),
+      foliageMat: new THREE.MeshLambertMaterial({ color: 0x3a7a3f, map: BLOCK_TEX }),
     },
   ]
 }
