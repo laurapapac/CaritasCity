@@ -114,7 +114,8 @@ export default function DevPreview() {
     const target = idx + 1;
     setCount(target);
     cityRef.current?.setVisibleCount(variant.key, target);
-    cityRef.current?.focusOnBlock(variant.key, idx, { highlight: true });
+    cityRef.current?.focusOnBlock(variant.key, idx);
+    cityRef.current?.markOwnBlock(variant.key, idx);
   }
 
   function handleCountChange(next: number) {
@@ -127,7 +128,8 @@ export default function DevPreview() {
   // Mirrors Kiosk.tsx's handleConfirm exactly (same shared montage constants,
   // same call sequence): camera focuses on where the new block will land,
   // then the last MONTAGE_BLOCK_COUNT blocks replay with a stagger, then —
-  // after a beat — the genuinely new block reveals with its highlight.
+  // after a beat — the genuinely new block reveals (drops in) and gets
+  // marked as "your own block".
   function handleSimulatePlacement() {
     if (isSimulating || count >= variant.totalBlocks) return;
 
@@ -140,6 +142,7 @@ export default function DevPreview() {
       () => {
         setTimeout(() => {
           cityRef.current?.addBlockToBuilding(variant.key);
+          cityRef.current?.markOwnBlock(variant.key, count);
           setCount((c) => c + 1);
           setIsSimulating(false);
         }, MONTAGE_FINAL_BLOCK_DELAY_MS);

@@ -6,11 +6,58 @@ import type { Block, Blueprint } from "./types"
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const GLASS_HEX      = 0x90c8d8
-export const HIGHLIGHT_HEX  = 0xffff44
-// Long enough to survive real-world reaction time: type a 6-char code, wait for
-// the API round-trip, then actually find the right spot on a wall that may now
-// have many other blocks in frame (see FOCUS_OFFSET in cityScene.ts).
-export const HIGHLIGHT_DUR  = 5.0   // seconds
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drop-in placement animation (revealBlockAt) — shared by a real user's own
+// placement (addBlock, played once camera is already framed on the block) and
+// the ambient decoration-construction loop (playAmbientCycle). The block
+// falls from above and lands with a hard stop — no squash/bounce (2026-08-28,
+// user feedback: read as too bouncy). Real (accelerating) gravity physics:
+// distance fallen grows with t³, so it starts slow and speeds up hard into
+// the landing (2026-08-28: an earlier ease-out version, which starts fast and
+// slows down, was a wrong-direction fix for a genuine ease-in bug — the
+// previous ease-in was paired with too short a duration/too tall a drop, so
+// almost all the perceptible motion got compressed into the fall's last
+// sliver of time; the real fix was slowing the whole fall down, not flipping
+// the curve). Cubic rather than quadratic (2026-08-28, follow-up user
+// feedback: the overall fall read as too slow, but the slow start itself was
+// liked and shouldn't just get uniformly sped up) — t³ keeps the first ~0.2s
+// nearly identical in real time to the old t²/0.5s curve (actually a touch
+// slower), then accelerates harder through the back half so it lands in
+// DROP_FALL_DUR instead of dragging out.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// World units the block falls from above its resting position.
+export const DROP_HEIGHT = 3.0
+// Fall duration, seconds. 0.5→0.38 (2026-08-28, user feedback: too slow
+// overall) — paired with the t³ curve above so the cut comes out of the
+// back half of the fall, not the slow start.
+export const DROP_FALL_DUR = 0.38
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "This is your block" marker (markOwnBlock in cityScene.ts) — a persistent,
+// gently-pulsing lit look on exactly one block's OWN instance colour:
+// whichever one the CURRENT kiosk session most recently placed, or re-found
+// via its own code. Purely client-side/local, and there is only ever one at
+// a time — marking a new block moves it, so a kiosk cycling between
+// different real users' codes always shows the CURRENT one's own block, and
+// looks entirely normal to anyone viewing a different kiosk (2026-08-28,
+// user request). 2026-08-28, follow-up: replaces an earlier version that
+// used a separate camera-facing glow sprite floating near the block — user
+// disliked the "circular sprite" look and wanted the block ITSELF to read as
+// lit up instead, so this blends the block's own colour toward white rather
+// than adding any extra geometry. 2026-08-28, second follow-up ("more
+// opacity would look better"): initially misread as "swap white for a
+// different tint" and tried a warm gold — user clarified they liked white,
+// just wanted a lower peak blend fraction (i.e. literally more opaque —
+// less washed-out — at the pulse's brightest), so this stays white, just at
+// a lower OWN_BLOCK_BLEND_MAX than the first attempt.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const OWN_BLOCK_LIT_HEX = 0xffffff   // white "lit" tone blended toward
+export const OWN_BLOCK_BLEND_MIN = 0.1      // fraction of OWN_BLOCK_LIT_HEX at the pulse's dim point
+export const OWN_BLOCK_BLEND_MAX = 0.3      // fraction of OWN_BLOCK_LIT_HEX at the pulse's bright point — capped low so the block's own colour stays clearly visible even at peak
+export const OWN_BLOCK_PULSE_PERIOD = 2.0   // seconds per breathing cycle
 
 export const TYPE_COLORS: Record<string, number> = {
   wall:    0xc05030,

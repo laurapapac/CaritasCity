@@ -1,16 +1,16 @@
 /**
  * useAmbientDecorConstruction — purely cosmetic "the city feels alive"
- * effect (2026-08-25, user request; scattered citywide + highlighted +
- * top-anchored reveals added 2026-08-26/27 after several earlier designs
- * proved impossible to spot — see cityScene.ts's playAmbientCycle for the
+ * effect (2026-08-25, user request; scattered citywide + top-anchored
+ * reveals added 2026-08-26/27 after several earlier designs proved
+ * impossible to spot — see cityScene.ts's playAmbientCycle for the
  * 2026-08-27 root-cause writeup on why the reveal has to reach the true top
  * of the blueprint, not an isolated window). Picks a pool of decoration
  * buildings (never backend-linked, deco_-prefixed ids — see
  * staticCityData.ts's own doc comment on why that's always safe to animate)
  * spread across the whole city and cycles them through construction forever:
  * truncate each building down to a random point partway up, then rebuild it
- * the rest of the way to the roof one block a second with the same highlight
- * flash a real placement gets, hold briefly once finished, then hand the
+ * the rest of the way to the roof one block a second with the same drop-in
+ * a real placement gets, hold briefly once finished, then hand the
  * site off to a different building far enough from it. Never touches the
  * database or the 160 real QR-linked buildings' progress — this is
  * client-side-only, ephemeral state that resets every time the page reloads.

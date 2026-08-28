@@ -27,7 +27,7 @@ import type { Block, CityBuilding, CityDecor } from "./types"
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CityRendererHandle {
-  /** Reveal one block for the given building, highlight it, fire onBlockAdded. */
+  /** Reveal one block for the given building (drops in), fire onBlockAdded. */
   addBlock(buildingId: string): void
   /** Purely visual "under construction" replay. See CitySceneHandle. */
   playConstructionMontage(
@@ -45,7 +45,9 @@ export interface CityRendererHandle {
   /** Cancels a building's pending ambient cycle, if any. */
   stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
-  focusOnBlock(buildingId: string, blockIndex: number, opts?: { highlight?: boolean }): void
+  focusOnBlock(buildingId: string, blockIndex: number): void
+  /** Marks a block as "this is your block" with a persistent lit-up glow. See CitySceneHandle. */
+  markOwnBlock(buildingId: string, blockIndex: number): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
   /** Instantly set a building's visible block count. See CitySceneHandle. */
@@ -113,8 +115,11 @@ export const CityRenderer = forwardRef<CityRendererHandle, CityRendererProps>(
       stopAmbientCycle(buildingId) {
         sceneRef.current?.stopAmbientCycle(buildingId)
       },
-      focusOnBlock(buildingId, blockIndex, opts) {
-        sceneRef.current?.focusOnBlock(buildingId, blockIndex, opts)
+      focusOnBlock(buildingId, blockIndex) {
+        sceneRef.current?.focusOnBlock(buildingId, blockIndex)
+      },
+      markOwnBlock(buildingId, blockIndex) {
+        sceneRef.current?.markOwnBlock(buildingId, blockIndex)
       },
       resetCamera() {
         sceneRef.current?.resetCamera()

@@ -17,8 +17,12 @@ import type { Block, CityBuilding, CityDecor } from "./types"
 import {
   BLOCK_TEX,
   GLASS_HEX,
-  HIGHLIGHT_HEX,
-  HIGHLIGHT_DUR,
+  DROP_HEIGHT,
+  DROP_FALL_DUR,
+  OWN_BLOCK_LIT_HEX,
+  OWN_BLOCK_BLEND_MIN,
+  OWN_BLOCK_BLEND_MAX,
+  OWN_BLOCK_PULSE_PERIOD,
   resolveColor,
   isGlass,
   computeUpTo,
@@ -29,7 +33,10 @@ import { buildDecorGroup, buildGroundGroup, disposeDecorGroup } from "./decor"
 // Internal types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type HighlightEntry = { origIdx: number; startTime: number }
+// Keyed by block index, not instance slot — the per-frame loop below
+// re-derives the solid instance slot each tick via node.solidUpTo (glass
+// blocks are never animated).
+type DropEntry = number // startTime, seconds
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera framing constants
@@ -627,7 +634,7 @@ interface BuildingNode {
   solidUpTo: Int32Array
   glassUpTo: Int32Array
   visibleCount: number
-  highlights: Map<number, HighlightEntry>
+  drops: Map<number, DropEntry>
   bboxXZ: BBoxXZ
 }
 
@@ -651,14 +658,15 @@ export interface CitySceneHandle {
    */
   setVisibleCount(buildingId: string, count: number): void
   /**
-   * Incrementally reveal one block, painting it yellow, then fading to its
-   * final colour over HIGHLIGHT_DUR seconds.  Fires onProgress(newCount).
+   * Incrementally reveal one block, dropping it in from above with a
+   * physically-accelerating fall (see DROP_HEIGHT/DROP_FALL_DUR in utils.ts).
+   * Fires onProgress(newCount).
    */
   addBlock(buildingId: string, onProgress?: (newCount: number) => void): void
   /**
    * Purely visual "under construction" effect: rewinds up to `count` of the
-   * building's most-recently-placed blocks, then replays their reveal — no
-   * highlight, they just pop to their final color — one at a time, `staggerMs`
+   * building's most-recently-placed blocks, then replays their reveal — not
+   * animated, they just pop to their final position/color — one at a time, `staggerMs`
    * apart. Doesn't change how many blocks are counted as placed — just re-plays
    * their appearance. Calls onComplete once the full replay has finished.
    */
@@ -674,8 +682,9 @@ export interface CitySceneHandle {
    * truncates the building down to a randomized point partway up (a
    * percentage of the building's OWN block count, not a fixed number, so the
    * gap reads as real on a big building and not just a house) and rebuilds
-   * it back up to the true top, highlighted (there's no camera-follow to
-   * make an unhighlighted change legible). The truncation always reaches the
+   * it back up to the true top, animated (the same physical drop-in as
+   * addBlock — there's no camera-follow to make a static change legible).
+   * The truncation always reaches the
    * real roof — never an isolated mid-building window — because a hidden
    * band left floating below an intact roof is invisible from the kiosk's
    * normal elevated camera angle (2026-08-27 root cause; see the long
@@ -703,11 +712,24 @@ export interface CitySceneHandle {
   stopAmbientCycle(buildingId: string): void
   /**
    * Snap the camera close to and facing a specific already-placed block (no
-   * animation — an instant cut), optionally re-triggering the same yellow
-   * highlight fade used when a block is first revealed. Deterministic: same
-   * buildingId + blockIndex always produces the same framing.
+   * animation — an instant cut). Deterministic: same buildingId + blockIndex
+   * always produces the same framing.
    */
-  focusOnBlock(buildingId: string, blockIndex: number, opts?: { highlight?: boolean }): void
+  focusOnBlock(buildingId: string, blockIndex: number): void
+  /**
+   * Marks exactly one block in the whole scene as "this is your block" — a
+   * persistent, gently-pulsing blend of the block's OWN instance colour
+   * toward white at a capped fraction (see OWN_BLOCK_* in utils.ts), not
+   * any separate glow geometry. There is only ever one: a
+   * later call restores the previous block's true colour and moves the
+   * mark, so a kiosk cycling between different real users' own codes always
+   * shows just the current one's block, with no history left behind on any
+   * earlier one (2026-08-28, user request — must look entirely normal to
+   * anyone else viewing the same building). No-op on a glass block (they
+   * carry no instance colour to blend). Purely client-side/local; never
+   * touches the database and has no effect on any other kiosk's own view.
+   */
+  markOwnBlock(buildingId: string, blockIndex: number): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
   getVisibleCount(buildingId: string): number
@@ -859,8 +881,12 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // ── Per-building node map ─────────────────────────────────────────────────
   const nodes  = new Map<string, BuildingNode>()
   const dummy  = new THREE.Object3D()
-  const hlColor  = new THREE.Color(HIGHLIGHT_HEX)
   const finColor = new THREE.Color()
+  const litColor = new THREE.Color(OWN_BLOCK_LIT_HEX) // scratch target for markOwnBlock's pulse blend
+
+  // "This is your block" marker — see markOwnBlock. At most one at a time;
+  // a new mark restores this one's true colour before moving on.
+  let ownMark: { buildingId: string; blockIndex: number } | null = null
 
   // ── Resize ───────────────────────────────────────────────────────────────
   const ro = new ResizeObserver(() => {
@@ -873,7 +899,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   ro.observe(container)
 
   // ── Render loop ───────────────────────────────────────────────────────────
-  // Highlight animation runs here rather than in useFrame so we don't need r3f.
+  // Drop animation runs here rather than in useFrame so we don't need r3f.
   let rafId = 0
   const animate = () => {
     rafId = requestAnimationFrame(animate)
@@ -911,25 +937,67 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     }
 
     const now = performance.now() / 1000
+
+    // Newly-placed-block drop animation (see revealBlockAt/DROP_HEIGHT/
+    // DROP_FALL_DUR in utils.ts). Keyed by block index rather than instance
+    // slot since the slot is only resolved once we know the block isn't
+    // glass (never applies to glass). Position only — colour was already set
+    // to its true final value when the drop started (see revealBlockAt) and
+    // is never touched here.
     for (const node of nodes.values()) {
-      if (node.highlights.size === 0) continue
+      if (node.drops.size === 0) continue
       let dirty = false
-      for (const [si, { origIdx, startTime }] of node.highlights) {
+      for (const [origIdx, startTime] of node.drops) {
         const elapsed = now - startTime
-        if (elapsed >= HIGHLIGHT_DUR) {
-          node.solidMesh.setColorAt(si, finColor.set(resolveColor(node.blocks[origIdx])))
-          node.highlights.delete(si)
-          dirty = true
+        const b = node.blocks[origIdx]
+        const si = node.solidUpTo[origIdx]
+
+        if (elapsed >= DROP_FALL_DUR) {
+          dummy.position.set(b.x, b.y + 0.5, b.z)
+          dummy.scale.set(1, 1, 1)
+          dummy.updateMatrix()
+          node.solidMesh.setMatrixAt(si, dummy.matrix)
+          node.drops.delete(origIdx)
         } else {
-          const t      = elapsed / HIGHLIGHT_DUR
-          const smooth = t * t * (3 - 2 * t) // smoothstep
-          hlColor.set(HIGHLIGHT_HEX)
-          finColor.set(resolveColor(node.blocks[origIdx]))
-          node.solidMesh.setColorAt(si, hlColor.lerp(finColor, smooth))
-          dirty = true
+          // Real (accelerating) gravity physics: distance fallen grows with
+          // t³, so it starts slow and speeds up hard into a landing — no
+          // squash/bounce (2026-08-28, user feedback: read as too bouncy).
+          // Cubic rather than quadratic (2026-08-28, follow-up feedback: the
+          // overall fall read as too slow, but the slow start was liked and
+          // shouldn't just get uniformly sped up) — see DROP_FALL_DUR's own
+          // comment in utils.ts for why t³ is what let the total duration
+          // shrink without touching the early motion.
+          const t = elapsed / DROP_FALL_DUR
+          const y = b.y + 0.5 + DROP_HEIGHT * (1 - t * t * t)
+          dummy.position.set(b.x, y, b.z)
+          dummy.scale.set(1, 1, 1)
+          dummy.updateMatrix()
+          node.solidMesh.setMatrixAt(si, dummy.matrix)
         }
+        dirty = true
       }
-      if (dirty && node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
+      if (dirty) node.solidMesh.instanceMatrix.needsUpdate = true
+    }
+
+    // "Your own block" marker's gentle breathing pulse — blends the block's
+    // OWN instance colour toward white at a capped fraction (like a
+    // translucent overlay's opacity, not an unbounded brightness boost —
+    // see OWN_BLOCK_* in utils.ts for why) rather than adding any separate
+    // geometry. Skipped while this exact block has an active drop in
+    // progress (rare — only right at the moment of a fresh placement) since
+    // the drop loop above already owns that slot's colour/matrix for
+    // its short window.
+    if (ownMark) {
+      const node = nodes.get(ownMark.buildingId)
+      const b = node?.blocks[ownMark.blockIndex]
+      const si = node ? node.solidUpTo[ownMark.blockIndex] : -1
+      if (node && b && si >= 0 && si < node.solidMesh.count && !node.drops.has(ownMark.blockIndex)) {
+        const pulse = 0.5 + 0.5 * Math.sin(now * ((2 * Math.PI) / OWN_BLOCK_PULSE_PERIOD))
+        const blend = OWN_BLOCK_BLEND_MIN + (OWN_BLOCK_BLEND_MAX - OWN_BLOCK_BLEND_MIN) * pulse
+        finColor.set(resolveColor(b)).lerp(litColor, blend)
+        node.solidMesh.setColorAt(si, finColor)
+        if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
+      }
     }
 
     renderer.render(scene, camera)
@@ -940,7 +1008,12 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   function rebuildNode(node: BuildingNode, count: number) {
     const target = Math.min(count, node.blocks.length)
     node.visibleCount = target
-    node.highlights.clear()
+    node.drops.clear()
+
+    // dummy is shared/reused across rebuildNode, revealBlockAt and the
+    // per-frame drop-animation loop below — reset scale explicitly rather
+    // than relying on it already being 1,1,1 from whatever last touched it.
+    dummy.scale.set(1, 1, 1)
 
     let si = 0, gi = 0
     for (let i = 0; i < target; i++) {
@@ -963,35 +1036,51 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   }
 
   // ── Internal: reveal a single block ───────────────────────────────────────
-  // Shared by addBlock() (one genuinely new block — always highlighted) and
-  // playConstructionMontage() (replaying already-known blocks purely for visual
-  // effect — highlight off by default, they just pop straight to their final color).
-  function revealBlockAt(node: BuildingNode, i: number, opts: { highlight?: boolean } = {}) {
-    const highlight = opts.highlight ?? true
+  // Shared by addBlock() (one genuinely new block — always animated: drops
+  // in with a physical fall) and playConstructionMontage() (replaying
+  // already-known blocks purely for visual effect — animate off by default,
+  // they just pop straight to their final position/color).
+  function revealBlockAt(node: BuildingNode, i: number, opts: { animate?: boolean } = {}) {
+    const animate = opts.animate ?? true
     const b = node.blocks[i]
     node.visibleCount = Math.max(node.visibleCount, i + 1)
 
-    dummy.position.set(b.x, b.y + 0.5, b.z)
-    dummy.updateMatrix()
-
     if (isGlass(b)) {
+      // Glass panes never animate — same as the old highlight, which also
+      // only ever applied to solid blocks.
+      dummy.position.set(b.x, b.y + 0.5, b.z)
+      dummy.scale.set(1, 1, 1)
+      dummy.updateMatrix()
       const gi = node.glassUpTo[i]
       node.glassMesh.setMatrixAt(gi, dummy.matrix)
       node.glassMesh.count = Math.max(node.glassMesh.count, gi + 1)
       node.glassMesh.instanceMatrix.needsUpdate = true
-    } else {
-      const si = node.solidUpTo[i]
-      node.solidMesh.setMatrixAt(si, dummy.matrix)
-      node.solidMesh.count = Math.max(node.solidMesh.count, si + 1)
-      node.solidMesh.instanceMatrix.needsUpdate = true
-      if (highlight) {
-        node.solidMesh.setColorAt(si, hlColor.set(HIGHLIGHT_HEX))
-        node.highlights.set(si, { origIdx: i, startTime: performance.now() / 1000 })
-      } else {
-        node.solidMesh.setColorAt(si, finColor.set(resolveColor(b)))
-      }
-      if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
+      return
     }
+
+    const si = node.solidUpTo[i]
+    node.solidMesh.count = Math.max(node.solidMesh.count, si + 1)
+    finColor.set(resolveColor(b))
+
+    if (animate) {
+      // Spawn above the resting position; the per-frame drop loop below
+      // animates it down and settles it, ending on the exact same matrix/
+      // color the non-animated branch sets immediately.
+      dummy.position.set(b.x, b.y + 0.5 + DROP_HEIGHT, b.z)
+      dummy.scale.set(1, 1, 1)
+      dummy.updateMatrix()
+      node.solidMesh.setMatrixAt(si, dummy.matrix)
+      node.solidMesh.setColorAt(si, finColor)
+      node.drops.set(i, performance.now() / 1000)
+    } else {
+      dummy.position.set(b.x, b.y + 0.5, b.z)
+      dummy.scale.set(1, 1, 1)
+      dummy.updateMatrix()
+      node.solidMesh.setMatrixAt(si, dummy.matrix)
+      node.solidMesh.setColorAt(si, finColor)
+    }
+    node.solidMesh.instanceMatrix.needsUpdate = true
+    if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
   }
 
   // Tracks the montage's pending timer so a new montage (or dispose) can cancel it.
@@ -1051,7 +1140,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           solidUpTo,
           glassUpTo,
           visibleCount: 0,
-          highlights: new Map(),
+          drops: new Map(),
           bboxXZ: computeBBoxXZ(blocks),
         }
         nodes.set(building.id, node)
@@ -1104,7 +1193,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
       let i = rewindTo
       const step = () => {
-        revealBlockAt(node, i, { highlight: false })
+        revealBlockAt(node, i, { animate: false })
         i++
         if (i >= target) { onComplete?.(); return }
         montageTimeoutId = setTimeout(step, staggerMs)
@@ -1191,13 +1280,13 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       // reads as reasonable rather than rushed.
       let i = start
       const step = () => {
-        // Unlike playConstructionMontage's replay steps (highlight off — the
+        // Unlike playConstructionMontage's replay steps (animate off — the
         // real per-block reveal is a throwaway lead-up to the one block that
-        // matters, which gets its own highlighted addBlock call once the
+        // matters, which gets its own animated addBlock call once the
         // montage ends and the camera is already on it), every ambient block
-        // is highlighted: this effect has no camera-follow to make it
-        // legible, so the yellow pop-then-fade is the only cue a viewer
-        // scanning the city gets that something's under construction here.
+        // is animated: this effect has no camera-follow to make it legible,
+        // so the drop-in is the only cue a viewer scanning the city gets
+        // that something's under construction here.
         revealBlockAt(node, i)
         i++
         if (i >= total) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
@@ -1214,7 +1303,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
     },
 
-    focusOnBlock(buildingId, blockIndex, opts) {
+    focusOnBlock(buildingId, blockIndex) {
       const node = nodes.get(buildingId)
       if (!node) return
       const block = node.blocks[blockIndex]
@@ -1259,13 +1348,28 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       camera.position.set(cx + ox * dist, cy + oy * dist, cz + oz * dist)
       controls.target.set(cx, cy, cz)
       controls.update()
+    },
 
-      if (opts?.highlight && !isGlass(block)) {
-        const si = node.solidUpTo[blockIndex]
-        if (si >= 0 && si < node.solidMesh.count) {
-          node.highlights.set(si, { origIdx: blockIndex, startTime: performance.now() / 1000 })
+    markOwnBlock(buildingId, blockIndex) {
+      // Restore whichever block was previously marked (if any) to its true
+      // colour before moving the mark — there's only ever one at a time.
+      if (ownMark) {
+        const prevNode = nodes.get(ownMark.buildingId)
+        const prevBlock = prevNode?.blocks[ownMark.blockIndex]
+        const prevSi = prevNode ? prevNode.solidUpTo[ownMark.blockIndex] : -1
+        if (prevNode && prevBlock && prevSi >= 0 && prevSi < prevNode.solidMesh.count) {
+          prevNode.solidMesh.setColorAt(prevSi, finColor.set(resolveColor(prevBlock)))
+          if (prevNode.solidMesh.instanceColor) prevNode.solidMesh.instanceColor.needsUpdate = true
         }
+        ownMark = null
       }
+
+      const node = nodes.get(buildingId)
+      const b = node?.blocks[blockIndex]
+      // Glass blocks never carry instance colour (see revealBlockAt) — there's
+      // no "lit up" appearance to give one, so leave nothing marked.
+      if (!node || !b || isGlass(b)) return
+      ownMark = { buildingId, blockIndex }
     },
 
     resetCamera() {

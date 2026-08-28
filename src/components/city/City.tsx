@@ -88,8 +88,8 @@ function cityReducer(state: CityState, action: CityAction): CityState {
 
 export interface CityHandle {
   /**
-   * Find the active building for `category`, reveal its next block with a
-   * yellow highlight, and fire onStateChange.
+   * Find the active building for `category`, reveal its next block (drops
+   * in), and fire onStateChange.
    * If the building just completed, the queue advances automatically.
    */
   addBlock(category: BuildingCategory): void
@@ -116,7 +116,9 @@ export interface CityHandle {
   /** Cancels a building's pending ambient cycle, if any. */
   stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
-  focusOnBlock(buildingId: string, blockIndex: number, opts?: { highlight?: boolean }): void
+  focusOnBlock(buildingId: string, blockIndex: number): void
+  /** Marks a block as "this is your block" with a persistent lit-up glow. See CitySceneHandle. */
+  markOwnBlock(buildingId: string, blockIndex: number): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
   /** Instantly set a building's visible block count. See CitySceneHandle. */
@@ -207,8 +209,12 @@ export const City = forwardRef<CityHandle, CityProps>(function City(
       rendererRef.current?.stopAmbientCycle(buildingId)
     },
 
-    focusOnBlock(buildingId, blockIndex, opts) {
-      rendererRef.current?.focusOnBlock(buildingId, blockIndex, opts)
+    focusOnBlock(buildingId, blockIndex) {
+      rendererRef.current?.focusOnBlock(buildingId, blockIndex)
+    },
+
+    markOwnBlock(buildingId, blockIndex) {
+      rendererRef.current?.markOwnBlock(buildingId, blockIndex)
     },
 
     resetCamera() {

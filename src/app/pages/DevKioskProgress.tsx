@@ -145,18 +145,21 @@ export default function DevKioskProgress() {
 
   // Mirrors Kiosk.tsx's handleConfirm exactly: frame the camera on the new
   // block's spot *before* it's revealed (so a tilted/tree-dodged shot is
-  // already in place when it pops), then reveal it with the same yellow
-  // highlight a real placement gets. Unlike the sliders above, this goes
-  // through addBlockToBuilding (not setVisibleCount) specifically to get
-  // that highlight + reveal — the whole point is seeing the real placement
-  // camera behavior in the actual city (real nearby trees/buildings), not
-  // just an instant jump.
+  // already in place when it pops), then reveal it (drops in) and mark it as
+  // "your own block" the same way a real placement does. Unlike the sliders
+  // above, this goes through addBlockToBuilding (not setVisibleCount)
+  // specifically to get that drop-in + marker — the whole point is seeing
+  // the real placement camera/animation behavior in the actual city (real
+  // nearby trees/buildings), not just an instant jump. The sliders/Empty/
+  // Full buttons are deliberately instant with no animation or marker — this
+  // button is the only one in this page that shows either.
   function handleAddNextBlock(category: BuildingCategory) {
     const active = activeBuildingFor(category);
     if (!active) return;
     const { entry, completedBlocks } = active;
     cityRef.current?.focusOnBlock(entry.buildingId, completedBlocks);
     cityRef.current?.addBlockToBuilding(entry.buildingId);
+    cityRef.current?.markOwnBlock(entry.buildingId, completedBlocks);
     appliedRef.current.set(entry.buildingId, completedBlocks + 1);
     setPlaced((p) => ({ ...p, [category]: p[category] + 1 }));
   }

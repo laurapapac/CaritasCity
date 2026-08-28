@@ -280,7 +280,8 @@ export default function Kiosk() {
     enterCode(code)
       .then((res) => {
         if (res.status === "existing") {
-          cityRef.current?.focusOnBlock(res.block.buildingId, res.block.blockIndex, { highlight: true });
+          cityRef.current?.focusOnBlock(res.block.buildingId, res.block.blockIndex);
+          cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
           setState({ phase: "existing", block: res.block });
         } else {
           setState({ phase: "needs_school", code, category: res.category });
@@ -316,7 +317,7 @@ export default function Kiosk() {
         // A silent, instant setVisibleCount to blockIndex (never higher —
         // this is the count BEFORE this block, so any block this kiosk
         // missed from the other placement pops in with no animation, but
-        // the montage/highlight below then lands on the right one) fixes
+        // the montage/reveal below then lands on the right one) fixes
         // it without touching the server, which was never the problem.
         cityRef.current?.setVisibleCount(res.block.buildingId, res.block.blockIndex);
         // Frame the block *before* the montage starts, not after — otherwise the
@@ -330,6 +331,7 @@ export default function Kiosk() {
           () => {
             setTimeout(() => {
               cityRef.current?.addBlock(category);
+              cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
               setState({ phase: "placed", block: res.block });
             }, MONTAGE_FINAL_BLOCK_DELAY_MS);
           }

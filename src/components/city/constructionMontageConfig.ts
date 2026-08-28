@@ -10,7 +10,6 @@
 // moment feels more dynamic. Doesn't affect completedBlocks or placed_at.
 export const MONTAGE_BLOCK_COUNT = 100;
 export const MONTAGE_STAGGER_MS = 20;
-// Pause after the montage finishes and before the genuinely new (highlighted)
-// block appears — a deliberate beat so it reads as the finale, not just
-// another step.
+// Pause after the montage finishes and before the genuinely new block drops
+// in — a deliberate beat so it reads as the finale, not just another step.
 export const MONTAGE_FINAL_BLOCK_DELAY_MS = 400;
