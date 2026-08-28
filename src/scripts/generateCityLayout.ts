@@ -261,6 +261,15 @@ const ROAD_WIDTH = 4
 const TREE_SPACING = 20
 const TREE_MARGIN = 8 // no trees within this distance of either road-segment endpoint
 const TREE_OFFSET = ROAD_WIDTH / 2 + 2 // how far off the road centerline, to each side
+// No roadside tree within this of a real building's own corner (2026-08-28,
+// user request — trees planted right at a building's corner kept blocking
+// the placement camera on some blocks even after the camera-angling fixes).
+// TREE_MARGIN already keeps trees off the road-SEGMENT endpoints (a block's
+// own corners), but a building's actual footprint is inset from the block
+// edge by ROAD_GAP/2+ and several buildings can share one block — its real
+// corners aren't at the road-segment endpoints TREE_MARGIN already guards,
+// so this checks distance to every real building's own corner directly.
+const BUILDING_CORNER_TREE_CLEARANCE = 6
 
 // Bounding square BSP starts from, and how far from center a leaf's center
 // has to be to get kept — the "circular-ish" filter that gives the whole city
@@ -1165,8 +1174,22 @@ function nearPolygon(px: number, pz: number, polygon: Point[], margin: number): 
 // instead of a bounding circle sized for the worst-case wobble direction
 // fixes this without touching central_lake's existing (smaller, working)
 // circle-based avoidance at all.
+// The 4 corners of a real building's own footprint (x/z is the center, per
+// PlacedBuilding) — used to keep roadside trees clear of them, see
+// BUILDING_CORNER_TREE_CLEARANCE.
+function buildingCorners(b: PlacedBuilding): Point[] {
+  const hw = b.width / 2, hd = b.depth / 2
+  return [
+    { x: b.x - hw, z: b.z - hd },
+    { x: b.x + hw, z: b.z - hd },
+    { x: b.x - hw, z: b.z + hd },
+    { x: b.x + hw, z: b.z + hd },
+  ]
+}
+
 function generateRoadTrees(
-  roads: RoadSegment[], avoidLakes: Circle[] = [], avoidPolygons: { polygon: Point[]; margin: number }[] = []
+  roads: RoadSegment[], avoidLakes: Circle[] = [], avoidPolygons: { polygon: Point[]; margin: number }[] = [],
+  avoidCorners: Point[] = []
 ): Point[] {
   const trees: Point[] = []
   for (const seg of roads) {
@@ -1186,6 +1209,10 @@ function generateRoadTrees(
           const ddx = a.x - cand.x, ddz = a.z - cand.z, clearance = a.radius + 3
           return ddx * ddx + ddz * ddz < clearance * clearance
         }) || avoidPolygons.some((p) => nearPolygon(cand.x, cand.z, p.polygon, p.margin))
+          || avoidCorners.some((c) => {
+            const ddx = c.x - cand.x, ddz = c.z - cand.z
+            return ddx * ddx + ddz * ddz < BUILDING_CORNER_TREE_CLEARANCE * BUILDING_CORNER_TREE_CLEARANCE
+          })
         if (!blocked) trees.push(cand)
       }
     }
@@ -2063,8 +2090,13 @@ const roadTreeAvoidCircles = lakeZones
   .filter((z) => z.id !== "lake_east" || !lakeEastShape)
   .map(visualLakeCircle)
 const roadTreeAvoidPolygons = lakeEastShape ? [{ polygon: lakeEastShape.points, margin: 4 }] : []
-const roadTrees = generateRoadTrees(roadSegments, roadTreeAvoidCircles, roadTreeAvoidPolygons)
-console.log(`Roads: ${roadSegments.length} segments, ${roadTrees.length} roadside trees`)
+// Only real (QR-linked) buildings' corners — decoration buildings are never
+// the target of a real placement camera shot, so their corners don't need
+// the same tree clearance (2026-08-28, user request scope).
+const roadTreeAvoidCorners = placed.flatMap(buildingCorners)
+const roadTrees = generateRoadTrees(roadSegments, roadTreeAvoidCircles, roadTreeAvoidPolygons, roadTreeAvoidCorners)
+console.log(`Roads: ${roadSegments.length} segments, ${roadTrees.length} roadside trees ` +
+  `(${roadTreeAvoidCorners.length} building corners kept clear)`)
 
 
 const roadsOutput = `/**
