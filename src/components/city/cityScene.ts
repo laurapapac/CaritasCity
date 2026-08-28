@@ -18,6 +18,7 @@ import {
   BLOCK_TEX,
   GLASS_HEX,
   DROP_HEIGHT,
+  DROP_HEIGHT_OWN,
   DROP_FALL_DUR,
   OWN_BLOCK_LIT_HEX,
   OWN_BLOCK_BLEND_MIN,
@@ -35,8 +36,12 @@ import { buildDecorGroup, buildGroundGroup, disposeDecorGroup } from "./decor"
 
 // Keyed by block index, not instance slot — the per-frame loop below
 // re-derives the solid instance slot each tick via node.solidUpTo (glass
-// blocks are never animated).
-type DropEntry = number // startTime, seconds
+// blocks are never animated). `height` is the fall distance THIS block
+// spawned from — addBlock's real placements use DROP_HEIGHT_OWN,
+// playAmbientCycle's decoration blocks use the shorter DROP_HEIGHT (see
+// revealBlockAt) — captured per-entry since concurrent drops of both kinds
+// can be in flight at once.
+type DropEntry = { startTime: number; height: number }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera framing constants
@@ -659,8 +664,9 @@ export interface CitySceneHandle {
   setVisibleCount(buildingId: string, count: number): void
   /**
    * Incrementally reveal one block, dropping it in from above with a
-   * physically-accelerating fall (see DROP_HEIGHT/DROP_FALL_DUR in utils.ts).
-   * Fires onProgress(newCount).
+   * physically-accelerating fall from DROP_HEIGHT_OWN (see utils.ts) — taller
+   * than playAmbientCycle's decoration-loop drop, since this is always a real
+   * user's own block. Fires onProgress(newCount).
    */
   addBlock(buildingId: string, onProgress?: (newCount: number) => void): void
   /**
@@ -947,7 +953,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     for (const node of nodes.values()) {
       if (node.drops.size === 0) continue
       let dirty = false
-      for (const [origIdx, startTime] of node.drops) {
+      for (const [origIdx, { startTime, height }] of node.drops) {
         const elapsed = now - startTime
         const b = node.blocks[origIdx]
         const si = node.solidUpTo[origIdx]
@@ -966,9 +972,12 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           // overall fall read as too slow, but the slow start was liked and
           // shouldn't just get uniformly sped up) — see DROP_FALL_DUR's own
           // comment in utils.ts for why t³ is what let the total duration
-          // shrink without touching the early motion.
+          // shrink without touching the early motion. `height` (not the flat
+          // DROP_HEIGHT) drives the distance — addBlock's real placements
+          // fall further than playAmbientCycle's decoration blocks, see
+          // revealBlockAt/DROP_HEIGHT_OWN.
           const t = elapsed / DROP_FALL_DUR
-          const y = b.y + 0.5 + DROP_HEIGHT * (1 - t * t * t)
+          const y = b.y + 0.5 + height * (1 - t * t * t)
           dummy.position.set(b.x, y, b.z)
           dummy.scale.set(1, 1, 1)
           dummy.updateMatrix()
@@ -1037,11 +1046,16 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
   // ── Internal: reveal a single block ───────────────────────────────────────
   // Shared by addBlock() (one genuinely new block — always animated: drops
-  // in with a physical fall) and playConstructionMontage() (replaying
-  // already-known blocks purely for visual effect — animate off by default,
-  // they just pop straight to their final position/color).
-  function revealBlockAt(node: BuildingNode, i: number, opts: { animate?: boolean } = {}) {
+  // in with a physical fall, from DROP_HEIGHT_OWN) and playConstructionMontage()
+  // (replaying already-known blocks purely for visual effect — animate off
+  // by default, they just pop straight to their final position/color).
+  // playAmbientCycle's decoration-loop reveals also go through here, animated
+  // but from the shorter DROP_HEIGHT (2026-08-28, user request — a real
+  // user's own block falls further than the purely cosmetic background
+  // loop's blocks).
+  function revealBlockAt(node: BuildingNode, i: number, opts: { animate?: boolean; height?: number } = {}) {
     const animate = opts.animate ?? true
+    const height = opts.height ?? DROP_HEIGHT
     const b = node.blocks[i]
     node.visibleCount = Math.max(node.visibleCount, i + 1)
 
@@ -1066,12 +1080,12 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       // Spawn above the resting position; the per-frame drop loop below
       // animates it down and settles it, ending on the exact same matrix/
       // color the non-animated branch sets immediately.
-      dummy.position.set(b.x, b.y + 0.5 + DROP_HEIGHT, b.z)
+      dummy.position.set(b.x, b.y + 0.5 + height, b.z)
       dummy.scale.set(1, 1, 1)
       dummy.updateMatrix()
       node.solidMesh.setMatrixAt(si, dummy.matrix)
       node.solidMesh.setColorAt(si, finColor)
-      node.drops.set(i, performance.now() / 1000)
+      node.drops.set(i, { startTime: performance.now() / 1000, height })
     } else {
       dummy.position.set(b.x, b.y + 0.5, b.z)
       dummy.scale.set(1, 1, 1)
@@ -1173,7 +1187,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       const i = node.visibleCount
       if (i >= node.blocks.length) return
 
-      revealBlockAt(node, i)
+      revealBlockAt(node, i, { height: DROP_HEIGHT_OWN })
       onProgress?.(i + 1)
     },
 

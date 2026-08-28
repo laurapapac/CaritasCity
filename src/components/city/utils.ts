@@ -27,11 +27,21 @@ export const GLASS_HEX      = 0x90c8d8
 // DROP_FALL_DUR instead of dragging out.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// World units the block falls from above its resting position.
+// World units the block falls from above its resting position — the
+// ambient decoration loop's height (playAmbientCycle). A real user's own
+// placement (addBlock) uses the taller DROP_HEIGHT_OWN instead (2026-08-28,
+// user request — noticeable for the block that matters, left alone for the
+// purely cosmetic background loop). 2026-08-28, follow-up ("start out of
+// camera sight"): measured live by projecting test points through the real
+// focusOnBlock camera (both a lateral wall shot and a steep top-view roof
+// shot) — the frame's top edge sits at height ≈7 in both cases, so 9.5
+// clears it with real margin rather than spawning right at the edge.
 export const DROP_HEIGHT = 3.0
+export const DROP_HEIGHT_OWN = 9.5
 // Fall duration, seconds. 0.5→0.38 (2026-08-28, user feedback: too slow
 // overall) — paired with the t³ curve above so the cut comes out of the
-// back half of the fall, not the slow start.
+// back half of the fall, not the slow start. Shared by both heights above —
+// only asked to change the height, not the timing.
 export const DROP_FALL_DUR = 0.38
 
 // ─────────────────────────────────────────────────────────────────────────────
