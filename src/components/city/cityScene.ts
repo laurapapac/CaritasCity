@@ -21,6 +21,16 @@ import {
   DROP_HEIGHT_OWN,
   DROP_FALL_DUR,
   DROP_FALL_DUR_OWN,
+  DUST_PARTICLES_PER_BURST,
+  DUST_POOL_SIZE,
+  DUST_SPEED_MIN,
+  DUST_SPEED_MAX,
+  DUST_UP_SPEED_MIN,
+  DUST_UP_SPEED_MAX,
+  DUST_GRAVITY,
+  DUST_LIFETIME,
+  DUST_SIZE,
+  DUST_HEX,
   OWN_BLOCK_LIT_HEX,
   OWN_BLOCK_BLEND_MIN,
   OWN_BLOCK_BLEND_MAX,
@@ -45,6 +55,14 @@ import { buildDecorGroup, buildGroundGroup, disposeDecorGroup } from "./decor"
 // DROP_FALL_DUR (see revealBlockAt) — captured per-entry since concurrent
 // drops of any mix of glass/solid can be in flight at once.
 type DropEntry = { startTime: number; height: number; duration: number; isGlass: boolean }
+
+// Landing-impact debris (spawnDustBurst) — one shared pool for the whole
+// city, not per building, since it's cosmetic set-dressing rather than part
+// of any one building's own state. `x0/y0/z0` is the spawn point (the
+// landed block's own base); `vx/vy/vz` is its initial outward+upward
+// velocity, integrated each frame under DUST_GRAVITY. `null` slots are
+// inactive/available for reuse. See DUST_* constants in utils.ts.
+type DustEntry = { startTime: number; x0: number; y0: number; z0: number; vx: number; vy: number; vz: number } | null
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera framing constants
@@ -916,6 +934,52 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   const finColor = new THREE.Color()
   const litColor = new THREE.Color(OWN_BLOCK_LIT_HEX) // scratch target for markOwnBlock's pulse blend
 
+  // ── Landing-impact dust (spawnDustBurst) ──────────────────────────────────
+  // One shared pool/mesh for the whole city (not per building) — a fixed-size
+  // ring buffer bounds total particle count no matter how many buildings are
+  // landing blocks at once. See DUST_* constants in utils.ts for the tuning
+  // rationale.
+  const dustGeo = new THREE.BoxGeometry(1, 1, 1)
+  const dustMat = new THREE.MeshLambertMaterial({ color: DUST_HEX })
+  const dustMesh = new THREE.InstancedMesh(dustGeo, dustMat, DUST_POOL_SIZE)
+  dustMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+  dustMesh.count = DUST_POOL_SIZE
+  dustMesh.frustumCulled = false
+  const dustSlots: DustEntry[] = new Array(DUST_POOL_SIZE).fill(null)
+  let nextDustSlot = 0
+  for (let i = 0; i < DUST_POOL_SIZE; i++) {
+    dummy.position.set(0, -1000, 0)
+    dummy.scale.set(0, 0, 0)
+    dummy.updateMatrix()
+    dustMesh.setMatrixAt(i, dummy.matrix)
+  }
+  dustMesh.instanceMatrix.needsUpdate = true
+  scene.add(dustMesh)
+
+  // Spawns DUST_PARTICLES_PER_BURST debris cubes at a block's own base —
+  // called once per landing, from the animate loop's drop-entry "elapsed >=
+  // duration" branch below (both real placement and the ambient loop go
+  // through it). Overwrites the oldest pool slots first (`nextDustSlot`
+  // wraps around) — under heavy concurrent landings this can recycle a
+  // still-visible particle early, an acceptable trade for a fixed, cheap
+  // pool rather than unbounded growth.
+  function spawnDustBurst(x: number, y: number, z: number) {
+    const now = performance.now() / 1000
+    for (let k = 0; k < DUST_PARTICLES_PER_BURST; k++) {
+      const slot = nextDustSlot
+      nextDustSlot = (nextDustSlot + 1) % DUST_POOL_SIZE
+      const angle = Math.random() * Math.PI * 2
+      const speed = DUST_SPEED_MIN + Math.random() * (DUST_SPEED_MAX - DUST_SPEED_MIN)
+      dustSlots[slot] = {
+        startTime: now,
+        x0: x, y0: y, z0: z,
+        vx: Math.cos(angle) * speed,
+        vz: Math.sin(angle) * speed,
+        vy: DUST_UP_SPEED_MIN + Math.random() * (DUST_UP_SPEED_MAX - DUST_UP_SPEED_MIN),
+      }
+    }
+  }
+
   // "This is your block" marker — see markOwnBlock. At most one at a time;
   // a new mark restores this one's true colour before moving on.
   let ownMark: { buildingId: string; blockIndex: number } | null = null
@@ -996,6 +1060,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           dummy.updateMatrix()
           mesh.setMatrixAt(si, dummy.matrix)
           node.drops.delete(origIdx)
+          spawnDustBurst(b.x, b.y, b.z)
         } else {
           // Real (accelerating) gravity physics: distance fallen grows with
           // t⁴, so it starts slow and speeds up hard into a landing — no
@@ -1028,6 +1093,40 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
       if (solidDirty) node.solidMesh.instanceMatrix.needsUpdate = true
       if (glassDirty) node.glassMesh.instanceMatrix.needsUpdate = true
+    }
+
+    // Landing-impact dust (see spawnDustBurst/DUST_* above and in utils.ts).
+    // Simple projectile motion (constant DUST_GRAVITY) from each particle's
+    // own spawn point/velocity, shrinking to nothing over DUST_LIFETIME
+    // rather than popping out — an expired slot is reset to a zero-scale,
+    // off-scene matrix and freed for reuse.
+    {
+      let dustDirty = false
+      for (let i = 0; i < DUST_POOL_SIZE; i++) {
+        const d = dustSlots[i]
+        if (!d) continue
+        const elapsed = now - d.startTime
+        if (elapsed >= DUST_LIFETIME) {
+          dustSlots[i] = null
+          dummy.position.set(0, -1000, 0)
+          dummy.scale.set(0, 0, 0)
+          dummy.updateMatrix()
+          dustMesh.setMatrixAt(i, dummy.matrix)
+          dustDirty = true
+          continue
+        }
+        const t = elapsed / DUST_LIFETIME
+        const x = d.x0 + d.vx * elapsed
+        const z = d.z0 + d.vz * elapsed
+        const y = d.y0 + d.vy * elapsed + 0.5 * DUST_GRAVITY * elapsed * elapsed
+        const scale = DUST_SIZE * (1 - t)
+        dummy.position.set(x, Math.max(y, d.y0), z)
+        dummy.scale.set(scale, scale, scale)
+        dummy.updateMatrix()
+        dustMesh.setMatrixAt(i, dummy.matrix)
+        dustDirty = true
+      }
+      if (dustDirty) dustMesh.instanceMatrix.needsUpdate = true
     }
 
     // "Your own block" marker's gentle breathing pulse — blends the block's
@@ -1464,6 +1563,9 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       voxelGeo.dispose()
       solidMat.dispose()
       glassMat.dispose()
+      scene.remove(dustMesh)
+      dustGeo.dispose()
+      dustMat.dispose()
       scene.remove(groundGroup)
       disposeDecorGroup(groundGroup)
       if (decorGroup) {

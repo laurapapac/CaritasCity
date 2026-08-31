@@ -59,6 +59,64 @@ export const DROP_FALL_DUR = 0.38
 export const DROP_FALL_DUR_OWN = 0.38 * (DROP_HEIGHT_OWN / 5.0)
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Landing-impact dust (spawnDustBurst in cityScene.ts) — 2026-08-31, user
+// feedback: the hard-stop landing (no squash/bounce, see above) reads as
+// bland on its own. A squash was already tried and explicitly rejected
+// ("that's not how solid blocks behave in real life"), so this doesn't
+// deform or move the block itself — a small burst of debris kicks up from
+// the block's own base at the exact moment it lands, the same way a real
+// solid object landing on a hard surface throws off dust/chips without
+// bouncing or squashing itself. Shared by every animated landing (real
+// placement and the ambient loop both go through the same drop-entry
+// "elapsed >= duration" branch in cityScene.ts's animate loop), same as the
+// fall itself — nothing asked for these to differ, and a construction site
+// kicking up dust reads the same whether it's the user's own block or the
+// background city's.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Debris cubes flung per landing. Kept low — this fires on every animated
+// landing, including the ambient loop's roughly-one-per-second-per-active-site
+// cadence across up to 180 concurrent sites, so it has to stay cheap and
+// subtle rather than a showy burst.
+export const DUST_PARTICLES_PER_BURST = 5
+// Fixed-size ring buffer of shared particle instances (one InstancedMesh for
+// the whole city, not per building) — bounds total particle count regardless
+// of how many buildings are landing blocks at once. 64 covers multiple
+// concurrent bursts (5 particles each) with room to spare before the oldest
+// unexpired particles start getting recycled early.
+export const DUST_POOL_SIZE = 64
+// World units the debris travels outward from the landing point before
+// gravity and despawn end it — kept small, this is meant to read as "settling
+// dust," not an explosion.
+export const DUST_SPEED_MIN = 0.9
+export const DUST_SPEED_MAX = 2.0
+export const DUST_UP_SPEED_MIN = 1.0
+export const DUST_UP_SPEED_MAX = 1.8
+export const DUST_GRAVITY = -9.0
+// Seconds a debris particle stays visible — brief on purpose (an accent at
+// the moment of impact, not a lingering effect that would pile up visually
+// under the ambient loop's steady one-block/sec cadence).
+// 0.35→0.5 (2026-08-31, user report: couldn't see any dust at all).
+// Confirmed the particle system itself was rendering correctly (a forced,
+// oversized test instance showed up fine at the right position/colour) — the
+// actual problem was pure tuning: 0.16 shrinking to 0 over just 0.35s was
+// small and brief enough, at the camera distances placement actually happens
+// from, to be effectively imperceptible. Widened both together rather than
+// either alone, so there's more time for the eye to catch a debris cube
+// that's also bigger while it's up.
+export const DUST_LIFETIME = 0.5
+// Edge length of each debris cube — small relative to a full 1×1×1 block, and
+// shrinks to 0 over its lifetime (see the animate loop) rather than popping
+// out abruptly. 0.16→0.32 (2026-08-31, see DUST_LIFETIME's note — the old
+// size was part of why the burst was invisible in practice).
+export const DUST_SIZE = 0.32
+// Dusty neutral tan-grey — reads as debris/dust rather than matching any one
+// block's own material, since a burst can contain a mix of whatever block
+// just landed. Lightened slightly (2026-08-31, same invisibility report) so
+// it doesn't blend into the terrain's own similar grey-tan ground colour.
+export const DUST_HEX = 0xd4c4a0
+
+// ─────────────────────────────────────────────────────────────────────────────
 // "This is your block" marker (markOwnBlock in cityScene.ts) — a persistent,
 // gently-pulsing lit look on exactly one block's OWN instance colour:
 // whichever one the CURRENT kiosk session most recently placed, or re-found
