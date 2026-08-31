@@ -36,13 +36,15 @@ import { buildDecorGroup, buildGroundGroup, disposeDecorGroup } from "./decor"
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Keyed by block index, not instance slot — the per-frame loop below
-// re-derives the solid instance slot each tick via node.solidUpTo (glass
-// blocks are never animated). `height`/`duration` are the fall distance and
-// time THIS block spawned with — addBlock's real placements use
-// DROP_HEIGHT_OWN/DROP_FALL_DUR_OWN, playAmbientCycle's decoration blocks
-// use the shorter DROP_HEIGHT/DROP_FALL_DUR (see revealBlockAt) — captured
-// per-entry since concurrent drops of both kinds can be in flight at once.
-type DropEntry = { startTime: number; height: number; duration: number }
+// re-derives the instance slot each tick via node.solidUpTo/glassUpTo
+// (`isGlass` picks which — glass and solid blocks live in separate
+// InstancedMeshes with independent index spaces, see revealBlockAt).
+// `height`/`duration` are the fall distance and time THIS block spawned
+// with — addBlock's real placements use DROP_HEIGHT_OWN/DROP_FALL_DUR_OWN,
+// playAmbientCycle's decoration blocks use the shorter DROP_HEIGHT/
+// DROP_FALL_DUR (see revealBlockAt) — captured per-entry since concurrent
+// drops of any mix of glass/solid can be in flight at once.
+type DropEntry = { startTime: number; height: number; duration: number; isGlass: boolean }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera framing constants
@@ -970,23 +972,29 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
     // Newly-placed-block drop animation (see revealBlockAt/DROP_HEIGHT/
     // DROP_FALL_DUR in utils.ts). Keyed by block index rather than instance
-    // slot since the slot is only resolved once we know the block isn't
-    // glass (never applies to glass). Position only — colour was already set
-    // to its true final value when the drop started (see revealBlockAt) and
-    // is never touched here.
+    // slot since the slot is only resolved once we know which mesh (solid or
+    // glass — 2026-08-31, glass blocks used to never animate at all, a gap
+    // inherited from the old highlight system that only ever applied to
+    // solid blocks and never got revisited when the drop-in animation was
+    // built) this entry belongs to, via `isGlass`. Position only — colour
+    // was already set to its true final value when the drop started (see
+    // revealBlockAt, solid blocks only — glass carries no instance colour)
+    // and is never touched here.
     for (const node of nodes.values()) {
       if (node.drops.size === 0) continue
-      let dirty = false
-      for (const [origIdx, { startTime, height, duration }] of node.drops) {
+      let solidDirty = false
+      let glassDirty = false
+      for (const [origIdx, { startTime, height, duration, isGlass: dropIsGlass }] of node.drops) {
         const elapsed = now - startTime
         const b = node.blocks[origIdx]
-        const si = node.solidUpTo[origIdx]
+        const mesh = dropIsGlass ? node.glassMesh : node.solidMesh
+        const si = dropIsGlass ? node.glassUpTo[origIdx] : node.solidUpTo[origIdx]
 
         if (elapsed >= duration) {
           dummy.position.set(b.x, b.y + 0.5, b.z)
           dummy.scale.set(1, 1, 1)
           dummy.updateMatrix()
-          node.solidMesh.setMatrixAt(si, dummy.matrix)
+          mesh.setMatrixAt(si, dummy.matrix)
           node.drops.delete(origIdx)
         } else {
           // Real (accelerating) gravity physics: distance fallen grows with
@@ -1013,11 +1021,13 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           dummy.position.set(b.x, y, b.z)
           dummy.scale.set(1, 1, 1)
           dummy.updateMatrix()
-          node.solidMesh.setMatrixAt(si, dummy.matrix)
+          mesh.setMatrixAt(si, dummy.matrix)
         }
-        dirty = true
+        if (dropIsGlass) glassDirty = true
+        else solidDirty = true
       }
-      if (dirty) node.solidMesh.instanceMatrix.needsUpdate = true
+      if (solidDirty) node.solidMesh.instanceMatrix.needsUpdate = true
+      if (glassDirty) node.glassMesh.instanceMatrix.needsUpdate = true
     }
 
     // "Your own block" marker's gentle breathing pulse — blends the block's
@@ -1093,14 +1103,24 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     node.visibleCount = Math.max(node.visibleCount, i + 1)
 
     if (isGlass(b)) {
-      // Glass panes never animate — same as the old highlight, which also
-      // only ever applied to solid blocks.
-      dummy.position.set(b.x, b.y + 0.5, b.z)
-      dummy.scale.set(1, 1, 1)
-      dummy.updateMatrix()
       const gi = node.glassUpTo[i]
-      node.glassMesh.setMatrixAt(gi, dummy.matrix)
       node.glassMesh.count = Math.max(node.glassMesh.count, gi + 1)
+      if (animate) {
+        // Same drop-in as solid blocks (2026-08-31 fix — glass used to
+        // always pop straight to its resting position, a gap inherited from
+        // the old highlight system that only ever applied to solid blocks).
+        // No colour to set — glass carries no instance colour, see below.
+        dummy.position.set(b.x, b.y + 0.5 + height, b.z)
+        dummy.scale.set(1, 1, 1)
+        dummy.updateMatrix()
+        node.glassMesh.setMatrixAt(gi, dummy.matrix)
+        node.drops.set(i, { startTime: performance.now() / 1000, height, duration, isGlass: true })
+      } else {
+        dummy.position.set(b.x, b.y + 0.5, b.z)
+        dummy.scale.set(1, 1, 1)
+        dummy.updateMatrix()
+        node.glassMesh.setMatrixAt(gi, dummy.matrix)
+      }
       node.glassMesh.instanceMatrix.needsUpdate = true
       return
     }
@@ -1118,7 +1138,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       dummy.updateMatrix()
       node.solidMesh.setMatrixAt(si, dummy.matrix)
       node.solidMesh.setColorAt(si, finColor)
-      node.drops.set(i, { startTime: performance.now() / 1000, height, duration })
+      node.drops.set(i, { startTime: performance.now() / 1000, height, duration, isGlass: false })
     } else {
       dummy.position.set(b.x, b.y + 0.5, b.z)
       dummy.scale.set(1, 1, 1)

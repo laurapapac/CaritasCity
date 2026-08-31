@@ -105,7 +105,24 @@ export function resolveColor(b: Block): number {
   return TYPE_COLORS[b.type] ?? 0x888888
 }
 
-export const isGlass = (b: Block): boolean => resolveColor(b) === GLASS_HEX
+// A block is glass if it's tagged as one (type "glass"/"window" — the two
+// labels used across the generators, houseGenerator.ts and
+// buildingGenerators.ts respectively) OR its resolved colour happens to be
+// the exact shared GLASS_HEX. The type check matters because glass is always
+// rendered through one shared, uniformly-tinted transparent material
+// (glassMesh never receives a per-instance colour — see revealBlockAt in
+// cityScene.ts) regardless of what colour the source data carries: every
+// non-house building's generator already throws away its own window palette
+// and force-writes GLASS_HEX (buildingGenerators.ts's makeBlocks), but house
+// windows (2026-08-31 bug fix) carry a real per-style tint from
+// WINDOW_PALETTES that was never actually visible in the rendered scene —
+// only used to fail this exact-colour check and render the "window" as an
+// opaque solid block instead of a transparent pane. Checking `type` instead
+// keeps every house style's tint variety in the source data (still useful
+// for anything that reads it directly) while making every window actually
+// render, and animate, as glass.
+export const isGlass = (b: Block): boolean =>
+  b.type === "glass" || b.type === "window" || resolveColor(b) === GLASS_HEX
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Index lookup tables
