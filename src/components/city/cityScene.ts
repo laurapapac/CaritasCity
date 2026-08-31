@@ -516,9 +516,32 @@ function wallSpanLength(
 // outward" purely from occupancy: whichever of the 6 neighbor cells is empty.
 // Pure function of the block list + index, so it's naturally deterministic across
 // calls (same building + blockIndex always yields the same framing).
+//
+// Occupancy is checked only against blocks[0..index] — i.e. what's actually
+// built so far — not the finished blueprint (2026-08-31 bug fix). Block
+// visibility is always a prefix of the blueprint array (see visibleCount/
+// solidUpTo elsewhere in this file), so a neighbor at a later index simply
+// doesn't exist yet at the moment `index` is revealed and framed, even though
+// it will in the completed building. Using full-blueprint occupancy meant
+// treating "will eventually be enclosed" the same as "is enclosed right now"
+// — verified against the real hospital generators this hits the
+// exposedLateral.length===0 fallback below (an arbitrary, unchecked
+// direction) for 8-19% of all blocks in every hospital variant, all of them
+// the inner sub-layer of a multi-thick wall ring at each floor's floor
+// level, sitting on a solid floor slab that in the FULL blueprint occupies
+// the "above"/"inward" neighbors — but at reveal time neither has been built
+// yet (the floor's full-height wall ring is inserted before that floor's
+// slab, and row-by-row before the layer above), so those directions were
+// actually clear. Reported live: hospital blocks placed while filling a
+// floor's ring horizontally framed from the side, with the shot blocked by
+// the building's own geometry, instead of from above.
 function findExposedFaceNormal(blocks: Block[], index: number): [number, number, number] {
   const b = blocks[index]
-  const occupied = new Set(blocks.map((v) => `${v.x},${v.y},${v.z}`))
+  const occupied = new Set<string>()
+  for (let i = 0; i <= index; i++) {
+    const v = blocks[i]
+    occupied.add(`${v.x},${v.y},${v.z}`)
+  }
 
   for (const [dx, dy, dz] of VERTICAL_DIRECTIONS) {
     if (!occupied.has(`${b.x + dx},${b.y + dy},${b.z + dz}`)) return [dx, dy, dz]
