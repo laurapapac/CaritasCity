@@ -13,18 +13,23 @@ export const GLASS_HEX      = 0x90c8d8
 // the ambient decoration-construction loop (playAmbientCycle). The block
 // falls from above and lands with a hard stop — no squash/bounce (2026-08-28,
 // user feedback: read as too bouncy). Real (accelerating) gravity physics:
-// distance fallen grows with t³, so it starts slow and speeds up hard into
-// the landing (2026-08-28: an earlier ease-out version, which starts fast and
-// slows down, was a wrong-direction fix for a genuine ease-in bug — the
-// previous ease-in was paired with too short a duration/too tall a drop, so
-// almost all the perceptible motion got compressed into the fall's last
-// sliver of time; the real fix was slowing the whole fall down, not flipping
-// the curve). Cubic rather than quadratic (2026-08-28, follow-up user
-// feedback: the overall fall read as too slow, but the slow start itself was
-// liked and shouldn't just get uniformly sped up) — t³ keeps the first ~0.2s
-// nearly identical in real time to the old t²/0.5s curve (actually a touch
-// slower), then accelerates harder through the back half so it lands in
-// DROP_FALL_DUR instead of dragging out.
+// distance fallen grows with t⁴ (see the animate loop in cityScene.ts), so it
+// starts slow and speeds up hard into the landing (2026-08-28: an earlier
+// ease-out version, which starts fast and slows down, was a wrong-direction
+// fix for a genuine ease-in bug — the previous ease-in was paired with too
+// short a duration/too tall a drop, so almost all the perceptible motion got
+// compressed into the fall's last sliver of time; the real fix was slowing
+// the whole fall down, not flipping the curve). Cubic rather than quadratic
+// (2026-08-28, follow-up user feedback: the overall fall read as too slow,
+// but the slow start itself was liked and shouldn't just get uniformly sped
+// up) — t³ keeps the first ~0.2s nearly identical in real time to the old
+// t²/0.5s curve (actually a touch slower), then accelerates harder through
+// the back half so it lands in DROP_FALL_DUR instead of dragging out.
+// Quartic rather than cubic (2026-08-31, follow-up: the landing itself still
+// read as too slow) — bumping the exponent again keeps the same slow start
+// (t⁴ < t³ at every t<1) while raising landing-instant velocity (∝ n·height/
+// duration) by a third, so the fall visibly speeds up right before impact
+// instead of coasting the last stretch in.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // World units the block falls from above its resting position — the
@@ -40,9 +45,18 @@ export const DROP_HEIGHT = 3.0
 export const DROP_HEIGHT_OWN = 9.5
 // Fall duration, seconds. 0.5→0.38 (2026-08-28, user feedback: too slow
 // overall) — paired with the t³ curve above so the cut comes out of the
-// back half of the fall, not the slow start. Shared by both heights above —
-// only asked to change the height, not the timing.
+// back half of the fall, not the slow start. This is the ambient
+// decoration loop's duration, paired with the shorter DROP_HEIGHT above.
 export const DROP_FALL_DUR = 0.38
+// Real placement's own duration (2026-08-28, follow-up): DROP_HEIGHT_OWN
+// was raised 5.0→9.5 without touching DROP_FALL_DUR, so the same 0.38s
+// suddenly covered ~1.9x the distance and the fall read as too fast. Since
+// the t³ curve's shape (fraction of height fallen vs. fraction of time
+// elapsed) is height-independent, only the landing speed changes with
+// height/duration — scaling duration by the same 5.0→9.5 ratio
+// (0.38 * 9.5/5.0) reproduces the exact landing speed the fall already had
+// at height 5.0, before it started reading as too fast.
+export const DROP_FALL_DUR_OWN = 0.38 * (DROP_HEIGHT_OWN / 5.0)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "This is your block" marker (markOwnBlock in cityScene.ts) — a persistent,
