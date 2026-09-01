@@ -2,7 +2,16 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
-## RESOLVED: dust burst still read as too mild after the visibility fix — doubled particle count (2026-09-01)
+## Status: dust burst raised again, 10→20 — user flagged 10 was still "way too mild" (2026-09-01, same session, follow-up)
+
+Immediate follow-up after the 5→10 round below shipped: user live-tested it and said 10 still looks too mild, asked for at least 20, with more possible if 20 is still mild.
+
+- **Fix**: `DUST_PARTICLES_PER_BURST` 10→20, `DUST_POOL_SIZE` 128→256 (`utils.ts`) — same doubling-together pattern as the 5→10 round, for the same reason (keep the ring-buffer pool's headroom at ~12-13 concurrent bursts rather than letting it shrink as per-burst count rises).
+- **Verified live via `/dev/preview`**, same temporary-hook pattern as every round in this file: re-added `window.__cityDustDebug`, confirmed the hot-reloaded constants read back as `perBurst: 20, poolSize: 256`, called `spawnDustBurst` directly and confirmed exactly 20 active pool slots — then removed the hook (confirmed via `grep`, zero matches; `git diff --stat` shows only `utils.ts` changed, not `cityScene.ts`). `vite build` clean. As with every prior round, the actual "does 20 look right now" visual judgment needs the user's own live look — this tab still has no running `requestAnimationFrame`.
+- **Open**: user explicitly flagged this may need another round if 20 still isn't enough — no cap has been set on how far this can go, just keep scaling `DUST_POOL_SIZE` in lockstep.
+- **Committed and pushed together with this same todo.md update** — see `git log` for the hash.
+
+## RESOLVED: dust burst still read as too mild after the visibility fix — doubled particle count 5→10 (2026-09-01)
 
 Picked up cold via this file's resume prompt. Found on arrival that every "not committed yet" note in this file's then-top three entries (dust visibility tuning, dust burst addition, hospital camera-framing fix) was stale — `git log`/`git show` confirmed all three were already committed and pushed (`c980aa3`, `e919ef2`); corrected those notes below rather than leaving them wrong. Brought the dev environment up from a full cold stop (Docker Desktop, backend, frontend, same access pattern as every prior session — LAN IP unchanged at `192.168.1.163`). Then user reported the dust burst itself (see the visibility fix two entries below) still reads too mild — not a "can't see it at all" complaint like before, just "not enough of it."
 
