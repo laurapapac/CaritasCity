@@ -74,17 +74,21 @@ export const DROP_FALL_DUR_OWN = 0.38 * (DROP_HEIGHT_OWN / 5.0)
 // background city's.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Debris cubes flung per landing. Kept low — this fires on every animated
-// landing, including the ambient loop's roughly-one-per-second-per-active-site
-// cadence across up to 180 concurrent sites, so it has to stay cheap and
-// subtle rather than a showy burst.
-export const DUST_PARTICLES_PER_BURST = 5
+// Debris cubes flung per landing. 5→10 (2026-09-01, user report: the burst
+// reads too mild even after the earlier size/lifetime/colour visibility
+// fix). Still fires on every animated landing, including the ambient loop's
+// roughly-one-per-second-per-active-site cadence across up to 180 concurrent
+// sites, so DUST_POOL_SIZE below is scaled up by the same factor to keep the
+// pool's headroom (in bursts-worth of capacity) identical to before.
+export const DUST_PARTICLES_PER_BURST = 10
 // Fixed-size ring buffer of shared particle instances (one InstancedMesh for
 // the whole city, not per building) — bounds total particle count regardless
-// of how many buildings are landing blocks at once. 64 covers multiple
-// concurrent bursts (5 particles each) with room to spare before the oldest
+// of how many buildings are landing blocks at once. 128 (2026-09-01, doubled
+// alongside DUST_PARTICLES_PER_BURST 5→10 so the pool still covers the same
+// ~12-13 concurrent bursts' worth of headroom as before, rather than halving
+// it) covers multiple concurrent bursts with room to spare before the oldest
 // unexpired particles start getting recycled early.
-export const DUST_POOL_SIZE = 64
+export const DUST_POOL_SIZE = 128
 // World units the debris travels outward from the landing point before
 // gravity and despawn end it — kept small, this is meant to read as "settling
 // dust," not an explosion.
