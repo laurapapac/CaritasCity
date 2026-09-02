@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: kiosk code-entry field now autofocuses on load — real dropped-ref bug, not an environment quirk (2026-09-02)
+
+User asked for the `/kiosk` code input to be focused on load with no click needed. First attempt: added a `useRef`/`useEffect(() => inputRef.current?.focus(), [])` in `EntryStep` (`Kiosk.tsx`) and passed `ref={inputRef}` to the local `<InputOTP>` wrapper. Verified live via the automated browser tab at the time — but that tab is backgrounded (`document.hasFocus()` false, `visibilityState: "hidden"`), so the failure to observe focus landing was wrongly attributed to that known limitation. User then tested for real (hard refresh on the actual kiosk machine) and reported it still didn't work — click was still required.
+
+- **Real root cause**: `InputOTP` in `src/app/components/ui/input-otp.tsx` was a plain function component, not wrapped in `React.forwardRef`. This project is React 18, where a `ref` passed to a plain function component is silently dropped (no error, no warning surfaced here) — so `inputRef.current` stayed `null` forever and `inputRef.current?.focus()` was a no-op every render. Not a timing/CSS/environment issue at all.
+- **Fix**: wrapped `InputOTP` in `React.forwardRef<React.ElementRef<typeof OTPInput>, ...>` and passed `ref` through to the underlying `<OTPInput>` from the `input-otp` library (itself already `forwardRef<HTMLInputElement>`, confirmed by reading its `.d.ts`). No change needed to `Kiosk.tsx`'s `EntryStep` — its ref/effect were already correct once the wrapper actually forwarded the ref.
+- **Verified live correctly this time**: distinguished "does .focus() get called" from "does the tab have OS focus" — confirmed a manual `.focus()` call on the raw DOM node does move `document.activeElement` even in this backgrounded automation tab (`hasFocus:false`), proving focus-calls aren't suppressed here. Then reloaded `/kiosk` fresh and polled `document.activeElement`: it was the OTP input at `t=0`, immediately on mount — confirming the ref now actually attaches and the effect fires, not just that it theoretically should. `vite build` clean.
+- **Committed and pushed** — see `git log` for the hash. User confirmed to commit without an additional live re-test round, having reviewed the fix.
+
 ## Status: dust burst raised again, 10→20 — user flagged 10 was still "way too mild" (2026-09-01, same session, follow-up)
 
 Immediate follow-up after the 5→10 round below shipped: user live-tested it and said 10 still looks too mild, asked for at least 20, with more possible if 20 is still mild.

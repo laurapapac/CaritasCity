@@ -113,6 +113,13 @@ function ProgressBlock({ block }: { block: BlockInfo }) {
 
 function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: string) => void }) {
   const [code, setCode] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Kiosk is a walk-up shared desktop — the code entry should be ready to
+  // type into the moment the screen appears, no click required.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   return (
     <Card className="pointer-events-auto w-full max-w-sm bg-card/95 backdrop-blur">
@@ -122,6 +129,7 @@ function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: strin
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4">
         <InputOTP
+          ref={inputRef}
           value={code}
           onChange={(v) => setCode(v.toUpperCase())}
           maxLength={CODE_LENGTH}
