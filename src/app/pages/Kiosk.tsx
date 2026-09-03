@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
+import logoUrl from "../../assets/logo-caritas-crvena.png";
 import {
   ApiError,
   enterCode,
@@ -122,12 +123,29 @@ function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: strin
   }, []);
 
   return (
-    <Card className="pointer-events-auto w-full max-w-sm bg-card/95 backdrop-blur">
-      <CardHeader>
-        <CardTitle>Enter your code</CardTitle>
-        <CardDescription>Type the code shown on your phone</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4">
+    <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
+      <CardContent className="flex flex-col items-center gap-6 pt-6">
+        <img src={logoUrl} alt="GRADiMIR" className="h-16 w-auto" />
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-lg font-bold">Hvala na donaciji 🙏</p>
+          <p className="text-sm">Vaš kod bit će aktiviran nakon potvrde.</p>
+        </div>
+
+        <p className="text-muted-foreground text-center text-sm">
+          U sljedećem koraku odabrat ćete svoju školu i dodati jednu digitalnu kockicu u GRADiMIR
+          svijet. Ta kockica predstavlja stvarnu novčanu donaciju koja pomaže obiteljima u
+          potrebi. Nastavite i pogledajte kako svaki doprinos zajednički pomaže graditi nešto
+          veće.
+        </p>
+
+        <div className="w-full border-t" />
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="font-bold">Unesite svoj kod</p>
+          <p className="text-muted-foreground text-sm">Upišite kod prikazan na vašem telefonu.</p>
+        </div>
+
         <InputOTP
           ref={inputRef}
           value={code}
@@ -138,13 +156,23 @@ function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: strin
         >
           <InputOTPGroup>
             {Array.from({ length: CODE_LENGTH }, (_, i) => (
-              <InputOTPSlot key={i} index={i} />
+              <InputOTPSlot
+                key={i}
+                index={i}
+                className="h-11 w-11 rounded-md border-0 bg-muted text-base first:rounded-md last:rounded-md"
+              />
             ))}
           </InputOTPGroup>
         </InputOTP>
+
         {error && <p className="text-destructive text-sm">{error}</p>}
-        <Button disabled={code.length !== CODE_LENGTH} onClick={() => onSubmit(code)}>
-          Continue
+
+        <Button
+          className="bg-neutral-500 text-white hover:bg-neutral-600"
+          disabled={code.length !== CODE_LENGTH}
+          onClick={() => onSubmit(code)}
+        >
+          Nastavi
         </Button>
       </CardContent>
     </Card>

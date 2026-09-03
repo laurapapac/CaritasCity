@@ -3,6 +3,7 @@ import { useParams } from "react-router";
 import { ApiError, scanQr, type ScanResponse } from "../../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import logoUrl from "../../assets/logo-caritas-crvena.png";
 
 type State =
   | { phase: "loading" }
@@ -30,17 +31,16 @@ function CodeCard({ data }: { data: ScanResponse }) {
 
   return (
     <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Your code</CardTitle>
-        <CardDescription>Type this into the shared kiosk screen</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4">
-        <div
-          className="text-5xl font-bold tracking-[0.3em]"
-          style={{ fontFamily: "ui-monospace,'Geist Mono','Courier New',monospace" }}
-        >
-          {data.code}
-        </div>
+      <CardContent className="flex flex-col items-center gap-4 pt-6">
+        <p className="text-center font-bold">
+          Posjetite na računalu web stranicu
+          <br />
+          gradimir.caritas.hr
+        </p>
+        <p className="text-muted-foreground text-center text-sm">
+          Upišite kod prikazan na vašem telefonu.
+        </p>
+        <div className="text-6xl font-extrabold tracking-[0.3em]">{data.code}</div>
         <p className={expired ? "text-destructive" : "text-muted-foreground"}>
           {expired ? "This code has expired" : `Valid for ${countdown}`}
         </p>
@@ -72,7 +72,9 @@ export default function ScanLanding() {
   }, [load]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen flex-col items-center gap-8 bg-background px-4 pt-12 pb-8">
+      <img src={logoUrl} alt="GRADiMIR" className="h-20 w-auto" />
+
       {state.phase === "loading" && <p className="text-muted-foreground">Loading…</p>}
 
       {state.phase === "ready" && <CodeCard data={state.data} />}
