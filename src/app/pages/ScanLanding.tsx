@@ -3,7 +3,7 @@ import { useParams } from "react-router";
 import { ApiError, scanQr, type ScanResponse } from "../../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import logoUrl from "../../assets/logo-caritas-crvena.png";
+import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
 
 type State =
   | { phase: "loading" }

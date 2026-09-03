@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
-import logoUrl from "../../assets/logo-caritas-crvena.png";
+import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
 import {
   ApiError,
   enterCode,
@@ -50,6 +50,13 @@ const CATEGORY_LABEL: Record<BuildingCategory, string> = {
   hospital: "Hospital",
   food: "Food",
   school: "School",
+};
+
+const CATEGORY_LABEL_HR: Record<BuildingCategory, string> = {
+  residential: "Stambena zgrada",
+  hospital: "Bolnica",
+  food: "Hrana",
+  school: "Škola",
 };
 
 // Real city layout (2026-08-13) — replaces the old 4-fixed-plot model.
@@ -204,56 +211,67 @@ function SchoolStep({
   const selected = schools.find((s) => s.id === schoolId);
 
   return (
-    <Card className="pointer-events-auto w-full max-w-sm bg-card/95 backdrop-blur">
-      <CardHeader>
-        <CardTitle>Which school?</CardTitle>
-        <CardDescription>
-          Placing a {CATEGORY_LABEL[category]} block — pick the school to credit
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" role="combobox" aria-expanded={open} className="justify-between">
-              {selected ? selected.name : "Select a school"}
-              <ChevronsUpDown className="opacity-50" />
+    <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
+      <CardContent className="flex flex-col items-center gap-6 pt-6">
+        <img src={logoUrl} alt="GRADiMIR" className="h-16 w-auto" />
+
+        <div className="flex w-full flex-col gap-4">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <p className="font-bold">Koja škola?</p>
+            <p className="text-muted-foreground text-sm">
+              Postavljate {CATEGORY_LABEL_HR[category]} kockicu — odaberite školu koju predstavljate.
+            </p>
+          </div>
+
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" role="combobox" aria-expanded={open} className="justify-between">
+                {selected ? selected.name : "Odaberite školu"}
+                <ChevronsUpDown className="opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+              <Command>
+                <CommandInput placeholder="Pretraži škole…" />
+                <CommandList>
+                  <CommandEmpty>Škola nije pronađena.</CommandEmpty>
+                  <CommandGroup>
+                    {schools.map((s) => (
+                      <CommandItem
+                        key={s.id}
+                        value={s.name}
+                        onSelect={() => {
+                          setSchoolId(s.id);
+                          setOpen(false);
+                        }}
+                      >
+                        <Check className={s.id === schoolId ? "opacity-100" : "opacity-0"} />
+                        {s.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {loadError && (
+            <p className="text-destructive text-sm">
+              Nije moguće učitati popis škola. Pokušajte ponovno učitati.
+            </p>
+          )}
+          {error && <p className="text-destructive text-sm">{error}</p>}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onBack}>
+              Natrag
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-            <Command>
-              <CommandInput placeholder="Search schools…" />
-              <CommandList>
-                <CommandEmpty>No school found.</CommandEmpty>
-                <CommandGroup>
-                  {schools.map((s) => (
-                    <CommandItem
-                      key={s.id}
-                      value={s.name}
-                      onSelect={() => {
-                        setSchoolId(s.id);
-                        setOpen(false);
-                      }}
-                    >
-                      <Check className={s.id === schoolId ? "opacity-100" : "opacity-0"} />
-                      {s.name}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        {loadError && (
-          <p className="text-destructive text-sm">Couldn't load the school list. Try reloading.</p>
-        )}
-        {error && <p className="text-destructive text-sm">{error}</p>}
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack}>
-            Back
-          </Button>
-          <Button disabled={!schoolId} onClick={() => schoolId && onConfirm(schoolId)}>
-            Enter the game
-          </Button>
+            <Button
+              className="bg-neutral-500 text-white hover:bg-neutral-600"
+              disabled={!schoolId}
+              onClick={() => schoolId && onConfirm(schoolId)}
+            >
+              Uđi u igru
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -326,8 +344,8 @@ export default function Kiosk() {
       .catch((err) => {
         const message =
           err instanceof ApiError && err.code === "invalid_or_expired_code"
-            ? "That code is invalid or has expired."
-            : "Something went wrong — try again.";
+            ? "Taj kod nije važeći ili je istekao."
+            : "Nešto je pošlo po zlu — pokušajte ponovno.";
         setState({ phase: "entry", error: message });
       });
   }
@@ -377,12 +395,12 @@ export default function Kiosk() {
         const message =
           err instanceof ApiError
             ? {
-                unknown_school: "That school isn't recognized.",
-                category_complete: "This category is already complete!",
-                block_already_placed: "This block was already placed.",
-                invalid_or_expired_code: "That code is invalid or has expired.",
-              }[err.code] ?? "Something went wrong — try again."
-            : "Something went wrong — try again.";
+                unknown_school: "Ta škola nije prepoznata.",
+                category_complete: "Ova kategorija je već završena!",
+                block_already_placed: "Ovaj blok je već postavljen.",
+                invalid_or_expired_code: "Taj kod nije važeći ili je istekao.",
+              }[err.code] ?? "Nešto je pošlo po zlu — pokušajte ponovno."
+            : "Nešto je pošlo po zlu — pokušajte ponovno.";
         setState({ phase: "needs_school", code, category, error: message });
       });
   }
