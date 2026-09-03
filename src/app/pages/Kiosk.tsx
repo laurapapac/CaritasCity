@@ -59,6 +59,22 @@ const CATEGORY_LABEL_HR: Record<BuildingCategory, string> = {
   school: "Škola",
 };
 
+// What the current block actually builds, by variant (accusative case, for
+// "Stavljate kockicu koja gradi ___"). Falls back to the category's own
+// generic label (see CATEGORY_LABEL_HR) if the active building's variant
+// couldn't be looked up locally — see getActiveVariant in Kiosk().
+const VARIANT_WORD_HR: Record<string, string> = {
+  school: "školu",
+  hospital_small: "bolnicu",
+  hospital_medium: "bolnicu",
+  hospital_large: "bolnicu",
+  restaurant: "restoran",
+  food_bank: "pučku kuhinju",
+  house: "kuću",
+  short_apartment: "zgradu",
+  tall_apartment: "zgradu",
+};
+
 // Real city layout (2026-08-13) — replaces the old 4-fixed-plot model.
 // Position has never lived in the database (see src/lib/api.ts's
 // BuildingState.orderIndex doc comment) and still doesn't; it's joined here
@@ -99,7 +115,7 @@ type Phase =
   | { phase: "loading" }
   | { phase: "load_error" }
   | { phase: "entry"; error?: string }
-  | { phase: "needs_school"; code: string; category: BuildingCategory; error?: string }
+  | { phase: "needs_school"; code: string; category: BuildingCategory; variant?: string; error?: string }
   | { phase: "constructing" }
   | { phase: "placed"; block: BlockInfo }
   | { phase: "existing"; block: BlockInfo };
@@ -188,11 +204,13 @@ function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: strin
 
 function SchoolStep({
   category,
+  variant,
   error,
   onConfirm,
   onBack,
 }: {
   category: BuildingCategory;
+  variant?: string;
   error?: string;
   onConfirm: (schoolId: number) => void;
   onBack: () => void;
@@ -209,6 +227,8 @@ function SchoolStep({
   }, []);
 
   const selected = schools.find((s) => s.id === schoolId);
+  const buildingWord =
+    (variant && VARIANT_WORD_HR[variant]) ?? CATEGORY_LABEL_HR[category].toLowerCase();
 
   return (
     <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
@@ -217,10 +237,9 @@ function SchoolStep({
 
         <div className="flex w-full flex-col gap-4">
           <div className="flex flex-col items-center gap-1 text-center">
-            <p className="font-bold">Koja škola?</p>
-            <p className="text-muted-foreground text-sm">
-              Postavljate {CATEGORY_LABEL_HR[category]} kockicu — odaberite školu koju predstavljate.
-            </p>
+            <p className="font-bold">Koja ste škola?</p>
+            <p className="text-muted-foreground text-sm">Stavljate kockicu koja gradi {buildingWord}.</p>
+            <p className="text-muted-foreground text-sm">Odaberite školu koju predstavljate.</p>
           </div>
 
           <Popover open={open} onOpenChange={setOpen}>
@@ -330,6 +349,16 @@ export default function Kiosk() {
   // client-side. See useAmbientDecorConstruction's own doc comment.
   useAmbientDecorConstruction(cityRef, STATIC_DECOR_BUILDINGS, cityData !== null);
 
+  // The active (in_progress) building for a category already has a fixed
+  // variant before school selection — placeBlock always targets it, one
+  // in_progress row per category (see server/src/routes/placeBlock.ts) — so
+  // this reads it straight out of the already-loaded city data instead of
+  // needing a backend change to /enter.
+  function getActiveVariant(category: BuildingCategory): string | undefined {
+    return cityData?.rows.find((r) => r.category === category && r.status === "in_progress")
+      ?.variant;
+  }
+
   function handleEnter(code: string) {
     enterCode(code)
       .then((res) => {
@@ -338,7 +367,12 @@ export default function Kiosk() {
           cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
           setState({ phase: "existing", block: res.block });
         } else {
-          setState({ phase: "needs_school", code, category: res.category });
+          setState({
+            phase: "needs_school",
+            code,
+            category: res.category,
+            variant: getActiveVariant(res.category),
+          });
         }
       })
       .catch((err) => {
@@ -401,7 +435,7 @@ export default function Kiosk() {
                 invalid_or_expired_code: "Taj kod nije važeći ili je istekao.",
               }[err.code] ?? "Nešto je pošlo po zlu — pokušajte ponovno."
             : "Nešto je pošlo po zlu — pokušajte ponovno.";
-        setState({ phase: "needs_school", code, category, error: message });
+        setState({ phase: "needs_school", code, category, variant: getActiveVariant(category), error: message });
       });
   }
 
@@ -442,6 +476,7 @@ export default function Kiosk() {
           {state.phase === "needs_school" && (
             <SchoolStep
               category={state.category}
+              variant={state.variant}
               error={state.error}
               onBack={() => setState({ phase: "entry" })}
               onConfirm={(schoolId) => handleConfirm(state.code, state.category, schoolId)}
