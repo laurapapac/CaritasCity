@@ -40,7 +40,7 @@ function CodeCard({ data }: { data: ScanResponse }) {
         <p className="text-muted-foreground text-center text-sm">
           Upišite kod prikazan na vašem telefonu.
         </p>
-        <div className="text-6xl font-extrabold tracking-[0.3em]">{data.code}</div>
+        <div className="text-3xl font-extrabold tracking-[0.3em]">{data.code}</div>
         <p className={expired ? "text-destructive" : "text-muted-foreground"}>
           {expired ? "This code has expired" : `Valid for ${countdown}`}
         </p>
