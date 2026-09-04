@@ -57,6 +57,14 @@
  * multiplicative shadeForLayer tint, since both need genuine color
  * blending toward the fog color for atmospheric perspective, not just a
  * ±12% brightness nudge.
+ *
+ * Road/floor textures (2026-09-04): roads and the city's own grey ground
+ * disc — the only two remaining flat-color surfaces — now use procedural
+ * CanvasTextures too (buildAsphaltTexture/buildConcreteTexture), same
+ * technique as the parks/beaches above. Roads get a dashed centerline +
+ * wheel-wear bands; the ground disc gets mottled speckle + a slab-joint
+ * grid. Base colors are unchanged (asphalt/concrete tones match the old
+ * flat fills), this only adds visible texture.
  */
 
 import * as THREE from "three"
@@ -65,7 +73,6 @@ import type { CityDecor, MeadowShape, MountainPeak, OrientedMarker, TerrainData 
 import { BLOCK_TEX } from "./utils"
 
 const LAKE_COLOR = 0x3a7bd5
-const ROAD_COLOR = 0x555a5e
 const BUSH_COLOR = 0x3d7a3f
 const LAMP_POLE_COLOR = 0x2b2b2b
 const LAMP_HEAD_COLOR = 0xffd98a
@@ -92,7 +99,11 @@ function mulberry32(seed: number): () => number {
 
 // World-space size (in units) one texture tile covers — how far apart UV
 // scaling repeats the canvas across a park/beach's real-world footprint.
-const TEXTURE_TILE_UNITS = { grass: 6, beach: 5 }
+// `road` is the tile's length along the direction of travel — its width
+// axis is never scaled (see the road-building loop below, it always spans
+// exactly one tile across the real ROAD_WIDTH). `floor` is the concrete
+// disc's slab size.
+const TEXTURE_TILE_UNITS = { grass: 6, beach: 5, road: 8, floor: 6 }
 
 function buildStoneTexture(): THREE.CanvasTexture {
   const size = 128
@@ -138,6 +149,92 @@ function buildGrassTexture(): THREE.CanvasTexture {
     ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len)
     ctx.stroke()
   }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  return tex
+}
+
+// Roads and the city's own ground disc (2026-09-04, user request: both read
+// as "a plain color" — texture them like parks/beaches already are). Same
+// procedural-canvas-plus-RepeatWrapping technique as buildStoneTexture/
+// buildGrassTexture above, just two new patterns.
+//
+// The canvas is deliberately non-square (2:1) to match a road tile's real
+// aspect ratio (TEXTURE_TILE_UNITS.road long × ROAD_WIDTH wide) — only the
+// length axis (U) ever gets repeat-scaled (see the road-building loop
+// below), so V always spans exactly one tile across the real road width,
+// which is what keeps the dashed centerline drawn at v=0.5 sitting on the
+// actual center of every segment regardless of that segment's own length.
+// The single centered dash (with the gap split evenly at the tile's left/
+// right edges) is what makes the dash pattern tile seamlessly instead of
+// doubling up or leaving an odd-width dash at each repeat boundary.
+function buildAsphaltTexture(): THREE.CanvasTexture {
+  const w = 256, h = 128
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext("2d")!
+  ctx.fillStyle = "#54585c"
+  ctx.fillRect(0, 0, w, h)
+
+  const rand = mulberry32(20260904)
+  for (let i = 0; i < 900; i++) {
+    const x = rand() * w, y = rand() * h
+    const r = 0.5 + rand() * 1.3
+    const shade = 60 + Math.floor(rand() * 40)
+    ctx.fillStyle = `rgba(${shade},${shade + 2},${shade + 4},0.5)`
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Wheel-wear tracks — two faint darker bands where tires travel, purely
+  // cosmetic (not tied to any real lane math).
+  ctx.fillStyle = "rgba(30,32,34,0.18)"
+  ctx.fillRect(0, h * 0.18, w, h * 0.14)
+  ctx.fillRect(0, h * 0.68, w, h * 0.14)
+
+  // Dashed centerline.
+  ctx.fillStyle = "#ded6a8"
+  ctx.fillRect(w * 0.25, h * 0.47, w * 0.5, h * 0.06)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  return tex
+}
+
+// Subtle mottled slab pattern for the ground disc — same speckle technique
+// as buildStoneTexture, lower contrast (it's meant to read as "textured
+// concrete," not gravel), plus a joint line drawn only along the tile's own
+// top/left edge so repeating it produces one continuous slab grid instead of
+// doubled-up lines at every seam.
+function buildConcreteTexture(): THREE.CanvasTexture {
+  const size = 128
+  const canvas = document.createElement("canvas")
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext("2d")!
+  ctx.fillStyle = "#b7b9ba"
+  ctx.fillRect(0, 0, size, size)
+
+  const rand = mulberry32(20260905)
+  for (let i = 0; i < 500; i++) {
+    const x = rand() * size, y = rand() * size
+    const r = 0.6 + rand() * 1.6
+    const shade = 150 + Math.floor(rand() * 55)
+    ctx.fillStyle = `rgba(${shade},${shade},${shade + 1},0.35)`
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  ctx.strokeStyle = "rgba(100,100,98,0.55)"
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(0, 0); ctx.lineTo(size, 0)
+  ctx.moveTo(0, 0); ctx.lineTo(0, size)
+  ctx.stroke()
+
   const tex = new THREE.CanvasTexture(canvas)
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
   return tex
@@ -519,7 +616,11 @@ export function buildGroundGroup(cityEdge = 450): THREE.Group {
   const blendEnd = blendStart + GROUND_BLEND_WIDTH
 
   const innerGeo = new THREE.CircleGeometry(discRadius, 96)
-  const innerMat = new THREE.MeshLambertMaterial({ color: GROUND_GREY })
+  // CircleGeometry's own UV already maps the full diameter to [0,1] on both
+  // axes, so scaleUV's usual "repeat = span / tileUnit" works unchanged even
+  // though this isn't a plane.
+  scaleUV(innerGeo, (2 * discRadius) / TEXTURE_TILE_UNITS.floor, (2 * discRadius) / TEXTURE_TILE_UNITS.floor)
+  const innerMat = new THREE.MeshLambertMaterial({ map: buildConcreteTexture() })
   const inner = new THREE.Mesh(innerGeo, innerMat)
   inner.rotation.x = -Math.PI / 2
   group.add(inner)
@@ -766,6 +867,11 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
       const length = Math.hypot(dx, dz)
       const angle = Math.atan2(dz, dx)
       const geo = new THREE.PlaneGeometry(length, decor.roadWidth)
+      // Only the length axis (U) is scaled — PlaneGeometry's default V
+      // already spans exactly [0,1] across decor.roadWidth (the plane's own
+      // height param), so leaving it alone is what keeps the texture's
+      // dashed centerline sitting on the real center of every segment.
+      scaleUV(geo, length / TEXTURE_TILE_UNITS.road, 1)
       geo.rotateX(-Math.PI / 2)
       geo.rotateY(-angle)
       geo.translate((seg.x1 + seg.x2) / 2, 0.10, (seg.z1 + seg.z2) / 2)
@@ -773,7 +879,7 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
     })
     const merged = mergeGeometries(roadGeometries)
     roadGeometries.forEach((g) => g.dispose())
-    const mat = new THREE.MeshLambertMaterial({ color: ROAD_COLOR })
+    const mat = new THREE.MeshLambertMaterial({ map: buildAsphaltTexture() })
     group.add(new THREE.Mesh(merged, mat))
   }
 
