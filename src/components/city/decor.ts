@@ -876,7 +876,21 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
       // already spans exactly [0,1] across decor.roadWidth (the plane's own
       // height param), so leaving it alone is what keeps the texture's
       // dashed centerline sitting on the real center of every segment.
-      scaleUV(geo, length / TEXTURE_TILE_UNITS.road, 1)
+      //
+      // repeatX is rounded to a whole number of tiles (min 1), not left as
+      // the raw length/tileUnit fraction — decor.roads segments are
+      // BSP-leaf edges of very uneven length (long avenue stretches down to
+      // short intersection-to-intersection nubs), and a fractional repeat
+      // samples only a *partial* tile: on a short segment that often meant
+      // showing just a sliver of the canvas around the dash, which reads as
+      // a near-solid unbroken line right where the real dash-gap pattern
+      // should be — the "glitchy"/inconsistent look the user flagged, not
+      // the (separately fixed) intersection z-fight. Rounding means every
+      // segment always shows complete dash-gap cycles; the actual per-cycle
+      // length varies slightly segment to segment to fit evenly, which
+      // isn't noticeable at this scale.
+      const repeatX = Math.max(1, Math.round(length / TEXTURE_TILE_UNITS.road))
+      scaleUV(geo, repeatX, 1)
       geo.rotateX(-Math.PI / 2)
       geo.rotateY(-angle)
       // Road segments are BSP-leaf edges (generateCityLayout.ts's

@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: dashed centerline still read as "glitchy" after the z-fight fix — real cause was per-segment fractional UV repeat (2026-09-04, same session, follow-up)
+
+User re-tested after the z-fighting fix (below) and said the road separator lines were *still* glitchy — meaning that fix, while real, wasn't the (only) thing being seen. Rather than assume it was a subtler version of the same z-fight, went back and looked closely at individual segments live via `/dev/city`.
+
+- **Real root cause**: `decor.roads` segments (BSP-leaf edges, see the entry below) are very uneven in length — long avenue stretches down to short intersection-to-intersection nubs. The road-building loop computed each segment's texture repeat as the raw fraction `length / TEXTURE_TILE_UNITS.road` (8), so a short segment sampled only a *partial* tile of the canvas — often just a sliver around the single centered dash — which reads as a near-solid unbroken line rather than a dash-gap pattern. Confirmed live: zoomed into the short segment feeding a real intersection and it showed a continuous line, visibly different in character from the clean evenly-spaced dashes on the longer segment immediately above it — exactly the "inconsistent/irregular" look "glitchy" was describing, unrelated to the (also real, separately fixed) z-fighting.
+- **Fix**: `decor.ts`'s road loop now rounds the repeat to a whole number of tiles (`Math.max(1, Math.round(length / TEXTURE_TILE_UNITS.road))`) instead of using the raw fraction. Every segment now always shows complete dash-gap cycles — the actual per-cycle length varies slightly segment to segment to fit evenly, which isn't noticeable at this scale, but no segment ever shows a truncated partial tile anymore.
+- **Verified live via `/dev/city`**: re-zoomed into the exact same short segment/intersection that showed the solid-line artifact before the fix — now shows a proper dash-gap pattern matching the rest of the street. No console errors. `pnpm exec vite build` clean.
+- **Not exhaustively re-verified**: checked the one specific spot that showed the artifact clearly, not all 335 road segments. The fix is structural (every segment gets the same whole-tile-rounding treatment) so it should generalize, but flag if a similar irregular-dash look gets reported at a different spot.
+
 ## RESOLVED: road dashed centerlines were z-fighting/flickering at intersections (2026-09-04, same session, follow-up)
 
 User confirmed the dashed-centerline design itself was right ("the road lines are perfect") but reported it looked "very glitchy" — flickering, not a shape/design complaint.
