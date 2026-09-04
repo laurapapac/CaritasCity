@@ -73,6 +73,11 @@ import type { CityDecor, MeadowShape, MountainPeak, OrientedMarker, TerrainData 
 import { BLOCK_TEX } from "./utils"
 
 const LAKE_COLOR = 0x3a7bd5
+// How far apart the two road orientations (x-varying vs z-varying segments)
+// sit in Y, to avoid z-fighting where their quads overlap at intersections —
+// see the road-building loop's doc comment. Small enough to stay well under
+// the next Y-stacking layer up (plazas, 0.12).
+const ROAD_LAYER_SPLIT = 0.01
 const BUSH_COLOR = 0x3d7a3f
 const LAMP_POLE_COLOR = 0x2b2b2b
 const LAMP_HEAD_COLOR = 0xffd98a
@@ -874,7 +879,19 @@ export function buildDecorGroup(decor: CityDecor): THREE.Group {
       scaleUV(geo, length / TEXTURE_TILE_UNITS.road, 1)
       geo.rotateX(-Math.PI / 2)
       geo.rotateY(-angle)
-      geo.translate((seg.x1 + seg.x2) / 2, 0.10, (seg.z1 + seg.z2) / 2)
+      // Road segments are BSP-leaf edges (generateCityLayout.ts's
+      // leavesToRoads) — every segment is exactly axis-aligned (either
+      // z1===z2 or x1===x2, never diagonal), and at every intersection a
+      // "horizontal" (x-varying) segment's ROAD_WIDTH-wide quad overlaps a
+      // "vertical" (z-varying) one's in the corner square, both otherwise at
+      // the identical y=0.10. That was invisible with a flat fill color but
+      // z-fights visibly (flickering) now that the surface carries a dashed
+      // texture. Splitting the two orientations onto slightly different y
+      // values — instead of a random/index-based jitter — means the same
+      // orientation always wins at a given overlap, consistently across
+      // frames/angles, rather than flickering pixel-by-pixel.
+      const y = 0.10 + (Math.abs(dz) > Math.abs(dx) ? ROAD_LAYER_SPLIT : 0)
+      geo.translate((seg.x1 + seg.x2) / 2, y, (seg.z1 + seg.z2) / 2)
       return geo
     })
     const merged = mergeGeometries(roadGeometries)

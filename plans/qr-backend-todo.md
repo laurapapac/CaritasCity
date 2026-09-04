@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: road dashed centerlines were z-fighting/flickering at intersections (2026-09-04, same session, follow-up)
+
+User confirmed the dashed-centerline design itself was right ("the road lines are perfect") but reported it looked "very glitchy" — flickering, not a shape/design complaint.
+
+- **Root cause**: `decor.roads` segments come from `generateCityLayout.ts`'s `leavesToRoads` — BSP-leaf boundary edges, always exactly axis-aligned (`z1===z2` or `x1===x2`, never diagonal). Adjacent leaves sharing a full edge get deduped into one segment, but at every intersection, a "horizontal" segment's `ROAD_WIDTH`-wide quad and a "vertical" segment's quad only share a corner *point* in the underlying edge data — after decor.ts turns each into a real `ROAD_WIDTH=4`-wide plane, those two quads physically overlap across the whole intersection square, both sitting at the identical `y=0.10`. Classic coplanar z-fighting. This overlap already existed before today's texture work, but was invisible against a flat matching fill color — it only became visible once the surface carried a dashed line + wheel-wear bands, since z-fighting flickers per-pixel between whichever triangle wins depth that frame.
+- **Fix**: added `ROAD_LAYER_SPLIT = 0.01` and split the two orientations onto slightly different Y (`0.10` vs `0.10 + ROAD_LAYER_SPLIT`) based on each segment's own `Math.abs(dz) > Math.abs(dx)` check, in `decor.ts`'s road-building loop. A fixed per-orientation offset (not a random/per-index jitter) means the same orientation consistently wins at every overlap, every frame — no more coin-flip flicker. Stays well under the next Y-stacking layer up (plazas, `0.12`), so no new z-fighting introduced against that.
+- **Verified live via `/dev/city`**: zoomed into a real cross-intersection — both dashed lines now cross cleanly, no torn/interleaved pattern where they meet (previously would have shown the z-fight artifact even in a single frame, not just as temporal flicker). No console errors. `pnpm exec vite build` clean.
+- **Not exhaustively re-verified**: checked one intersection closely, not all of the city's 335 road segments' crossing points — the fix is a structural one (any axis-aligned crossing gets the same treatment), so it should generalize, but worth a look if a flicker gets reported at a specific spot again.
+
 ## RESOLVED: roads and the ground disc textured — were the last two flat-color surfaces (2026-09-04, same session, follow-up)
 
 User asked for roads and "the floor" to get a texture instead of a plain color, "if possible... different textures to make it more realistic." Parks/beaches already had procedural CanvasTextures (`buildGrassTexture`/`buildStoneTexture`, added 2026-08-12) — roads (`ROAD_COLOR` flat fill) and the city's grey ground disc (`GROUND_GREY` flat fill, in `buildGroundGroup`) were the only two decor surfaces still untextured.
