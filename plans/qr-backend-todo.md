@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: dashed centerline removed — still read as glitchy after two real fixes, parked rather than chase a third theory live (2026-09-04, same session, follow-up)
+
+After the previous entry's fix (rounding to whole texture tiles) user still said the lines were glitchy. Two real, distinct bugs behind the dashed line had already been found and fixed (intersection z-fighting; partial-tile squish on short segments) — rather than guess at a third mechanism sight-unseen (this automated browser tab can't perceive the actual live-motion "glitchy" quality the user is seeing on their own hardware), user asked to just remove the dash for now and revisit later.
+
+- **Removed**: the dashed-centerline `ctx.fillRect` draw call in `buildAsphaltTexture()` (`decor.ts`). The speckle grain + wheel-wear bands stay — only the line itself is gone.
+- **Left in place** (harmless, not dash-specific, still correct): the road-building loop's whole-tile UV-repeat rounding and the `ROAD_LAYER_SPLIT` intersection y-offset — both apply to the asphalt texture generally, not just the removed dash, so no reason to revert them.
+- **Verified live via `/dev/city`**: re-checked the same intersection area from the prior two entries — plain speckled asphalt now, no line artifact of any kind. No console errors. `pnpm exec vite build` clean.
+- **Open**: revisit later if a real fix is wanted. If picking this back up, the doc comment left in `buildAsphaltTexture()` notes where to re-add the draw call and what's already correctly in place (tile aspect ratio, whole-tile repeat rounding) versus what actually needs solving (whatever's still making it read as "glitchy" beyond the two already-fixed causes — worth asking the user for more specifics next time, e.g. a screen recording, since two rounds of "found a real bug, fixed it, still glitchy" suggests the remaining cause may not be visible from a static screenshot at all).
+
 ## RESOLVED: dashed centerline still read as "glitchy" after the z-fight fix — real cause was per-segment fractional UV repeat (2026-09-04, same session, follow-up)
 
 User re-tested after the z-fighting fix (below) and said the road separator lines were *still* glitchy — meaning that fix, while real, wasn't the (only) thing being seen. Rather than assume it was a subtler version of the same z-fight, went back and looked closely at individual segments live via `/dev/city`.

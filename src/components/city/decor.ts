@@ -167,12 +167,17 @@ function buildGrassTexture(): THREE.CanvasTexture {
 // The canvas is deliberately non-square (2:1) to match a road tile's real
 // aspect ratio (TEXTURE_TILE_UNITS.road long × ROAD_WIDTH wide) — only the
 // length axis (U) ever gets repeat-scaled (see the road-building loop
-// below), so V always spans exactly one tile across the real road width,
-// which is what keeps the dashed centerline drawn at v=0.5 sitting on the
-// actual center of every segment regardless of that segment's own length.
-// The single centered dash (with the gap split evenly at the tile's left/
-// right edges) is what makes the dash pattern tile seamlessly instead of
-// doubling up or leaving an odd-width dash at each repeat boundary.
+// below), so V always spans exactly one tile across the real road width.
+//
+// Dashed centerline removed (2026-09-04, same day, follow-up) — even after
+// fixing two real, separate bugs behind it (intersection z-fighting; short
+// segments sampling a partial/squished texture tile), the user still saw it
+// as "glitchy" and asked to drop it for now rather than chase a third
+// theory live. The speckle/wheel-wear asphalt texture stays; only the
+// dashed-line draw call was removed. If revisited, re-add the dash as its
+// own draw call here (kept the tile's 2:1 aspect and per-segment whole-tile
+// repeat rounding below, both still correct/needed for the asphalt grain
+// itself, not dash-specific).
 function buildAsphaltTexture(): THREE.CanvasTexture {
   const w = 256, h = 128
   const canvas = document.createElement("canvas")
@@ -198,10 +203,6 @@ function buildAsphaltTexture(): THREE.CanvasTexture {
   ctx.fillStyle = "rgba(30,32,34,0.18)"
   ctx.fillRect(0, h * 0.18, w, h * 0.14)
   ctx.fillRect(0, h * 0.68, w, h * 0.14)
-
-  // Dashed centerline.
-  ctx.fillStyle = "#ded6a8"
-  ctx.fillRect(w * 0.25, h * 0.47, w * 0.5, h * 0.06)
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
