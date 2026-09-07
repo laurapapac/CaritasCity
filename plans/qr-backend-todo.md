@@ -2,6 +2,17 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: re-added the dashed road centerline with a third theory — texture aliasing, not geometry (2026-09-07)
+
+Picked up cold via this file's parked entry below. Two earlier geometry fixes (intersection z-fighting; short-segment partial-tile squish) were both real bugs but didn't stop the user from seeing the dash as "glitchy," so rather than re-add the exact same draw call and hope, looked for a mechanism neither prior fix touched.
+
+- **Theory**: `controls.maxPolarAngle` (`cityScene.ts:866`) is set to `Math.PI/2 - 0.02` — the camera is allowed almost down to the horizon over the road plane. A thin repeating line texture viewed at a grazing angle with no anisotropic filtering is a classic shimmer/moiré source as the camera moves — a temporal aliasing artifact that a static screenshot genuinely cannot show, which lines up with this file's own prior note that "the remaining cause may not be visible from a static screenshot at all."
+- **Fix**: re-added the exact dash draw call removed in `098a962` (`ctx.fillStyle = "#ded6a8"; ctx.fillRect(w*0.25, h*0.47, w*0.5, h*0.06)` in `buildAsphaltTexture()`, `decor.ts`) plus `tex.anisotropy = 16` on the returned texture. Confirmed from three.js source (`WebGLTextures.js`) that this is clamped automatically to the real device max at upload time (`Math.min(texture.anisotropy, capabilities.getMaxAnisotropy())`), so a fixed value is safe without threading a renderer reference into the texture builder.
+- **Verified live via `/dev/city`**: dashes render correctly, evenly spaced, on straight segments; re-checked a plaza-adjacent area for crossing artifacts, none seen. No console errors on `/dev/city` or `/kiosk` (fresh reloads, checked via `read_console_messages`). `pnpm exec vite build` clean.
+- **Not verified**: the actual motion-shimmer judgment — by definition this automated browser tab (no live `requestAnimationFrame`, same limitation noted throughout this file's animation entries) can't observe a temporal artifact, so whether this genuinely fixes the "glitchy" look, versus just being a reasonable theory, needs the user's own live look on a real kiosk/phone while panning the camera. If it's still glitchy after this, the grazing-angle/anisotropy theory would be ruled out and the ground textures (grass/stone/concrete) share the same untreated-anisotropy property, worth checking too since they're the same class of surface.
+- **Environment**: brought up from a full cold stop this session (Docker Desktop, `docker compose up -d`, backend `pnpm dev` in `server/`, frontend `pnpm exec vite --host` — all were down, consistent with the last session's clean shutdown). LAN IP unchanged at `192.168.1.163`.
+- Not committed yet — confirm before committing, per this file's standing convention.
+
 ## RESOLVED: added a button on the mobile code screen linking to /kiosk (2026-09-04, same session, follow-up)
 
 User asked for a button on "the window where user receives the code" (the `/s/:token` `CodeCard`, `ScanLanding.tsx`) that links to `/kiosk`.

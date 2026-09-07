@@ -169,15 +169,16 @@ function buildGrassTexture(): THREE.CanvasTexture {
 // length axis (U) ever gets repeat-scaled (see the road-building loop
 // below), so V always spans exactly one tile across the real road width.
 //
-// Dashed centerline removed (2026-09-04, same day, follow-up) — even after
-// fixing two real, separate bugs behind it (intersection z-fighting; short
-// segments sampling a partial/squished texture tile), the user still saw it
-// as "glitchy" and asked to drop it for now rather than chase a third
-// theory live. The speckle/wheel-wear asphalt texture stays; only the
-// dashed-line draw call was removed. If revisited, re-add the dash as its
-// own draw call here (kept the tile's 2:1 aspect and per-segment whole-tile
-// repeat rounding below, both still correct/needed for the asphalt grain
-// itself, not dash-specific).
+// Dashed centerline re-added (2026-09-07) — third theory, after the two
+// earlier geometry fixes (intersection z-fighting; short-segment partial-
+// tile squish) didn't make it stop reading as "glitchy": neither prior fix
+// touched texture filtering, and `controls.maxPolarAngle` (cityScene.ts)
+// allows the camera down to near-horizon over the road plane, where a thin
+// line texture with no anisotropic filtering shimmers/aliases as the camera
+// moves — a temporal artifact a static screenshot can't show, which is
+// exactly the gap the last attempt's verification flagged. Set anisotropy
+// on the returned texture below rather than just re-adding the draw call
+// unchanged.
 function buildAsphaltTexture(): THREE.CanvasTexture {
   const w = 256, h = 128
   const canvas = document.createElement("canvas")
@@ -204,8 +205,16 @@ function buildAsphaltTexture(): THREE.CanvasTexture {
   ctx.fillRect(0, h * 0.18, w, h * 0.14)
   ctx.fillRect(0, h * 0.68, w, h * 0.14)
 
+  // Dashed centerline.
+  ctx.fillStyle = "#ded6a8"
+  ctx.fillRect(w * 0.25, h * 0.47, w * 0.5, h * 0.06)
+
   const tex = new THREE.CanvasTexture(canvas)
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  // Three.js clamps this to the renderer's actual max at upload time
+  // (Math.min(texture.anisotropy, capabilities.getMaxAnisotropy())), so a
+  // fixed high value is safe without threading a renderer reference in here.
+  tex.anisotropy = 16
   return tex
 }
 
