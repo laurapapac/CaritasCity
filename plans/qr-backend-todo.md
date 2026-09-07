@@ -2,6 +2,14 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: added a button on the mobile code screen linking to /kiosk (2026-09-04, same session, follow-up)
+
+User asked for a button on "the window where user receives the code" (the `/s/:token` `CodeCard`, `ScanLanding.tsx`) that links to `/kiosk`.
+
+- **Added**: a full-width `Otvori kiosk` (Croatian, matching the rest of the screen's copy) `Button` below the countdown, using `Button asChild` wrapping a react-router `Link to="/kiosk"` — real SPA navigation, not a raw `<a>`/page reload. Not gated on the code's expiry state; the button is just a shortcut to the kiosk route, unrelated to whether this particular code is still valid.
+- **Verified live**: fetched a real token from the dev DB (`qr_codes.public_token`, `y-KzBx86FvBMPmzLTF4rd`), loaded `/s/<token>` — button renders correctly styled below the code/countdown, clicking it navigates to `/kiosk` (URL changed, kiosk code-entry screen rendered with its own autofocus intact). No console errors. `pnpm exec vite build` clean.
+- Not committed yet — confirm before committing, per this file's standing convention.
+
 ## Status: dashed centerline removed — still read as glitchy after two real fixes, parked rather than chase a third theory live (2026-09-04, same session, follow-up)
 
 After the previous entry's fix (rounding to whole texture tiles) user still said the lines were glitchy. Two real, distinct bugs behind the dashed line had already been found and fixed (intersection z-fighting; partial-tile squish on short segments) — rather than guess at a third mechanism sight-unseen (this automated browser tab can't perceive the actual live-motion "glitchy" quality the user is seeing on their own hardware), user asked to just remove the dash for now and revisit later.

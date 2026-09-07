@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { ApiError, scanQr, type ScanResponse } from "../../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -44,6 +44,9 @@ function CodeCard({ data }: { data: ScanResponse }) {
         <p className={expired ? "text-destructive" : "text-muted-foreground"}>
           {expired ? "This code has expired" : `Valid for ${countdown}`}
         </p>
+        <Button asChild className="w-full">
+          <Link to="/kiosk">Otvori kiosk</Link>
+        </Button>
       </CardContent>
     </Card>
   );
