@@ -731,7 +731,60 @@ function leavesToRoads(leaves: Rect[]): RoadSegment[] {
       if (!segs.has(k)) segs.set(k, { x1: a.x, z1: a.z, x2: b.x, z2: b.z })
     }
   }
-  return [...segs.values()]
+  return mergeColinearRoadOverlaps([...segs.values()])
+}
+
+// The exact-endpoint dedup above only collapses two leaves that share a
+// FULL edge. Adjacent leaves of different sizes (a small leaf next to a
+// bigger one, i.e. a BSP "T-vertex") each still contribute their own edge
+// along the same line, but with different endpoints — neither matches the
+// other's key, so both survive as distinct, partially-overlapping segments.
+// Confirmed live in the generated data: 182 such colinear pairs, some
+// overlapping by 30+ units. Harmless when roads were a flat fill color, but
+// decor.ts's per-orientation Y-split (ROAD_LAYER_SPLIT) only separates
+// horizontal from vertical roads at intersections — two SAME-orientation
+// overlapping segments still land on the identical Y and z-fight against
+// each other along the whole overlap, which reads as glitchy/flickering
+// while the camera moves. Fixed at the source (not in decor.ts) so every
+// consumer of these segments (road trees, leaf-border lamps) sees one clean
+// segment per line instead of several overlapping ones.
+function mergeColinearRoadOverlaps(segments: RoadSegment[]): RoadSegment[] {
+  const EPS = 0.01
+  const horizontal = new Map<string, [number, number][]>() // key: z, value: [xMin,xMax][]
+  const vertical = new Map<string, [number, number][]>() // key: x, value: [zMin,zMax][]
+  for (const s of segments) {
+    if (Math.abs(s.z1 - s.z2) < EPS) {
+      const key = s.z1.toFixed(3)
+      const list = horizontal.get(key) ?? []
+      list.push([Math.min(s.x1, s.x2), Math.max(s.x1, s.x2)])
+      horizontal.set(key, list)
+    } else {
+      const key = s.x1.toFixed(3)
+      const list = vertical.get(key) ?? []
+      list.push([Math.min(s.z1, s.z2), Math.max(s.z1, s.z2)])
+      vertical.set(key, list)
+    }
+  }
+  const mergeIntervals = (intervals: [number, number][]): [number, number][] => {
+    const sorted = [...intervals].sort((a, b) => a[0] - b[0])
+    const merged: [number, number][] = [sorted[0]]
+    for (const [lo, hi] of sorted.slice(1)) {
+      const last = merged[merged.length - 1]
+      if (lo <= last[1] + EPS) last[1] = Math.max(last[1], hi)
+      else merged.push([lo, hi])
+    }
+    return merged
+  }
+  const result: RoadSegment[] = []
+  for (const [zKey, intervals] of horizontal) {
+    const z = Number(zKey)
+    for (const [x1, x2] of mergeIntervals(intervals)) result.push({ x1, z1: z, x2, z2: z })
+  }
+  for (const [xKey, intervals] of vertical) {
+    const x = Number(xKey)
+    for (const [z1, z2] of mergeIntervals(intervals)) result.push({ x1: x, z1, x2: x, z2 })
+  }
+  return result
 }
 
 interface PlacedBuilding {
