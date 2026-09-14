@@ -241,6 +241,13 @@ function EntryStep({
   );
 }
 
+// Several schools across different cities share the same name (e.g.
+// multiple "Osnovna škola Vladimir Nazor") — show the city alongside the
+// name everywhere the picker displays a school, so they're distinguishable.
+function schoolLabel(s: School): string {
+  return s.city ? `${s.name} (${s.city})` : s.name;
+}
+
 function SchoolStep({
   category,
   variant,
@@ -284,7 +291,7 @@ function SchoolStep({
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" role="combobox" aria-expanded={open} className="justify-between">
-                {selected ? selected.name : "Odaberite školu"}
+                {selected ? schoolLabel(selected) : "Odaberite školu"}
                 <ChevronsUpDown className="opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -297,14 +304,14 @@ function SchoolStep({
                     {schools.map((s) => (
                       <CommandItem
                         key={s.id}
-                        value={s.name}
+                        value={schoolLabel(s)}
                         onSelect={() => {
                           setSchoolId(s.id);
                           setOpen(false);
                         }}
                       >
                         <Check className={s.id === schoolId ? "opacity-100" : "opacity-0"} />
-                        {s.name}
+                        {schoolLabel(s)}
                       </CommandItem>
                     ))}
                   </CommandGroup>

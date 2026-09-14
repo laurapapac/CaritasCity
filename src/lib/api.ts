@@ -65,7 +65,7 @@ export function placeBlock(code: string, schoolId: number): Promise<PlaceBlockRe
   });
 }
 
-export type School = { id: number; name: string };
+export type School = { id: number; name: string; city: string | null };
 
 export function getSchools(): Promise<School[]> {
   return request<School[]>("/schools");
