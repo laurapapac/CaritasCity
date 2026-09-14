@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, KeyRound } from "lucide-react";
 import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
 import {
   ApiError,
@@ -161,7 +161,15 @@ function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse:
   );
 }
 
-function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: string) => void }) {
+function EntryStep({
+  error,
+  onSubmit,
+  onBack,
+}: {
+  error?: string;
+  onSubmit: (code: string) => void;
+  onBack: () => void;
+}) {
   const [code, setCode] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -216,13 +224,18 @@ function EntryStep({ error, onSubmit }: { error?: string; onSubmit: (code: strin
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
-        <Button
-          className="bg-neutral-500 text-white hover:bg-neutral-600"
-          disabled={code.length !== CODE_LENGTH}
-          onClick={() => onSubmit(code)}
-        >
-          Nastavi
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onBack}>
+            Natrag
+          </Button>
+          <Button
+            className="bg-neutral-500 text-white hover:bg-neutral-600"
+            disabled={code.length !== CODE_LENGTH}
+            onClick={() => onSubmit(code)}
+          >
+            Nastavi
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -505,7 +518,13 @@ export default function Kiosk() {
               onBrowse={() => setState({ phase: "browsing" })}
             />
           )}
-          {state.phase === "entry" && <EntryStep error={state.error} onSubmit={handleEnter} />}
+          {state.phase === "entry" && (
+            <EntryStep
+              error={state.error}
+              onSubmit={handleEnter}
+              onBack={() => setState({ phase: "welcome" })}
+            />
+          )}
           {state.phase === "needs_school" && (
             <SchoolStep
               category={state.category}
@@ -519,11 +538,13 @@ export default function Kiosk() {
       )}
 
       {state.phase === "browsing" && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-4">
+        <div className="pointer-events-none absolute top-4 right-4">
           <Button
-            className="pointer-events-auto bg-neutral-500 text-white hover:bg-neutral-600"
+            size="lg"
+            className="pointer-events-auto bg-red-600 text-white shadow-xl hover:bg-red-700"
             onClick={() => setState({ phase: "entry" })}
           >
+            <KeyRound />
             Unesi kod
           </Button>
         </div>
