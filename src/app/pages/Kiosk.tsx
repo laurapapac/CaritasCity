@@ -114,8 +114,10 @@ function buildCityBuilding(b: BuildingState): CityBuilding | null {
 type Phase =
   | { phase: "loading" }
   | { phase: "load_error" }
+  | { phase: "welcome" }
   | { phase: "entry"; error?: string }
   | { phase: "needs_school"; code: string; category: BuildingCategory; variant?: string; error?: string }
+  | { phase: "browsing" }
   | { phase: "constructing" }
   | { phase: "placed"; block: BlockInfo }
   | { phase: "existing"; block: BlockInfo };
@@ -132,6 +134,30 @@ function ProgressBlock({ block }: { block: BlockInfo }) {
         {block.completedBlocks}/{block.totalBlocks} placed
       </p>
     </div>
+  );
+}
+
+function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse: () => void }) {
+  return (
+    <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
+      <CardContent className="flex flex-col items-center gap-6 pt-6">
+        <img src={logoUrl} alt="GRADiMIR" className="h-16 w-auto" />
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-lg font-bold">Dobrodošli u GRADiMIR</p>
+          <p className="text-muted-foreground text-sm">Zajedno gradimo grad, kockicu po kockicu.</p>
+        </div>
+
+        <div className="flex w-full flex-col gap-3">
+          <Button className="bg-neutral-500 text-white hover:bg-neutral-600" onClick={onHasCode}>
+            Imam kod
+          </Button>
+          <Button variant="outline" onClick={onBrowse}>
+            Pogledaj gradilište
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -322,7 +348,7 @@ export default function Kiosk() {
           if (row.status === "in_progress") queue[row.category] = row.id;
         }
         setCityData({ rows, buildings: [...buildings, ...STATIC_LANDMARKS, ...STATIC_DECOR_BUILDINGS], queue });
-        setState({ phase: "entry" });
+        setState({ phase: "welcome" });
       })
       .catch(() => setState({ phase: "load_error" }));
   }, []);
@@ -439,7 +465,8 @@ export default function Kiosk() {
       });
   }
 
-  const showsModal = state.phase === "entry" || state.phase === "needs_school";
+  const showsModal =
+    state.phase === "welcome" || state.phase === "entry" || state.phase === "needs_school";
 
   return (
     <div className="relative min-h-screen w-screen overflow-hidden bg-background">
@@ -472,6 +499,12 @@ export default function Kiosk() {
 
       {showsModal && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/40 p-4 backdrop-blur-sm">
+          {state.phase === "welcome" && (
+            <WelcomeStep
+              onHasCode={() => setState({ phase: "entry" })}
+              onBrowse={() => setState({ phase: "browsing" })}
+            />
+          )}
           {state.phase === "entry" && <EntryStep error={state.error} onSubmit={handleEnter} />}
           {state.phase === "needs_school" && (
             <SchoolStep
@@ -482,6 +515,17 @@ export default function Kiosk() {
               onConfirm={(schoolId) => handleConfirm(state.code, state.category, schoolId)}
             />
           )}
+        </div>
+      )}
+
+      {state.phase === "browsing" && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-4">
+          <Button
+            className="pointer-events-auto bg-neutral-500 text-white hover:bg-neutral-600"
+            onClick={() => setState({ phase: "entry" })}
+          >
+            Unesi kod
+          </Button>
         </div>
       )}
 
@@ -498,7 +542,7 @@ export default function Kiosk() {
               <Button
                 onClick={() => {
                   cityRef.current?.resetCamera();
-                  setState({ phase: "entry" });
+                  setState({ phase: "welcome" });
                 }}
               >
                 Scan next block
