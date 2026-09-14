@@ -2,6 +2,58 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: two stale zombie dev-server processes found and killed — likely real root cause of the repeated "killed for low memory" restarts (2026-09-14, same session, follow-up)
+
+Backend and frontend background dev servers had been killed by the harness for low system memory twice in this session. After a routine restart request, the fresh backend start failed with `EADDRINUSE` on :3001, and Vite had to fall back through 5173→5174→5175 before finding a free port — meaning old server instances were still alive and holding those ports, despite being reported "killed."
+
+- **Found via `tasklist`/`netstat`**: 13 `node.exe` processes running, 4 of them bound to this project's ports (backend `tsx watch` on 3001, three separate Vite instances on 5173/5174/5175). Confirmed each PID's real command line via `Get-CimInstance Win32_Process` before touching anything — all four were genuinely this project's dev servers (`src/index.ts` / `vite/bin/vite.js --host`), not unrelated processes.
+- **Root cause theory**: the harness's low-memory kill isn't actually terminating the full process tree, so every "killed → restart" cycle piles a new server on top of the old one instead of replacing it — directly explaining why memory kept running low enough to trigger more kills. A real leak/accumulation bug in this dev workflow, not a one-off.
+- **Fix (for now)**: `Stop-Process -Force` on the 4 stale PIDs, then restarted backend (:3001) and frontend (:5173) cleanly — both came up on their normal ports with no conflicts.
+- **Not fixed**: the underlying reason the harness's kill doesn't fully terminate the process tree — worth revisiting if this recurs. If servers ever fail with `EADDRINUSE` or Vite has to hop ports again, check `tasklist`/`netstat -ano` for duplicate node processes before assuming something else is wrong.
+- **End of session**: stopped both dev servers cleanly and ran `docker compose down` (removes the container + network, **not** the `caritascity_postgres_data` volume — confirmed via `docker volume ls` that it survived, so today's real school/city data is still there next time).
+
+## RESOLVED: schools table gets a `city` column — fixes 5 real schools wrongly dropped by the earlier county-only import (2026-09-14, same session, follow-up)
+
+User pointed out several school names repeat across different towns within the same county (e.g. multiple "Osnovna škola Vladimir Nazor"), so `county` alone can't disambiguate them in the kiosk picker — asked for a `city` column, plus display logic, ahead of receiving an updated source spreadsheet with city data.
+
+- **Migration `003_add_school_city.sql`**: `ALTER TABLE schools ADD COLUMN city TEXT` (nullable, same pattern as `county`).
+- **`GET /api/schools`** now returns `city` alongside `id`/`name`. **`SchoolStep` in `Kiosk.tsx`** gets a new `schoolLabel()` helper — renders `"Name (City)"` wherever a school has a city, in both the search list and the selected-value trigger button; falls back to bare name when city is null.
+- **Verified live**: temporarily set two real schools' `city` via SQL, drove the kiosk through a real scan→code→school-picker flow, confirmed `"Centar za autizam Rijeka (Rijeka)"` rendered correctly and disambiguated from two other same-named-but-city-less rows in the same search. Reverted the temp data afterward. No console errors, both frontend/backend builds clean.
+- **User then supplied `external-files/schools_new.xlsx`** — same county+name data as the original file, plus a `Mjesto` (city) column. First upload attempt actually still had 2 extra schools not in the old file (branch/satellite units — `PO "Dobrinj"` and `Područni odjel Dankovec`); user re-uploaded a corrected version that matches the old file's 1,323 real schools exactly, confirmed via a full (county,name) diff between old and new before touching anything (per user's explicit ask to review first).
+- **Real bug found via that diff**: the original import (`county`-only) deduped on `(county, name)` and silently dropped **5 real schools** that only looked like duplicates without city data — they're distinct schools sharing a name within the same county but sitting in different towns (`Osnovna škola Vladimir Nazor` in Brodsko-posavska: Slavonski Brod *and* Adžamovci; similarly for two "Vladimir Nazor" in Osječko-baranjska, "Josipa Jurja Strossmayera," "Matija Gubec," and "Stjepan Radić"). Confirmed via the new file that all 1,325→1,323 rows are unique once `(county, name, city)` is the key — zero true duplicates.
+- **Fix**: applied the same ALL-CAPS→sentence-case cleanup (mined-vocabulary approach, see the entry below) to both `name` and `city` columns of the new file (only 1 city value, "BRODARICA", was actually all-caps). Rewrote `import-schools.ts` to read the 3-column CSV, dedupe on `(county, name, city)`, and **replace the table's contents wholesale** (`DELETE FROM schools` then re-insert) instead of appending — so re-running it after a future source update always matches the CSV exactly rather than accumulating drift. Safe only because `blocks` was already empty from the city reset below (would otherwise fail loudly on the FK, which is the right behavior — never silently orphan real placements).
+- **Result**: `schools` now has all **1,323** real schools, every one with a real `city`, including the 5 previously-dropped ones — verified directly in the DB (`Josipa Jurja Strossmayera` now shows both Đurđenovac and Trnava rows, etc.) and via `GET /api/schools`.
+- **Committed as `24dcb67`** (city column + display) **and `d78ceff`** (city-annotated data + the 5-school fix).
+
+## RESOLVED: city reset from scratch — wiped blocks/desktop codes, reset buildings, removed the dev placeholder school (2026-09-14, same session, follow-up)
+
+User asked to remove the "Dev Test School" placeholder row (id 1) and start the city over from scratch, keeping `qr_codes` (already printed onto real physical stickers) and the real school list untouched.
+
+- **New `server/src/scripts/reset-city.ts`**: `DELETE FROM blocks`, `DELETE FROM desktop_codes`, resets every building to `completed_blocks = 0` / `status = 'queued'` then flips exactly one per category back to `in_progress` (same pattern as the existing `reset-and-generate-qr.ts`, minus the QR-wiping/regeneration part — deliberately left `qr_codes` alone this time). Then deletes the `Dev Test School` row, which was previously blocked by an FK (12 dev-only test blocks referenced it) — safe now that blocks are wiped first, in the same transaction.
+- **Verified in DB**: 0 blocks, 0 desktop_codes, exactly 4 `in_progress` buildings (one per category) + 156 `queued`, dev placeholder gone, `qr_codes` (85 rows) and the real school list untouched.
+- **Verified live** via `/` — kiosk loads cleanly against the reset DB, welcome screen renders, no console errors.
+- **Committed as `51770ca`** (bundled with the school-list import below).
+
+## RESOLVED: real 1,323-school list imported with ALL-CAPS names normalized to sentence case (2026-09-14, same session, follow-up)
+
+User uploaded `external-files/schools.xlsx` (a government county/school-name spreadsheet) asking to fill the `schools` table with its content, with the ALL-CAPS names fixed — "schools shouldn't be in all caps."
+
+- **Casing fix**: rather than a blind Title Case, mined which words already appeared lowercase somewhere else in the same sheet (common institutional nouns like "škola", "centar", "gimnazija", prepositions) vs. words that never did (treated as proper nouns — person/place names) — matches the house style of the rows that were already correctly formatted, instead of over-capitalizing every word. Handled Roman-numeral ordinals (`I.`, `II.`, ...) and known real acronyms (PKG, AMAC, SUVAG — found by manually reviewing all 98 rows that mixed already-good casing with a leftover all-caps word) as special cases so they weren't mangled.
+- **Source-data cleanup**: dropped a stray "Grand Total" pivot-table row (sitting at row 343, *not* the last row — an early wrong assumption corrected after the user pushed back on the school-count math) and a few exact duplicate rows. Later corrected (see the entry above) — the "duplicates" among 5 of those turned out to be real distinct schools once `city` was available.
+- **New `server/src/scripts/import-schools.ts`** (reads `server/src/data/schools.csv`, the committed cleaned data) and migration `002_add_school_county.sql` (nullable `county TEXT`, added first as DB-only per user's explicit choice — not wired to the API/UI until the `city` follow-up above).
+- **Verified live** via `curl /api/schools` and `pnpm run build`/`vite build` clean.
+- **Committed as `ef0c280`** (county column) **and `51770ca`** (school-list import + city-reset script, see above).
+
+## RESOLVED: kiosk gets a welcome step ("Imam kod" / "Pogledaj gradilište"), a back button, and a more visible reopen button (2026-09-14, same session, follow-up)
+
+User wanted a screen before the code-input window with two choices — "Imam kod" (I have a code) leading to the existing thank-you/code-entry screen, "Pogledaj gradilište" (view the construction site) closing the modal to show the bare city — plus a way to bring the code window back, and (in a follow-up) a way to back out of code entry if someone chose "Imam kod" by mistake.
+
+- **New `welcome` and `browsing` phases** in `Kiosk.tsx`'s `Phase` union. Kiosk now boots into `welcome` (was `entry`) after `getBuildings()` resolves. New `WelcomeStep` component with the two buttons; `"Pogledaj gradilište"` sets `browsing`, which shows the city with no modal at all, plus a floating **"Unesi kod"** button.
+- **Follow-up (same session)**: `EntryStep` gets an `onBack` prop → a `"Natrag"` button next to `"Nastavi"`, returning to `welcome`. The reopen button was made more visible per feedback — moved from bottom-center to **top-right**, restyled larger/red (`bg-red-600`) with a `KeyRound` icon instead of the muted neutral style.
+- **`"Scan next block"`** (after a successful placement) now returns to `welcome` instead of straight to `entry`, so the next walk-up visitor gets the same choice.
+- **Verified live** via the dev server: both welcome buttons, the reopen button (repositioned + restyled), and the back button all round-tripped correctly through real clicks; no console errors; both builds clean.
+- **Committed as `aecef0a`** (welcome step) **and `36c3896`** (back button + reopen-button styling).
+
 ## RESOLVED: documentation gap backfilled — 2 real commits from 2026-09-10 were never logged here (2026-09-14)
 
 Picked up cold via this file's resume prompt. `git status` showed a clean working tree, but `git log` showed **2 commits landed 2026-09-10** (a separate session, `session_01UrCdwBPrNH9jF5S4oQMuzr` for the second) after this file's last-documented entry (`328f7bd`, road overlap fix) — neither mentioned here. Same pattern this file has flagged before (2026-08-25, 2026-09-01, 2026-09-04). Confirmed via `git show --stat` on each rather than assuming from the subject line alone.
