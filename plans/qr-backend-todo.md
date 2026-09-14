@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: documentation gap backfilled — 2 real commits from 2026-09-10 were never logged here (2026-09-14)
+
+Picked up cold via this file's resume prompt. `git status` showed a clean working tree, but `git log` showed **2 commits landed 2026-09-10** (a separate session, `session_01UrCdwBPrNH9jF5S4oQMuzr` for the second) after this file's last-documented entry (`328f7bd`, road overlap fix) — neither mentioned here. Same pattern this file has flagged before (2026-08-25, 2026-09-01, 2026-09-04). Confirmed via `git show --stat` on each rather than assuming from the subject line alone.
+
+- **`8b8f726` — Add production Docker deployment.** Adds `Dockerfile`, `server/Dockerfile`, `docker-compose.production.yml`, `nginx.caritascity.conf`, and a regenerated `server/package-lock.json` (2073 lines). No application code changed.
+- **`f333fce` — Make Kiosk the homepage, keep /kiosk working.** `src/main.tsx`: `/` now renders `Kiosk` directly instead of the old 5-house demo `App`, so `gradimir.kod.hr` shows the real city on load. `/kiosk` still renders the same component for the existing shortcut link/QR flow — unchanged.
+
+**Not independently re-verified this session** — backfilling from `git show`/commit messages only, no live re-test of either change.
+
 ## RESOLVED: road dashed centerlines still "very glitchy" after the anisotropy fix — real cause was overlapping road segments from a BSP T-vertex bug, not texture aliasing (2026-09-09)
 
 User re-tested live on their own hardware after the 2026-09-07 anisotropy fix and reported the road lines were **still very glitchy while the camera is moving** — meaning that theory (grazing-angle texture shimmer) was wrong, or at least not the whole story. Rather than reach for a fourth texture-side theory sight-unseen, went back to the data the renderer actually consumes.
