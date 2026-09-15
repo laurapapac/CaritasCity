@@ -45,13 +45,6 @@ const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_PATTERN = `^[${CODE_ALPHABET}${CODE_ALPHABET.toLowerCase()}]*$`;
 const CODE_LENGTH = 6;
 
-const CATEGORY_LABEL: Record<BuildingCategory, string> = {
-  residential: "Residential",
-  hospital: "Hospital",
-  food: "Food",
-  school: "School",
-};
-
 const CATEGORY_LABEL_HR: Record<BuildingCategory, string> = {
   residential: "Stambena zgrada",
   hospital: "Bolnica",
@@ -73,6 +66,21 @@ const VARIANT_WORD_HR: Record<string, string> = {
   house: "kuću",
   short_apartment: "zgradu",
   tall_apartment: "zgradu",
+};
+
+// Nominative-case display name per variant, for the placed/existing block
+// card ("Bolnica — Mala bolnica"). Falls back to the raw variant string
+// (see ProgressBlock) if a variant is ever added here without a translation.
+const VARIANT_LABEL_HR: Record<string, string> = {
+  house: "Kuća",
+  short_apartment: "Niža stambena zgrada",
+  tall_apartment: "Neboder",
+  food_bank: "Pučka kuhinja",
+  restaurant: "Restoran",
+  school: "Škola",
+  hospital_small: "Mala bolnica",
+  hospital_medium: "Srednja bolnica",
+  hospital_large: "Velika bolnica",
 };
 
 // Real city layout (2026-08-13) — replaces the old 4-fixed-plot model.
@@ -127,11 +135,11 @@ function ProgressBlock({ block }: { block: BlockInfo }) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-sm">
-        {CATEGORY_LABEL[block.category]} — {block.buildingVariant}
+        {CATEGORY_LABEL_HR[block.category]} — {VARIANT_LABEL_HR[block.buildingVariant] ?? block.buildingVariant}
       </p>
       <Progress value={pct} />
       <p className="text-muted-foreground text-xs">
-        {block.completedBlocks}/{block.totalBlocks} placed
+        {block.completedBlocks}/{block.totalBlocks} kockica stavljeno
       </p>
     </div>
   );
@@ -563,7 +571,7 @@ export default function Kiosk() {
             <CardContent className="flex items-center gap-4 py-3">
               <div className="flex-1">
                 <p className="font-medium">
-                  {state.phase === "placed" ? "Block placed!" : "Already placed"}
+                  {state.phase === "placed" ? "Kockica je stavljena!" : "Već postavljeno"}
                 </p>
                 <ProgressBlock block={state.block} />
               </div>
@@ -583,7 +591,7 @@ export default function Kiosk() {
                     setState({ phase: "welcome" });
                   }}
                 >
-                  Scan next block
+                  Stavi sljedeću kockicu
                 </Button>
               </div>
             </CardContent>
