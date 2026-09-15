@@ -45,7 +45,7 @@ function CodeCard({ data }: { data: ScanResponse }) {
           {expired ? "This code has expired" : `Valid for ${countdown}`}
         </p>
         <Button asChild className="w-full">
-          <Link to="/kiosk">Otvori kiosk</Link>
+          <Link to="/">Otvori kiosk</Link>
         </Button>
       </CardContent>
     </Card>

@@ -12,7 +12,6 @@ createRoot(document.getElementById("root")!).render(
     <Routes>
       <Route path="/" element={<Kiosk />} />
       <Route path="/s/:token" element={<ScanLanding />} />
-      <Route path="/kiosk" element={<Kiosk />} />
       {/* Dev-only block-count preview tool — import.meta.env.DEV is statically
           replaced with `false` in production builds, so Rollup dead-code-eliminates
           this branch (and the now-unreferenced DevPreview import/module) entirely;
