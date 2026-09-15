@@ -273,6 +273,7 @@ function SchoolStep({
   const [schoolId, setSchoolId] = useState<number | undefined>();
   const [loadError, setLoadError] = useState(false);
   const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getSchools()
@@ -299,14 +300,25 @@ function SchoolStep({
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" role="combobox" aria-expanded={open} className="justify-between">
-                {selected ? schoolLabel(selected) : "Odaberite školu"}
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {selected ? schoolLabel(selected) : "Odaberite školu"}
+                </span>
                 <ChevronsUpDown className="opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
               <Command>
-                <CommandInput placeholder="Pretraži škole…" />
-                <CommandList>
+                <CommandInput
+                  placeholder="Pretraži škole…"
+                  onValueChange={() => {
+                    // cmdk keeps the list's previous scroll position after
+                    // filtering, so the top (best) match can land scrolled
+                    // out of view below the fold instead of at the top —
+                    // reset it on every keystroke.
+                    if (listRef.current) listRef.current.scrollTop = 0;
+                  }}
+                />
+                <CommandList ref={listRef}>
                   <CommandEmpty>Škola nije pronađena.</CommandEmpty>
                   <CommandGroup>
                     {schools.map((s) => (
