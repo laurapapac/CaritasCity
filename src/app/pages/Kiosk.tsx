@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronsUpDown, KeyRound } from "lucide-react";
+import { Check, ChevronsUpDown, KeyRound, MapPin } from "lucide-react";
 import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
 import {
   ApiError,
@@ -567,14 +567,25 @@ export default function Kiosk() {
                 </p>
                 <ProgressBlock block={state.block} />
               </div>
-              <Button
-                onClick={() => {
-                  cityRef.current?.resetCamera();
-                  setState({ phase: "welcome" });
-                }}
-              >
-                Scan next block
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    cityRef.current?.focusOnBlock(state.block.buildingId, state.block.blockIndex)
+                  }
+                >
+                  <MapPin />
+                  Vrati me na moju kockicu
+                </Button>
+                <Button
+                  onClick={() => {
+                    cityRef.current?.resetCamera();
+                    setState({ phase: "welcome" });
+                  }}
+                >
+                  Scan next block
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
