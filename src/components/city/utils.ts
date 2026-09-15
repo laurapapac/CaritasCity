@@ -47,7 +47,12 @@ export const DROP_HEIGHT_OWN = 9.5
 // overall) — paired with the t³ curve above so the cut comes out of the
 // back half of the fall, not the slow start. This is the ambient
 // decoration loop's duration, paired with the shorter DROP_HEIGHT above.
-export const DROP_FALL_DUR = 0.38
+// 2026-09-15: slowed ~40% (×1.4) across the board per user request — the
+// t⁴ curve's shape is height/duration-independent (see above), so scaling
+// both this and DROP_FALL_DUR_OWN by the same factor stretches the whole
+// fall out evenly without changing its acceleration profile.
+const DROP_SLOWDOWN = 1.4
+export const DROP_FALL_DUR = 0.38 * DROP_SLOWDOWN
 // Real placement's own duration (2026-08-28, follow-up): DROP_HEIGHT_OWN
 // was raised 5.0→9.5 without touching DROP_FALL_DUR, so the same 0.38s
 // suddenly covered ~1.9x the distance and the fall read as too fast. Since
@@ -56,7 +61,7 @@ export const DROP_FALL_DUR = 0.38
 // height/duration — scaling duration by the same 5.0→9.5 ratio
 // (0.38 * 9.5/5.0) reproduces the exact landing speed the fall already had
 // at height 5.0, before it started reading as too fast.
-export const DROP_FALL_DUR_OWN = 0.38 * (DROP_HEIGHT_OWN / 5.0)
+export const DROP_FALL_DUR_OWN = 0.38 * DROP_SLOWDOWN * (DROP_HEIGHT_OWN / 5.0)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Landing-impact dust (spawnDustBurst in cityScene.ts) — 2026-08-31, user
