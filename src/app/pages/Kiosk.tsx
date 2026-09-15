@@ -226,6 +226,36 @@ function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse:
   );
 }
 
+// Replaces WelcomeStep once the city hits 100% (see Kiosk()'s cityComplete)
+// — there's nothing left to place a code toward, so "Imam kod" gives way to
+// looking up where your own already-placed block ended up. Copy is a
+// placeholder; content here is expected to change later.
+function CityCompleteStep({ onVisitBlock, onBrowse }: { onVisitBlock: () => void; onBrowse: () => void }) {
+  return (
+    <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
+      <CardContent className="flex flex-col items-center gap-6 pt-6">
+        <img src={logoUrl} alt="GRADiMIR" className="h-16 w-auto" />
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-lg font-bold">Hvala vam! 🙏</p>
+          <p className="text-muted-foreground text-sm">
+            Grad GRADiMIR je u potpunosti izgrađen zahvaljujući vašoj velikodušnosti.
+          </p>
+        </div>
+
+        <div className="flex w-full flex-col gap-3">
+          <Button className="bg-neutral-500 text-white hover:bg-neutral-600" onClick={onVisitBlock}>
+            Posjeti svoju kockicu
+          </Button>
+          <Button variant="outline" onClick={onBrowse}>
+            Pogledaj grad
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function EntryStep({
   error,
   onSubmit,
@@ -457,6 +487,8 @@ export default function Kiosk() {
     return { overallCompleted: total, categoryCompleted: perCategory };
   }, [liveBuildings, realBuildingIds]);
 
+  const cityComplete = overallCompleted >= TOTAL_BLOCKS_TARGET;
+
   function refreshStats() {
     getStats()
       .then(setStats)
@@ -505,7 +537,7 @@ export default function Kiosk() {
   // Purely cosmetic "the city feels alive" effect — cycles a small local
   // cluster of decoration buildings through construction forever, entirely
   // client-side. See useAmbientDecorConstruction's own doc comment.
-  useAmbientDecorConstruction(cityRef, STATIC_DECOR_BUILDINGS, cityData !== null);
+  useAmbientDecorConstruction(cityRef, STATIC_DECOR_BUILDINGS, cityData !== null && !cityComplete);
 
   // The active (in_progress) building for a category already has a fixed
   // variant before school selection — placeBlock always targets it, one
@@ -633,7 +665,13 @@ export default function Kiosk() {
 
       {showsModal && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/40 p-4 backdrop-blur-sm">
-          {state.phase === "welcome" && (
+          {state.phase === "welcome" && cityComplete && (
+            <CityCompleteStep
+              onVisitBlock={() => setState({ phase: "entry" })}
+              onBrowse={() => setState({ phase: "browsing" })}
+            />
+          )}
+          {state.phase === "welcome" && !cityComplete && (
             <WelcomeStep
               onHasCode={() => setState({ phase: "entry" })}
               onBrowse={() => setState({ phase: "browsing" })}
