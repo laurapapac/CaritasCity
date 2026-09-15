@@ -218,6 +218,7 @@ function EntryStep({
           maxLength={CODE_LENGTH}
           pattern={CODE_PATTERN}
           onComplete={onSubmit}
+          inputMode="text"
         >
           <InputOTPGroup>
             {Array.from({ length: CODE_LENGTH }, (_, i) => (
