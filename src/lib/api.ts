@@ -91,3 +91,9 @@ export type BuildingState = {
 export function getBuildings(): Promise<BuildingState[]> {
   return request<BuildingState[]>("/buildings");
 }
+
+export type Stats = { schoolBlocksPlaced: number };
+
+export function getStats(): Promise<Stats> {
+  return request<Stats>("/stats");
+}

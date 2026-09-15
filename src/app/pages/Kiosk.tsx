@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, KeyRound, MapPin } from "lucide-react";
 import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
 import {
@@ -6,11 +6,13 @@ import {
   enterCode,
   getBuildings,
   getSchools,
+  getStats,
   placeBlock,
   type BlockInfo,
   type BuildingCategory,
   type BuildingState,
   type School,
+  type Stats,
 } from "../../lib/api";
 import { City, type CityHandle } from "../../components/city/City";
 import type { CityBuilding, ConstructionQueue } from "../../components/city/types";
@@ -82,6 +84,61 @@ const VARIANT_LABEL_HR: Record<string, string> = {
   hospital_medium: "Srednja bolnica",
   hospital_large: "Velika bolnica",
 };
+
+// Stats panel targets — match BUILDING_SPECS's totals in
+// src/scripts/generateCityLayout.ts (75*1080 + 7*4000 + 2*8000 = 125,000 per
+// category * 4 categories = 500,000 overall). 460,000 is the school-donation
+// target specifically: 500,000 minus the 40,000 expected to come in as
+// external (non-school) donations instead.
+const TOTAL_BLOCKS_TARGET = 500_000;
+const CATEGORY_BLOCKS_TARGET = 125_000;
+const SCHOOL_BLOCKS_TARGET = 460_000;
+const STATS_CATEGORIES: BuildingCategory[] = ["residential", "hospital", "food", "school"];
+
+function pct(completed: number, target: number): number {
+  return target > 0 ? Math.min(100, (completed / target) * 100) : 0;
+}
+
+function StatsPanel({
+  overallCompleted,
+  categoryCompleted,
+  schoolBlocksPlaced,
+}: {
+  overallCompleted: number;
+  categoryCompleted: Record<BuildingCategory, number>;
+  schoolBlocksPlaced: number | null;
+}) {
+  return (
+    <div className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2">
+      <Card className="pointer-events-auto w-56 bg-card/90 backdrop-blur">
+        <CardContent className="flex flex-col gap-3 py-4 text-sm">
+          <div className="flex flex-col gap-1">
+            <p className="flex justify-between font-medium">
+              <span>Ukupno</span>
+              <span>{pct(overallCompleted, TOTAL_BLOCKS_TARGET).toFixed(1)}%</span>
+            </p>
+            <Progress value={pct(overallCompleted, TOTAL_BLOCKS_TARGET)} />
+          </div>
+          {STATS_CATEGORIES.map((category) => (
+            <div key={category} className="flex flex-col gap-1">
+              <p className="flex justify-between text-muted-foreground">
+                <span>{CATEGORY_LABEL_HR[category]}</span>
+                <span>{pct(categoryCompleted[category], CATEGORY_BLOCKS_TARGET).toFixed(1)}%</span>
+              </p>
+              <Progress value={pct(categoryCompleted[category], CATEGORY_BLOCKS_TARGET)} />
+            </div>
+          ))}
+          <div className="flex justify-between border-t pt-2 text-muted-foreground">
+            <span>Škole postavile</span>
+            <span>
+              {schoolBlocksPlaced ?? "…"}/{SCHOOL_BLOCKS_TARGET}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 // Real city layout (2026-08-13) — replaces the old 4-fixed-plot model.
 // Position has never lived in the database (see src/lib/api.ts's
@@ -372,7 +429,41 @@ export default function Kiosk() {
     queue: ConstructionQueue;
   } | null>(null);
   const [state, setState] = useState<Phase>({ phase: "loading" });
+  const [liveBuildings, setLiveBuildings] = useState<CityBuilding[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const revealedOnLoad = useRef(false);
+
+  // Real (non-decor) building ids, to exclude STATIC_LANDMARKS/
+  // STATIC_DECOR_BUILDINGS from the stats panel's totals below — those are
+  // purely cosmetic and aren't part of the real 500,000-block target.
+  const realBuildingIds = useMemo(
+    () => new Set((cityData?.rows ?? []).map((r) => r.id)),
+    [cityData],
+  );
+
+  const { overallCompleted, categoryCompleted } = useMemo(() => {
+    const perCategory: Record<BuildingCategory, number> = {
+      residential: 0,
+      hospital: 0,
+      food: 0,
+      school: 0,
+    };
+    let total = 0;
+    for (const b of liveBuildings) {
+      if (!realBuildingIds.has(b.id)) continue;
+      perCategory[b.category] += b.completedBlocks;
+      total += b.completedBlocks;
+    }
+    return { overallCompleted: total, categoryCompleted: perCategory };
+  }, [liveBuildings, realBuildingIds]);
+
+  function refreshStats() {
+    getStats()
+      .then(setStats)
+      .catch(() => {});
+  }
+
+  useEffect(refreshStats, []);
 
   useEffect(() => {
     getBuildings()
@@ -488,6 +579,7 @@ export default function Kiosk() {
               cityRef.current?.addBlock(category);
               cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
               setState({ phase: "placed", block: res.block });
+              refreshStats();
             }, MONTAGE_FINAL_BLOCK_DELAY_MS);
           }
         );
@@ -517,6 +609,7 @@ export default function Kiosk() {
           initialBuildings={cityData.buildings}
           initialQueue={cityData.queue}
           decor={STATIC_CITY_DECOR}
+          onStateChange={setLiveBuildings}
           style={{ position: "absolute", inset: 0 }}
         />
       )}
@@ -610,6 +703,14 @@ export default function Kiosk() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {cityData && (
+        <StatsPanel
+          overallCompleted={overallCompleted}
+          categoryCompleted={categoryCompleted}
+          schoolBlocksPlaced={stats?.schoolBlocksPlaced ?? null}
+        />
       )}
     </div>
   );

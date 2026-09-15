@@ -5,6 +5,7 @@ import { enterRouter } from './routes/enter.js';
 import { placeBlockRouter } from './routes/placeBlock.js';
 import { schoolsRouter } from './routes/schools.js';
 import { buildingsRouter } from './routes/buildings.js';
+import { statsRouter } from './routes/stats.js';
 
 const app = express();
 app.use(express.json());
@@ -16,6 +17,7 @@ app.use('/api', enterRouter);
 app.use('/api', placeBlockRouter);
 app.use('/api', schoolsRouter);
 app.use('/api', buildingsRouter);
+app.use('/api', statsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
