@@ -2,6 +2,13 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: stats panel percentages shown to two decimal places instead of one (2026-09-16, same day, follow-up)
+
+Small follow-up: `StatsPanel`'s overall and per-category percentages (`Ukupno`, and each of the 4 category rows) changed from `.toFixed(1)` to `.toFixed(2)` — e.g. "0.0%" → "0.01%". Purely a display-precision tweak, no change to the underlying `pct()` calculation.
+
+- **Verified live**: zoomed screenshot of the welcome screen's stats panel confirms two-decimal percentages rendering correctly (`0.01%`, `0.00%`, etc.). No console errors. Production `vite build` clean.
+- **Committed as `<fill in after commit>`.**
+
 ## RESOLVED: logo given a -82px top margin so it visually pops out above its card (2026-09-16, same day, follow-up)
 
 User asked for the logo to "visually exit the container" — added `-mt-[82px]` to all 4 `Kiosk.tsx` `<img>` instances (welcome, city-complete, entry, school-picker), on top of the existing `h-auto max-h-[200px] w-auto max-w-full` responsive sizing from earlier today. Works because `Card` (`ui/card.tsx`) has no `overflow-hidden` — the negative margin just pulls the image up past the card's own top edge with nothing clipping it.

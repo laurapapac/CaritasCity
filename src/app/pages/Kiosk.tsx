@@ -125,7 +125,7 @@ function StatsPanel({
           <div className="flex flex-col gap-1">
             <p className="flex justify-between font-medium">
               <span>Ukupno</span>
-              <span>{pct(overallCompleted, TOTAL_BLOCKS_TARGET).toFixed(1)}%</span>
+              <span>{pct(overallCompleted, TOTAL_BLOCKS_TARGET).toFixed(2)}%</span>
             </p>
             <Progress value={pct(overallCompleted, TOTAL_BLOCKS_TARGET)} />
           </div>
@@ -133,7 +133,7 @@ function StatsPanel({
             <div key={category} className="flex flex-col gap-1">
               <p className="flex justify-between text-muted-foreground">
                 <span>{CATEGORY_LABEL_HR[category]}</span>
-                <span>{pct(categoryCompleted[category], CATEGORY_BLOCKS_TARGET).toFixed(1)}%</span>
+                <span>{pct(categoryCompleted[category], CATEGORY_BLOCKS_TARGET).toFixed(2)}%</span>
               </p>
               <Progress value={pct(categoryCompleted[category], CATEGORY_BLOCKS_TARGET)} />
             </div>
