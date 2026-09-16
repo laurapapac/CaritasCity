@@ -10,7 +10,7 @@ User uploaded `src/assets/logo-gradimir.png` (a lion mascot holding a heart, nex
 - **Sizing iteration**: started by directly swapping the fixed `h-16` for `h-24` per request, then per a follow-up ask for "200px tall on desktop, resize down on narrower screens" changed all 4 `Kiosk.tsx` instances to `h-auto max-h-[200px] w-auto max-w-full` — a single CSS rule (no breakpoints) that caps the logo at 200px tall but lets the browser's own intrinsic-aspect-ratio scaling shrink both dimensions together whenever the container is too narrow for that height, so it never overflows the card at any width.
 - **Known, accepted gap**: at a typical wide desktop window the logo actually renders **~189px tall, not the literal 200px** — the modal cards (`max-w-md`, fixed regardless of viewport) are slightly narrower than what the new logo's aspect ratio needs for a full 200px height, so card width becomes the binding constraint before the height cap is reached. Flagged to the user (widening the cards would close the gap) — **explicitly told to leave it at 189px**, not a bug to revisit.
 - **Verified live**: both `pnpm exec vite build` and a real browser check at a wide desktop viewport (1362px window, confirmed 398×189px rendered logo via `getBoundingClientRect`) and a real narrow one (360px-wide iframe, same trick used for the mobile stats-panel/placed-card work above — confirmed proportional shrink, no overflow, rest of the welcome card unaffected). No console errors either width.
-- **Committed as `<fill in after commit>`.**
+- **Committed as `5140d0d`.**
 
 ## RESOLVED: two mobile layout fixes — stats panel hidden behind a hamburger toggle, placed/existing card buttons stacked below the text (2026-09-16, same day, follow-up)
 
