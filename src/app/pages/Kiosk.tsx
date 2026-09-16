@@ -216,7 +216,7 @@ function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse:
   return (
     <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
       <CardContent className="flex flex-col items-center gap-6 pt-6">
-        <img src={logoUrl} alt="GRADiMIR" className="h-auto max-h-[200px] w-auto max-w-full" />
+        <img src={logoUrl} alt="GRADiMIR" className="-mt-[82px] h-auto max-h-[200px] w-auto max-w-full" />
 
         <div className="flex flex-col items-center gap-1 text-center">
           <p className="text-lg font-bold">Dobrodošli u GRADiMIR</p>
@@ -256,7 +256,7 @@ function CityCompleteStep({ onVisitBlock, onBrowse }: { onVisitBlock: () => void
   return (
     <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
       <CardContent className="flex flex-col items-center gap-6 pt-6">
-        <img src={logoUrl} alt="GRADiMIR" className="h-auto max-h-[200px] w-auto max-w-full" />
+        <img src={logoUrl} alt="GRADiMIR" className="-mt-[82px] h-auto max-h-[200px] w-auto max-w-full" />
 
         <div className="flex flex-col items-center gap-1 text-center">
           <p className="text-lg font-bold">Hvala vam! 🙏</p>
@@ -311,7 +311,7 @@ function EntryStep({
   return (
     <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
       <CardContent className="flex flex-col items-center gap-6 pt-6">
-        <img src={logoUrl} alt="GRADiMIR" className="h-auto max-h-[200px] w-auto max-w-full" />
+        <img src={logoUrl} alt="GRADiMIR" className="-mt-[82px] h-auto max-h-[200px] w-auto max-w-full" />
 
         <div className="flex flex-col items-center gap-1 text-center">
           <p className="text-lg font-bold">Hvala na donaciji 🙏</p>
@@ -419,7 +419,7 @@ function SchoolStep({
   return (
     <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
       <CardContent className="flex flex-col items-center gap-6 pt-6">
-        <img src={logoUrl} alt="GRADiMIR" className="h-auto max-h-[200px] w-auto max-w-full" />
+        <img src={logoUrl} alt="GRADiMIR" className="-mt-[82px] h-auto max-h-[200px] w-auto max-w-full" />
 
         <div className="flex w-full flex-col gap-4">
           <div className="flex flex-col items-center gap-1 text-center">
