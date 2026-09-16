@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: two mobile layout fixes — stats panel hidden behind a hamburger toggle, placed/existing card buttons stacked below the text (2026-09-16, same day, follow-up)
+
+Same session as the sound-effects work above. Reminder of the real deployment model this depends on: every visitor is on their own phone/PC via URL (see the sound-effects entry below), so these are real per-visitor mobile-width fixes, not shared-kiosk concerns.
+
+- **Stats panel** (`StatsPanel` in `Kiosk.tsx`) was overlapping the centered welcome/entry/school modal at mobile widths. Now hidden by default (`hidden`) with `sm:block` forcing it always-visible on desktop (≥640px, unchanged there) — matches the "desktop stays the same" ask. A new hamburger icon button (`Menu`/`X`, `sm:hidden` so desktop never sees it) toggles a `statsOpen` state that controls the panel's visibility on mobile. Positioned top-right, shifted down (`top-20`) specifically during the `browsing` phase so it doesn't collide with that phase's own top-right "Unesi kod" button.
+- **Placed/existing card** (bottom-center, `state.phase === "placed"/"existing"`): the text+progress block and the two action buttons ("Vrati me na moju kockicu" / "Stavi sljedeću kockicu") were a single row, too narrow on mobile to fit both without cramping. `CardContent` changed from `flex items-center` to `flex flex-col sm:flex-row sm:items-center` — buttons now stack below the text on mobile, side-by-side row unchanged on desktop.
+- **Verified live** using a real narrow viewport: since this environment's `resize_window` tool doesn't actually resize the browser (stayed at the OS window's 1920×1080 regardless), used an iframe sized to 380×760 pointing at the dev server as a reliable stand-in for a true mobile CSS viewport, then drove a real code through the full welcome→entry→school→confirm flow inside it. Confirmed: hamburger visible and stats panel hidden by default on mobile, toggle opens/closes it correctly, placed-card buttons stack full-width below the text. Re-widened the same iframe to 900px and confirmed desktop reverts to the original always-visible stats panel and single-row card layout, unchanged. No console errors either width. Production `vite build` clean.
+- **Committed as `<fill in after commit>`.**
+
 ## Status: sound effects added — block landing + plumbing for mute/city-complete/button-click, one bug found and fixed (2026-09-16)
 
 **Deployment model correction, worth remembering for any future UI/UX decision**: this is NOT a shared public kiosk on one screen — it's accessed via URL, and every visitor uses their own phone or personal computer individually. The `Kiosk`/`kiosk` naming throughout the codebase is legacy from an earlier assumption and doesn't reflect real usage. This matters for anything involving sound, session state, or "shared device" assumptions — there's no risk of one person's session annoying/looping for others.

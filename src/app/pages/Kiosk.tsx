@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, KeyRound, MapPin, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronsUpDown, KeyRound, MapPin, Menu, Volume2, VolumeX, X } from "lucide-react";
 import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
 import { playSound, useMuted } from "../../lib/sound";
 import { DROP_FALL_DUR_OWN } from "../../components/city/utils";
@@ -101,17 +101,24 @@ function pct(completed: number, target: number): number {
   return target > 0 ? Math.min(100, (completed / target) * 100) : 0;
 }
 
+// Desktop keeps this always visible; on mobile it overlaps the centered
+// modal steps at this width, so it's hidden by default and toggled open via
+// a hamburger button instead (see Kiosk()'s statsOpen/MobileStatsToggle).
 function StatsPanel({
   overallCompleted,
   categoryCompleted,
   schoolBlocksPlaced,
+  mobileOpen,
 }: {
   overallCompleted: number;
   categoryCompleted: Record<BuildingCategory, number>;
   schoolBlocksPlaced: number | null;
+  mobileOpen: boolean;
 }) {
   return (
-    <div className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2">
+    <div
+      className={`pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 sm:block ${mobileOpen ? "block" : "hidden"}`}
+    >
       <Card className="pointer-events-auto w-56 bg-card/90 backdrop-blur">
         <CardContent className="flex flex-col gap-3 py-4 text-sm">
           <div className="flex flex-col gap-1">
@@ -533,6 +540,7 @@ export default function Kiosk() {
 
   const cityComplete = overallCompleted >= TOTAL_BLOCKS_TARGET;
   const [muted, toggleMuted] = useMuted();
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // Fires once, the moment the city first reads as complete (not on every
   // re-render while it stays true) — a one-off milestone sound, not tied to
@@ -776,7 +784,7 @@ export default function Kiosk() {
       {(state.phase === "placed" || state.phase === "existing") && (
         <div className="absolute inset-x-0 bottom-6 flex justify-center px-4">
           <Card className="w-full max-w-lg bg-card/90 backdrop-blur">
-            <CardContent className="flex items-center gap-4 py-3">
+            <CardContent className="flex flex-col gap-4 py-3 sm:flex-row sm:items-center">
               <div className="flex-1">
                 <p className="font-medium">
                   {state.phase === "placed" ? "Kockica je stavljena!" : "Već postavljeno"}
@@ -814,6 +822,7 @@ export default function Kiosk() {
           overallCompleted={overallCompleted}
           categoryCompleted={categoryCompleted}
           schoolBlocksPlaced={stats?.schoolBlocksPlaced ?? null}
+          mobileOpen={statsOpen}
         />
       )}
 
@@ -831,6 +840,26 @@ export default function Kiosk() {
           {muted ? <VolumeX /> : <Volume2 />}
         </Button>
       </div>
+
+      {/* Mobile-only (see StatsPanel's own doc comment) — desktop shows the
+          stats panel unconditionally, so it needs no toggle there. Shifted
+          down when the browsing phase's own top-right "Unesi kod" button is
+          also on screen, so the two never overlap. */}
+      {cityData && (
+        <div
+          className={`pointer-events-none absolute right-4 sm:hidden ${state.phase === "browsing" ? "top-20" : "top-4"}`}
+        >
+          <Button
+            size="icon"
+            variant="outline"
+            className="pointer-events-auto bg-card/90 backdrop-blur"
+            onClick={() => setStatsOpen((v) => !v)}
+            aria-label={statsOpen ? "Zatvori statistiku" : "Otvori statistiku"}
+          >
+            {statsOpen ? <X /> : <Menu />}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
