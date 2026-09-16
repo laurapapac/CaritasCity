@@ -12,7 +12,7 @@ Use this to re-prompt Claude if the conversation is lost. Paste it in and say "c
 - **Real bug found and fixed during this**: the mute button initially rendered invisible/washed-out on the welcome/entry/school screens (fine once in `browsing` phase). Root cause — those screens show a full-screen blurred modal backdrop (`bg-background/40 backdrop-blur-sm`) that, due to DOM order, was painting on top of the button. Fixed by moving the button to render last in the JSX (after `StatsPanel`) so it's always the topmost element.
 - **Verified live end-to-end** via the dev server: minted two real desktop codes through the actual `/api/scan/:publicToken` endpoint (not faked), drove each through the full welcome→code→school→confirm flow, confirmed `block-landing.mp3` is fetched with the correct `audio/mpeg` content-type and plays at landing, no console errors either time. Also confirmed the mute toggle persists across reload and renders correctly on every phase after the backdrop-order fix. Production `vite build` clean throughout.
 - **Noted, not a bug**: Vite's dev server returns a 200/HTML SPA-fallback (not a 404) for the still-missing `city-complete.mp3`/`button-click.mp3` — the browser fails to decode HTML as audio and the `.catch()` swallows it silently. A real static file server (production) would 404 these the normal way instead; behavior is equivalent either way (silent no-op).
-- **Committed as `<fill in after commit>`.**
+- **Committed as `30d33d1`.**
 
 ## RESOLVED: documentation gap backfilled — 8 real commits from 2026-09-15 were never logged here (2026-09-16)
 
