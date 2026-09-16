@@ -7,7 +7,7 @@ Use this to re-prompt Claude if the conversation is lost. Paste it in and say "c
 Small follow-up: `StatsPanel`'s overall and per-category percentages (`Ukupno`, and each of the 4 category rows) changed from `.toFixed(1)` to `.toFixed(2)` — e.g. "0.0%" → "0.01%". Purely a display-precision tweak, no change to the underlying `pct()` calculation.
 
 - **Verified live**: zoomed screenshot of the welcome screen's stats panel confirms two-decimal percentages rendering correctly (`0.01%`, `0.00%`, etc.). No console errors. Production `vite build` clean.
-- **Committed as `<fill in after commit>`.**
+- **Committed as `3dff710`.**
 
 ## RESOLVED: logo given a -82px top margin so it visually pops out above its card (2026-09-16, same day, follow-up)
 
