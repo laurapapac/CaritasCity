@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, KeyRound, MapPin } from "lucide-react";
+import { Check, ChevronsUpDown, KeyRound, MapPin, Volume2, VolumeX } from "lucide-react";
 import logoUrl from "../../assets/logo-caritas-crvena-slogan.png";
+import { playSound, useMuted } from "../../lib/sound";
+import { DROP_FALL_DUR_OWN } from "../../components/city/utils";
 import {
   ApiError,
   enterCode,
@@ -214,10 +216,22 @@ function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse:
         </div>
 
         <div className="flex w-full flex-col gap-3">
-          <Button className="bg-neutral-500 text-white hover:bg-neutral-600" onClick={onHasCode}>
+          <Button
+            className="bg-neutral-500 text-white hover:bg-neutral-600"
+            onClick={() => {
+              playSound("buttonClick");
+              onHasCode();
+            }}
+          >
             Imam kod
           </Button>
-          <Button variant="outline" onClick={onBrowse}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              playSound("buttonClick");
+              onBrowse();
+            }}
+          >
             Pogledaj gradilište
           </Button>
         </div>
@@ -244,10 +258,22 @@ function CityCompleteStep({ onVisitBlock, onBrowse }: { onVisitBlock: () => void
         </div>
 
         <div className="flex w-full flex-col gap-3">
-          <Button className="bg-neutral-500 text-white hover:bg-neutral-600" onClick={onVisitBlock}>
+          <Button
+            className="bg-neutral-500 text-white hover:bg-neutral-600"
+            onClick={() => {
+              playSound("buttonClick");
+              onVisitBlock();
+            }}
+          >
             Posjeti svoju kockicu
           </Button>
-          <Button variant="outline" onClick={onBrowse}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              playSound("buttonClick");
+              onBrowse();
+            }}
+          >
             Pogledaj grad
           </Button>
         </div>
@@ -321,13 +347,22 @@ function EntryStep({
         {error && <p className="text-destructive text-sm">{error}</p>}
 
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              playSound("buttonClick");
+              onBack();
+            }}
+          >
             Natrag
           </Button>
           <Button
             className="bg-neutral-500 text-white hover:bg-neutral-600"
             disabled={code.length !== CODE_LENGTH}
-            onClick={() => onSubmit(code)}
+            onClick={() => {
+              playSound("buttonClick");
+              onSubmit(code);
+            }}
           >
             Nastavi
           </Button>
@@ -434,13 +469,22 @@ function SchoolStep({
           )}
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onBack}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                playSound("buttonClick");
+                onBack();
+              }}
+            >
               Natrag
             </Button>
             <Button
               className="bg-neutral-500 text-white hover:bg-neutral-600"
               disabled={!schoolId}
-              onClick={() => schoolId && onConfirm(schoolId)}
+              onClick={() => {
+                playSound("buttonClick");
+                if (schoolId) onConfirm(schoolId);
+              }}
             >
               Uđi u igru
             </Button>
@@ -488,6 +532,18 @@ export default function Kiosk() {
   }, [liveBuildings, realBuildingIds]);
 
   const cityComplete = overallCompleted >= TOTAL_BLOCKS_TARGET;
+  const [muted, toggleMuted] = useMuted();
+
+  // Fires once, the moment the city first reads as complete (not on every
+  // re-render while it stays true) — a one-off milestone sound, not tied to
+  // any particular button press the way the others above are.
+  const announcedCityComplete = useRef(false);
+  useEffect(() => {
+    if (cityComplete && !announcedCityComplete.current) {
+      announcedCityComplete.current = true;
+      playSound("cityComplete");
+    }
+  }, [cityComplete]);
 
   function refreshStats() {
     getStats()
@@ -612,6 +668,11 @@ export default function Kiosk() {
               cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
               setState({ phase: "placed", block: res.block });
               refreshStats();
+              // addBlock() above always falls for exactly DROP_FALL_DUR_OWN
+              // seconds (see revealBlockAt/utils.ts) before settling — there's
+              // no host-side "landed" callback out of the three.js scene, so
+              // this just times the sound to the same fixed duration instead.
+              setTimeout(() => playSound("blockLanding"), DROP_FALL_DUR_OWN * 1000);
             }, MONTAGE_FINAL_BLOCK_DELAY_MS);
           }
         );
@@ -701,7 +762,10 @@ export default function Kiosk() {
           <Button
             size="lg"
             className="pointer-events-auto bg-red-600 text-white shadow-xl hover:bg-red-700"
-            onClick={() => setState({ phase: "entry" })}
+            onClick={() => {
+              playSound("buttonClick");
+              setState({ phase: "entry" });
+            }}
           >
             <KeyRound />
             Unesi kod
@@ -722,15 +786,17 @@ export default function Kiosk() {
               <div className="flex flex-col gap-2">
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    cityRef.current?.focusOnBlock(state.block.buildingId, state.block.blockIndex)
-                  }
+                  onClick={() => {
+                    playSound("buttonClick");
+                    cityRef.current?.focusOnBlock(state.block.buildingId, state.block.blockIndex);
+                  }}
                 >
                   <MapPin />
                   Vrati me na moju kockicu
                 </Button>
                 <Button
                   onClick={() => {
+                    playSound("buttonClick");
                     cityRef.current?.resetCamera();
                     setState({ phase: "welcome" });
                   }}
@@ -750,6 +816,21 @@ export default function Kiosk() {
           schoolBlocksPlaced={stats?.schoolBlocksPlaced ?? null}
         />
       )}
+
+      {/* Rendered last (on top of the modal steps' full-screen blurred
+          backdrop, see showsModal above) so it stays visible and clickable
+          on every phase, not just ones without a backdrop overlay. */}
+      <div className="pointer-events-none absolute top-4 left-4">
+        <Button
+          size="icon"
+          variant="outline"
+          className="pointer-events-auto bg-card/90 backdrop-blur"
+          onClick={toggleMuted}
+          aria-label={muted ? "Uključi zvuk" : "Isključi zvuk"}
+        >
+          {muted ? <VolumeX /> : <Volume2 />}
+        </Button>
+      </div>
     </div>
   );
 }
