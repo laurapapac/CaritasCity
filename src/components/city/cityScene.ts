@@ -1280,9 +1280,23 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       let node = nodes.get(building.id)
 
       if (!node) {
-        // Allocate meshes sized for this building's worst-case block count
-        const maxSolid = building.totalBlocks + 64
-        const maxGlass = Math.max(64, Math.ceil(building.totalBlocks * 0.05))
+        // Allocate meshes sized to this building's REAL solid/glass split
+        // (computeUpTo(blocks)'s final cumulative counts), not a guessed
+        // ratio — a flat "glass is at most 5% of totalBlocks" assumption
+        // used here previously undersized every tall_apartment (real glass
+        // ratio 7.9%, not 5%), so its glass InstancedMesh's draw call
+        // exceeded its allocated GPU buffer once enough windows were
+        // revealed, spamming a GL_INVALID_OPERATION "vertex buffer not big
+        // enough" warning every frame from then on. blocks.length is fixed
+        // for a building's lifetime and completedBlocks/visibleCount never
+        // exceeds it, so sizing from the blueprint's own real counts is
+        // exact — no heuristic, no headroom needed.
+        const { solidUpTo, glassUpTo } = computeUpTo(blocks)
+        // Floored at 1 — some variants (e.g. the placeholder box generator)
+        // have zero glass, and a zero-length InstancedMesh is an edge case
+        // not worth risking.
+        const maxSolid = Math.max(1, solidUpTo[blocks.length])
+        const maxGlass = Math.max(1, glassUpTo[blocks.length])
 
         const sm = new THREE.InstancedMesh(voxelGeo, solidMat, maxSolid)
         sm.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
@@ -1296,8 +1310,6 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         gm.frustumCulled = false
         gm.renderOrder   = 1
         scene.add(gm)
-
-        const { solidUpTo, glassUpTo } = computeUpTo(blocks)
 
         node = {
           solidMesh: sm,
