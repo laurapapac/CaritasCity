@@ -596,7 +596,16 @@ const GROUND_HAZY       = new THREE.Color(0x9dbcc9)
 // city's own size, so they stay fixed.
 function groundColorAt(radius: number, blendStart: number, blendEnd: number, out: THREE.Color): THREE.Color {
   if (radius < blendEnd) return out.copy(GROUND_GREY).lerp(GROUND_GRASS_EDGE, smoothstep(blendStart, blendEnd, radius))
-  if (radius < 900) return out.copy(GROUND_GRASS_EDGE).lerp(GROUND_GRASS_FULL, smoothstep(blendEnd, 450, radius))
+  // Fixed a latent bug here (2026-09-16): this used to read
+  // smoothstep(blendEnd, 450, radius) — edge1 (450) sat BELOW edge0
+  // (blendEnd, always >450 once GROUND_BLEND_MARGIN/WIDTH grew past their
+  // original tiny values), so the interval was inverted and every radius in
+  // this band clamped to t=0, meaning grass never actually reached
+  // GROUND_GRASS_FULL until the next band kicked in at 900. Harmless on its
+  // own (both colors are close), but worth fixing while tuning this same
+  // gradient system — 900 matches the next band's own start, same pattern
+  // as every other band here.
+  if (radius < 900) return out.copy(GROUND_GRASS_EDGE).lerp(GROUND_GRASS_FULL, smoothstep(blendEnd, 900, radius))
   if (radius < 1300) return out.copy(GROUND_GRASS_FULL).lerp(GROUND_HAZY, smoothstep(900, 1300, radius))
   return out.copy(GROUND_HAZY).lerp(FOG_TINT_COLOR, smoothstep(1300, 2000, radius))
 }
@@ -619,44 +628,109 @@ function groundColorAt(radius: number, blendStart: number, blendEnd: number, out
 // building/tree geometry (measured extent up to ~390) poking out past the
 // concrete onto bare grass.
 const GROUND_DISC_MARGIN = 10
-const GROUND_BLEND_MARGIN = 5
-const GROUND_BLEND_WIDTH = 25
+// 2026-09-16, user report: "the transition isn't so sharp between the
+// circle and the grass" — a first attempt just widened the color blend
+// (GROUND_BLEND_MARGIN/WIDTH, since removed) but that alone barely changed
+// anything, because the real hard edge wasn't the COLOR jump — it was the
+// concrete-vs-grass TEXTURE PATTERN meeting at a hard geometric seam
+// (RingGeometry starting exactly at the disc's edge). A color gradient
+// can't soften a pattern discontinuity between two differently-textured
+// meshes. Real fix: give the grass ring a real alpha crossfade — it now
+// starts INSIDE the solid disc's own radius (at discRadius -
+// GROUND_CROSSFADE_HALFWIDTH) with alpha 0 there, ramping to alpha 1 at
+// discRadius + GROUND_CROSSFADE_HALFWIDTH. Rendered on top of the (always
+// opaque, unchanged) concrete disc, this genuinely crossfades the two
+// textures across a wide band straddling the true edge, rather than
+// switching materials at a single radius. The RGB color blend still runs
+// too (see groundColorAt), timed to the same crossfade band so hue and
+// opacity land together.
+const GROUND_CROSSFADE_HALFWIDTH = 60
 
 export function buildGroundGroup(cityEdge = 450): THREE.Group {
   const group = new THREE.Group()
   group.name = "ground"
 
   const discRadius = cityEdge + GROUND_DISC_MARGIN
-  const blendStart = cityEdge + GROUND_BLEND_MARGIN
-  const blendEnd = blendStart + GROUND_BLEND_WIDTH
+  const crossfadeStart = Math.max(0, discRadius - GROUND_CROSSFADE_HALFWIDTH)
+  const crossfadeEnd = discRadius + GROUND_CROSSFADE_HALFWIDTH
 
-  const innerGeo = new THREE.CircleGeometry(discRadius, 96)
+  // Rendered slightly past discRadius, out to crossfadeEnd — the semi-
+  // transparent grass ring below needs SOMETHING opaque underneath its
+  // entire alpha ramp, not just up to the "real" edge. Originally this
+  // matched discRadius exactly, which left the outer half of the crossfade
+  // band (discRadius→crossfadeEnd) with no ground geometry at all beneath
+  // it — the ring's partial alpha there was blending straight against the
+  // scene's sky-blue background color, not concrete or grass, which is what
+  // actually produced the reported teal cast (real-time fog, disabled
+  // above, turned out not to be the cause). The ring fully hides this extra
+  // concrete margin by the time its own alpha reaches 1 at crossfadeEnd, so
+  // extending the solid backing costs nothing visually.
+  const innerGeo = new THREE.CircleGeometry(crossfadeEnd, 96)
   // CircleGeometry's own UV already maps the full diameter to [0,1] on both
   // axes, so scaleUV's usual "repeat = span / tileUnit" works unchanged even
   // though this isn't a plane.
-  scaleUV(innerGeo, (2 * discRadius) / TEXTURE_TILE_UNITS.floor, (2 * discRadius) / TEXTURE_TILE_UNITS.floor)
+  scaleUV(innerGeo, (2 * crossfadeEnd) / TEXTURE_TILE_UNITS.floor, (2 * crossfadeEnd) / TEXTURE_TILE_UNITS.floor)
   const innerMat = new THREE.MeshLambertMaterial({ map: buildConcreteTexture() })
   const inner = new THREE.Mesh(innerGeo, innerMat)
   inner.rotation.x = -Math.PI / 2
   group.add(inner)
 
-  const ringGeo = new THREE.RingGeometry(blendStart, 2000, 128, 48)
-  ringGeo.rotateX(-Math.PI / 2)
-  const avgCircumference = 2 * Math.PI * ((blendStart + 2000) / 2)
-  scaleUV(ringGeo, avgCircumference / TEXTURE_TILE_UNITS.grass, (2000 - blendStart) / TEXTURE_TILE_UNITS.grass)
+  // Two ring segments merged into one mesh: a finely-subdivided crossfade
+  // band (extra phiSegments so the alpha/color ramp itself doesn't look
+  // faceted) and a coarser far band out to the fog-tinted horizon, same as
+  // before. Built and UV-scaled separately, then merged — mergeGeometries
+  // needs matching attribute sets, so both get the same RGBA color layout.
+  const crossfadeGeo = new THREE.RingGeometry(crossfadeStart, crossfadeEnd, 128, 32)
+  const farGeo = new THREE.RingGeometry(crossfadeEnd, 2000, 128, 48)
+  // Rotate into the horizontal XZ plane BEFORE reading radius below —
+  // RingGeometry is built flat in XY (all Z=0), so radius must be measured
+  // from (x,z) only after this, matching where the mesh actually ends up.
+  crossfadeGeo.rotateX(-Math.PI / 2)
+  farGeo.rotateX(-Math.PI / 2)
 
-  const pos = ringGeo.attributes.position
-  const colors = new Float32Array(pos.count * 3)
   const c = new THREE.Color()
-  for (let i = 0; i < pos.count; i++) {
-    groundColorAt(Math.hypot(pos.getX(i), pos.getZ(i)), blendStart, blendEnd, c)
-    colors[i * 3] = c.r
-    colors[i * 3 + 1] = c.g
-    colors[i * 3 + 2] = c.b
+  function paintRing(geo: THREE.RingGeometry, tileUnits: number, alphaAt: (radius: number) => number) {
+    const avgCircumference = 2 * Math.PI * ((geo.parameters.innerRadius + geo.parameters.outerRadius) / 2)
+    scaleUV(
+      geo,
+      avgCircumference / tileUnits,
+      (geo.parameters.outerRadius - geo.parameters.innerRadius) / tileUnits,
+    )
+    const pos = geo.attributes.position
+    const colors = new Float32Array(pos.count * 4)
+    for (let i = 0; i < pos.count; i++) {
+      const radius = Math.hypot(pos.getX(i), pos.getZ(i))
+      groundColorAt(radius, crossfadeStart, crossfadeEnd, c)
+      colors[i * 4] = c.r
+      colors[i * 4 + 1] = c.g
+      colors[i * 4 + 2] = c.b
+      colors[i * 4 + 3] = alphaAt(radius)
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 4))
   }
-  ringGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3))
 
-  const ringMat = new THREE.MeshLambertMaterial({ map: buildGrassTexture(), vertexColors: true })
+  paintRing(crossfadeGeo, TEXTURE_TILE_UNITS.grass, (r) => smoothstep(crossfadeStart, crossfadeEnd, r))
+  paintRing(farGeo, TEXTURE_TILE_UNITS.grass, () => 1)
+
+  const ringGeo = mergeGeometries([crossfadeGeo, farGeo])
+
+  const ringMat = new THREE.MeshLambertMaterial({
+    map: buildGrassTexture(),
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    // scene.fog (cityScene.ts, tinted pale blue 0xc5e8f7) applies per-fragment
+    // by real camera distance — this ring's own vertex colors already bake
+    // in the correct grey→grass→haze→fog-color fade by RADIUS (see
+    // groundColorAt's doc comment), so real-time fog on top of that is
+    // redundant at best. At worst — this is what actually happened — the
+    // crossfade band's alpha blending sits far enough from camera at this
+    // shallow viewing angle for real fog to kick in early, tinting the
+    // still-green crossfade a muddy teal well before the manual gradient
+    // ever reaches its own haze bands. Disabling material fog here leaves
+    // the manual radius-based gradient as the only source of color.
+    fog: false,
+  })
   const ring = new THREE.Mesh(ringGeo, ringMat)
   ring.position.y = 0.03
   group.add(ring)
