@@ -7,7 +7,7 @@ Use this to re-prompt Claude if the conversation is lost. Paste it in and say "c
 User asked for the logo to "visually exit the container" — added `-mt-[82px]` to all 4 `Kiosk.tsx` `<img>` instances (welcome, city-complete, entry, school-picker), on top of the existing `h-auto max-h-[200px] w-auto max-w-full` responsive sizing from earlier today. Works because `Card` (`ui/card.tsx`) has no `overflow-hidden` — the negative margin just pulls the image up past the card's own top edge with nothing clipping it.
 
 - **Verified live**: screenshot of the welcome card confirms the mascot's head/helmet now overlaps and pokes out above the white card, rest of the card content unaffected. No console errors. Production `vite build` clean.
-- **Committed as `<fill in after commit>`.**
+- **Committed as `c2eea8e`.**
 
 ## RESOLVED: real GPU bug found and fixed — tall_apartment's glass InstancedMesh buffer was undersized, spamming a GL_INVALID_OPERATION warning every frame (2026-09-16, same day, follow-up)
 
