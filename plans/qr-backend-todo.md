@@ -10,7 +10,7 @@ User asked for a clean full-scale reset ahead of print production: wipe all plac
 - **500,000 QR codes generated, split evenly 125,000 per category** (residential/hospital/food/school) — matches `CATEGORY_BLOCKS_TARGET` × 4 categories in `Kiosk.tsx` exactly. Used the same `generatePublicToken()` (nanoid, 21 chars) as every other QR-generation path; verified all 500,000 `public_token`s came out unique.
 - **Verified in the db** directly: `qr_codes` = 500,000 (125,000 per category), `desktop_codes` = 0, `blocks` = 0, `buildings` status distribution unchanged (156 queued/4 in_progress) with `sum(completed_blocks) = 0` across all. **Verified live** via the kiosk welcome screen — loads cleanly, every stat at 0.00%, "Škole postavile 0/460000", no console errors.
 - **CSV exported** (user asked for one, after the fact) to `server/qr-exports/qr-codes-2026-09-16T13-31-25Z.csv` (gitignored, not committed — same convention as every other batch in that folder) — 500,000 rows, `category,public_token,scan_path` columns, same format `reset-and-generate-qr.ts` already used.
-- **Committed as `<fill in after commit>`.**
+- **Committed as `f6ab40b`.**
 
 ## RESOLVED: city-edge ground disc now genuinely blends into the surrounding grass instead of a hard line (2026-09-16, same day, follow-up)
 
