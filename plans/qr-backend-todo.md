@@ -2,6 +2,15 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: mobile stats-panel/hamburger cutoff raised from 640px to 1200px — was still overlapping the modal on tablets (2026-09-16, same day, follow-up)
+
+User reported the hamburger-toggle fix from earlier today (see the mobile-layout entry below) still overlapped on tablet resolutions — Tailwind's default `sm:` breakpoint (640px) is phone-only in practice; real tablets (e.g. 768–1024px) were still wide enough to trip `sm:block` and show the always-visible stats panel colliding with the centered modal there too.
+
+- **`StatsPanel`'s wrapper and the hamburger-toggle wrapper** in `Kiosk.tsx`: `sm:block`/`sm:hidden` → `min-[1200px]:block`/`min-[1200px]:hidden` (Tailwind v4 arbitrary-value breakpoint, since 1200px doesn't match any of Tailwind's named breakpoints). Updated both components' doc comments to say "wide desktop (≥1200px)" instead of implying the old, much narrower cutoff.
+- **The placed/existing card's `sm:flex-row`/`sm:items-center`** (separate concern — button-row-too-narrow, not this stats-panel overlap) was deliberately left at the original `sm:` breakpoint, not raised — the user's report was specifically about the hamburger/stats panel.
+- **Verified live** via the same iframe-at-fixed-width trick used earlier today (this environment's `resize_window` still doesn't actually resize the real browser window): confirmed the hamburger shows and the panel stays hidden at a real 1024px-wide viewport (tablet), and confirmed the switch-over is exact — at precisely 1200px the hamburger disappears and the panel becomes unconditionally visible again with clear space from the modal. (Caught and corrected a test-harness-only artifact along the way: an iframe `border` was quietly eating 2px off the intended test width, which is unrelated to the app itself.) No console errors at either width. Production `vite build` clean.
+- **Committed as `<fill in after commit>`.**
+
 ## RESOLVED: logo replaced with the new GRADiMIR mascot artwork, sized responsively (2026-09-16, same day, follow-up)
 
 User uploaded `src/assets/logo-gradimir.png` (a lion mascot holding a heart, next to the wordmark — replaces the old plain-text `logo-caritas-crvena-slogan.png`) and asked for it to swap in everywhere, then iterated on sizing live.

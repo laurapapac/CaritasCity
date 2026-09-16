@@ -101,9 +101,10 @@ function pct(completed: number, target: number): number {
   return target > 0 ? Math.min(100, (completed / target) * 100) : 0;
 }
 
-// Desktop keeps this always visible; on mobile it overlaps the centered
-// modal steps at this width, so it's hidden by default and toggled open via
-// a hamburger button instead (see Kiosk()'s statsOpen/MobileStatsToggle).
+// Wide desktop (≥1200px) keeps this always visible; below that — phones and
+// tablets both — it overlaps the centered modal steps, so it's hidden by
+// default and toggled open via a hamburger button instead (see Kiosk()'s
+// statsOpen state and the toggle button rendered near the end of Kiosk()).
 function StatsPanel({
   overallCompleted,
   categoryCompleted,
@@ -117,7 +118,7 @@ function StatsPanel({
 }) {
   return (
     <div
-      className={`pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 sm:block ${mobileOpen ? "block" : "hidden"}`}
+      className={`pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 min-[1200px]:block ${mobileOpen ? "block" : "hidden"}`}
     >
       <Card className="pointer-events-auto w-56 bg-card/90 backdrop-blur">
         <CardContent className="flex flex-col gap-3 py-4 text-sm">
@@ -841,13 +842,15 @@ export default function Kiosk() {
         </Button>
       </div>
 
-      {/* Mobile-only (see StatsPanel's own doc comment) — desktop shows the
-          stats panel unconditionally, so it needs no toggle there. Shifted
-          down when the browsing phase's own top-right "Unesi kod" button is
-          also on screen, so the two never overlap. */}
+      {/* Shown below 1200px (see StatsPanel's own doc comment) — the stats
+          panel overlaps the centered modal at tablet widths too, not just
+          phones, so the cutoff for "desktop shows it unconditionally" is
+          wider than Tailwind's own sm breakpoint. Shifted down when the
+          browsing phase's own top-right "Unesi kod" button is also on
+          screen, so the two never overlap. */}
       {cityData && (
         <div
-          className={`pointer-events-none absolute right-4 sm:hidden ${state.phase === "browsing" ? "top-20" : "top-4"}`}
+          className={`pointer-events-none absolute right-4 min-[1200px]:hidden ${state.phase === "browsing" ? "top-20" : "top-4"}`}
         >
           <Button
             size="icon"
