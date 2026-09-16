@@ -2,6 +2,16 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: full-scale reset — city wiped back to 0 and 500,000 real QR codes generated in the db (2026-09-16, same day, follow-up)
+
+User asked for a clean full-scale reset ahead of print production: wipe all placed-block/code data and mint the real, final 500,000-QR-code batch (one per real block, matching `TOTAL_BLOCKS_TARGET`) — DB rows only, no PNGs yet (that's a deliberate later step).
+
+- **New `server/src/scripts/wipe-and-generate-500k-qr.ts`** (one-off, not wired into `package.json` — run directly via `pnpm exec tsx`). Scope was explicitly narrowed by the user to exactly three tables plus one column: `DELETE FROM blocks/desktop_codes/qr_codes`, then `UPDATE buildings SET completed_blocks = 0` — **`status` deliberately left untouched**. Verified safe before running: no building was ever `'completed'` (only 156 `queued` + 4 `in_progress` existed), so resetting completed_blocks alone leaves every building in a valid state without also needing to reset/re-flip status the way the older `reset-and-generate-qr.ts` does.
+- **500,000 QR codes generated, split evenly 125,000 per category** (residential/hospital/food/school) — matches `CATEGORY_BLOCKS_TARGET` × 4 categories in `Kiosk.tsx` exactly. Used the same `generatePublicToken()` (nanoid, 21 chars) as every other QR-generation path; verified all 500,000 `public_token`s came out unique.
+- **Verified in the db** directly: `qr_codes` = 500,000 (125,000 per category), `desktop_codes` = 0, `blocks` = 0, `buildings` status distribution unchanged (156 queued/4 in_progress) with `sum(completed_blocks) = 0` across all. **Verified live** via the kiosk welcome screen — loads cleanly, every stat at 0.00%, "Škole postavile 0/460000", no console errors.
+- **CSV exported** (user asked for one, after the fact) to `server/qr-exports/qr-codes-2026-09-16T13-31-25Z.csv` (gitignored, not committed — same convention as every other batch in that folder) — 500,000 rows, `category,public_token,scan_path` columns, same format `reset-and-generate-qr.ts` already used.
+- **Committed as `<fill in after commit>`.**
+
 ## RESOLVED: city-edge ground disc now genuinely blends into the surrounding grass instead of a hard line (2026-09-16, same day, follow-up)
 
 User asked to soften the visible seam between the city's grey concrete disc and the grass terrain around it. Explicitly scoped to `/dev/city` only for now — this lives in `decor.ts`'s shared `buildGroundGroup`, which both the kiosk and the dev preview render through, so it will apply everywhere once confirmed, but verification this round was deliberately dev-preview-only.
