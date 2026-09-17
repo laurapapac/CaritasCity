@@ -32,6 +32,7 @@ function CodeCard({ data }: { data: ScanResponse }) {
   return (
     <Card className="w-full max-w-sm">
       <CardContent className="flex flex-col items-center gap-4 pt-6">
+        <img src={logoUrl} alt="GRADiMIR" className="h-auto max-h-[200px] w-auto max-w-full -mt-[73px]" />
         <p className="text-center font-bold">
           Posjetite na računalu web stranicu
           <br />
@@ -45,7 +46,7 @@ function CodeCard({ data }: { data: ScanResponse }) {
           {expired ? "This code has expired" : `Valid for ${countdown}`}
         </p>
         <Button asChild className="w-full">
-          <Link to="/">Otvori kiosk</Link>
+          <Link to="/">Idi na gradilište</Link>
         </Button>
       </CardContent>
     </Card>
@@ -75,9 +76,7 @@ export default function ScanLanding() {
   }, [load]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center gap-8 bg-background px-4 pt-12 pb-8">
-      <img src={logoUrl} alt="GRADiMIR" className="h-20 w-auto" />
-
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-background px-4 py-8">
       {state.phase === "loading" && <p className="text-muted-foreground">Loading…</p>}
 
       {state.phase === "ready" && <CodeCard data={state.data} />}
