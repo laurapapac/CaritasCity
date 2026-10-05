@@ -2,6 +2,14 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: city ground recolored from grey concrete to beige #bca99a, compensated so it actually renders as the swatch (2026-10-05)
+
+User asked to change the city ground color to `#bca99a`.
+
+- **All in `src/components/city/decor.ts`**: `buildConcreteTexture` (used only by the ground disc) gets a new base fill; its speckles are now the base color scaled ×0.8–1.09 instead of neutral grey dots (which read as grey flecks on a warm base), and the slab joint lines are a matching darker warm tone. `GROUND_GREY` renamed to `GROUND_BASE` = `0xbca99a` so the edge crossfade ring starts from the new color too.
+- **Lighting compensation**: using `#bca99a` directly as the texture fill rendered noticeably lighter/greyer on screen — measured ~(193,181,168) by sampling the live WebGL canvas in `/dev/city` (copied into a 2D canvas inside a `requestAnimationFrame` right after the scene's own render, then averaged the warm-light ground pixels). The texture is lit (Lambert + hemisphere/ambient/sun/fill lights) and encoded to sRGB on output, which brightens and desaturates it. Computed a per-channel correction in linear space → texture fill `#b1917f` (speckles/joint lines scaled to match). Re-measured: renders as **(188,169,155)** vs. target (188,169,154). Comment in the code explains why the source color differs from the swatch.
+- **Verified live** in `/dev/city`: whole-city view, edge still blends cleanly into the grass, no console errors. Measurement is from the default overview camera; faces at different light angles will vary slightly.
+
 ## RESOLVED: full 500,000-image print batch generated — 600x600 PNGs, one brand color per category, from real CMYK print specs (2026-09-17, same day, follow-up)
 
 User asked to render printable PNGs for all 500,000 QR codes already minted in the db (see the 500k-reset entry below) — 600x600px, one color per category, using exact CMYK values supplied for print: residential C100/M0/Y23/K39, school C100/M69/Y0/K37, hospital C0/M100/Y68/K35, food C0/M18/Y37/K42.

@@ -229,21 +229,27 @@ function buildConcreteTexture(): THREE.CanvasTexture {
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext("2d")!
-  ctx.fillStyle = "#b7b9ba"
+  // Deliberately darker/warmer than the target swatch #bca99a: the scene's
+  // lighting + output encoding brighten and desaturate this texture, so
+  // #b1917f is what actually renders as ~#bca99a on screen (measured live
+  // by sampling rendered ground pixels in /dev/city).
+  ctx.fillStyle = "#b1917f"
   ctx.fillRect(0, 0, size, size)
 
+  // Speckles are the base color scaled darker/lighter (not neutral grey), so
+  // they stay in the same warm hue as the base instead of reading as grey dots.
   const rand = mulberry32(20260905)
   for (let i = 0; i < 500; i++) {
     const x = rand() * size, y = rand() * size
     const r = 0.6 + rand() * 1.6
-    const shade = 150 + Math.floor(rand() * 55)
-    ctx.fillStyle = `rgba(${shade},${shade},${shade + 1},0.35)`
+    const k = 0.8 + rand() * 0.29
+    ctx.fillStyle = `rgba(${Math.round(177 * k)},${Math.round(145 * k)},${Math.round(127 * k)},0.35)`
     ctx.beginPath()
     ctx.arc(x, y, r, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  ctx.strokeStyle = "rgba(100,100,98,0.55)"
+  ctx.strokeStyle = "rgba(105,84,71,0.55)"
   ctx.lineWidth = 2
   ctx.beginPath()
   ctx.moveTo(0, 0); ctx.lineTo(size, 0)
@@ -580,7 +586,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 // close camera distances fog barely touches.
 const FOG_TINT_COLOR = new THREE.Color(0xc5e8f7)
 
-const GROUND_GREY       = new THREE.Color(0xb3b5b6) // matches the old flat ground color exactly
+const GROUND_BASE       = new THREE.Color(0xbca99a) // matches buildConcreteTexture's base fill
 const GROUND_GRASS_EDGE = new THREE.Color(0x7f9a6e)
 const GROUND_GRASS_FULL = new THREE.Color(0x86a874)
 const GROUND_HAZY       = new THREE.Color(0x9dbcc9)
@@ -595,7 +601,7 @@ const GROUND_HAZY       = new THREE.Color(0x9dbcc9)
 // (900/1300/2000) are pure distant-terrain aesthetics, unrelated to the
 // city's own size, so they stay fixed.
 function groundColorAt(radius: number, blendStart: number, blendEnd: number, out: THREE.Color): THREE.Color {
-  if (radius < blendEnd) return out.copy(GROUND_GREY).lerp(GROUND_GRASS_EDGE, smoothstep(blendStart, blendEnd, radius))
+  if (radius < blendEnd) return out.copy(GROUND_BASE).lerp(GROUND_GRASS_EDGE, smoothstep(blendStart, blendEnd, radius))
   // Fixed a latent bug here (2026-09-16): this used to read
   // smoothstep(blendEnd, 450, radius) — edge1 (450) sat BELOW edge0
   // (blendEnd, always >450 once GROUND_BLEND_MARGIN/WIDTH grew past their
