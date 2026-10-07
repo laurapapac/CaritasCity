@@ -9,6 +9,7 @@ function required(name: string): string {
 export const config = {
   databaseUrl: required('DATABASE_URL'),
   port: Number(process.env.PORT ?? 3001),
+  dbPoolMax: Number(process.env.DB_POOL_MAX ?? 25),
   desktopCodeLength: Number(process.env.DESKTOP_CODE_LENGTH ?? 6),
   desktopCodeTtlMinutes: Number(process.env.DESKTOP_CODE_TTL_MINUTES ?? 5),
 };

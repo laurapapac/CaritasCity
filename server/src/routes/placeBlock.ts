@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { pool } from '../db.js';
+import { asyncRoute } from '../lib/asyncRoute.js';
 import { findLiveDesktopCode } from '../lib/desktopCode.js';
 
 export const placeBlockRouter = Router();
@@ -20,7 +21,7 @@ const placeBlockBody = z.object({
   schoolId: z.number().int().positive(),
 });
 
-placeBlockRouter.post('/place-block', placeBlockLimiter, async (req, res) => {
+placeBlockRouter.post('/place-block', placeBlockLimiter, asyncRoute(async (req, res) => {
   const parsed = placeBlockBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_request' });
@@ -30,6 +31,7 @@ placeBlockRouter.post('/place-block', placeBlockLimiter, async (req, res) => {
   const { schoolId } = parsed.data;
 
   const client = await pool.connect();
+  let failed = false;
   try {
     await client.query('BEGIN');
 
@@ -140,9 +142,13 @@ placeBlockRouter.post('/place-block', placeBlockLimiter, async (req, res) => {
       },
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    failed = true;
+    // If the connection itself broke, ROLLBACK fails too; don't let that mask err.
+    await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
-    client.release();
+    // After an error, discard the client instead of returning it to the pool:
+    // it may be broken.
+    client.release(failed);
   }
-});
+}));

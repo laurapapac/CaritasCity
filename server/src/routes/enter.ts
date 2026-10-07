@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { pool } from '../db.js';
+import { asyncRoute } from '../lib/asyncRoute.js';
 import { findLiveDesktopCode } from '../lib/desktopCode.js';
 
 export const enterRouter = Router();
@@ -20,7 +21,7 @@ const enterLimiter = rateLimit({
 
 const enterBody = z.object({ code: z.string().min(1) });
 
-enterRouter.post('/enter', enterLimiter, async (req, res) => {
+enterRouter.post('/enter', enterLimiter, asyncRoute(async (req, res) => {
   const parsed = enterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_request' });
@@ -76,4 +77,4 @@ enterRouter.post('/enter', enterLimiter, async (req, res) => {
   // No block yet — the code stays unused so /place-block can redeem it once the
   // school picker has been completed.
   res.json({ status: 'needs_school', category: qr.category });
-});
+}));

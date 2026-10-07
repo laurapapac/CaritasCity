@@ -8,6 +8,10 @@ import { buildingsRouter } from './routes/buildings.js';
 import { statsRouter } from './routes/stats.js';
 
 const app = express();
+// Exactly one reverse proxy (the host's nginx) sits in front of this server,
+// so take the client IP from the last X-Forwarded-For hop. Without this every
+// request appears to come from nginx and all users share one rate-limit bucket.
+app.set('trust proxy', 1);
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));

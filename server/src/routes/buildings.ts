@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
+import { asyncRoute } from '../lib/asyncRoute.js';
 
 export const buildingsRouter = Router();
 
@@ -10,7 +11,7 @@ export const buildingsRouter = Router();
 // joins these rows against src/data/cityLayout.ts client-side, keyed by
 // `${variant}_${orderIndex}`, which generateCityLayout.ts's buildingId
 // (`${variant}_${i}`) was already designed to match (see its doc comment).
-buildingsRouter.get('/buildings', async (_req, res) => {
+buildingsRouter.get('/buildings', asyncRoute(async (_req, res) => {
   const result = await pool.query<{
     id: string;
     category: string;
@@ -32,4 +33,4 @@ buildingsRouter.get('/buildings', async (_req, res) => {
       status: r.status,
     })),
   );
-});
+}));

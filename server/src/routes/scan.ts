@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
+import { asyncRoute } from '../lib/asyncRoute.js';
 import { config } from '../config.js';
 import { generateDesktopCode } from '../lib/codes.js';
 
@@ -8,7 +9,7 @@ export const scanRouter = Router();
 // Phone hits this after scanning the physical QR code. Mints a short code for
 // the user to type into the shared desktop kiosk; nothing else about the QR
 // (its category, internal id, etc.) goes back to the phone.
-scanRouter.post('/scan/:publicToken', async (req, res) => {
+scanRouter.post('/scan/:publicToken', asyncRoute(async (req, res) => {
   const { publicToken } = req.params;
 
   const qrResult = await pool.query<{ id: string }>(
@@ -42,4 +43,4 @@ scanRouter.post('/scan/:publicToken', async (req, res) => {
   }
 
   res.status(503).json({ error: 'could_not_allocate_code_try_again' });
-});
+}));
