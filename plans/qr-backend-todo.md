@@ -2,9 +2,21 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: backend hardened for thousands of concurrent users (2026-10-07)
+
+Audit after the rate-limiter incident, given that ~500k QR codes are going out nationwide. Fixed:
+- **Async errors crashed the process.** Express 4 doesn't catch rejected promises from async handlers, so any DB error became an unhandled rejection and killed Node. All handlers are now wrapped in `server/src/lib/asyncRoute.ts` (forwards to `next()` → 500 `internal_error`). `pool.on('error')` added too: an idle client dropping (e.g. Postgres restart) also crashed the process. `place-block` now discards the client after an error (`release(true)`) and a failing ROLLBACK no longer masks the original error.
+- **Pool** (`server/src/db.ts`): max 25 (`DB_POOL_MAX`), `connectionTimeoutMillis` 5s (fail fast instead of hanging forever when saturated), `statement_timeout` 10s.
+- **`trust proxy` = 1** in `server/src/index.ts`. Verified on the prod host with `nginx -T`: exactly one proxy (host nginx, `/etc/nginx/sites-enabled/gradimir.kod.hr`), `location /api/` → `127.0.0.1:3001` and already sets `X-Forwarded-For`. No CDN in front (DNS points straight at 46.225.191.72). Note the same host also runs `search.magicmarinac.hr`.
+- **`/stats` cached 5s in memory**, concurrent requests share one in-flight COUNT.
+
+Verified locally: endpoints + scan flow OK; 21st wrong code from one IP → 429 `rate_limited`, other IPs unaffected; 40 failing place-block requests without slowdown (no client leak); Postgres stopped mid-run → 500s, process stayed up, recovered when the DB came back.
+
+Not done yet: a real load test (autocannon/k6) of scan → enter → place-block. Known but accepted: placements are serialized per category by the `FOR UPDATE` on the active building (est. a few hundred/s total); expired-unused `desktop_codes` rows stay in the partial unique index forever (harmless at this scale, `/scan` retries collisions).
+
 ## RESOLVED: "Nešto je pošlo po zlu" after ~20 rapid scans: rate limiter counted valid entries (2026-10-07)
 
-Four testers scanned ~10 valid codes each in quick succession; after ~7-8 each the kiosk showed the generic error. Cause: `/enter` and `/place-block` limiters (20 req / 15 min per IP) counted successful requests too, and behind the Vite dev proxy every request comes from `localhost`, so all testers shared one bucket. The 429 body was plain text, so the client fell back to the generic message. Fix: `skipSuccessfulRequests: true` on both limiters (only failures count, which is what brute-forcing looks like), 429 now returns JSON `{ error: 'rate_limited' }`, and Kiosk.tsx maps it to "Previše neuspjelih pokušaja — pričekajte nekoliko minuta pa pokušajte ponovno." Still open: set `app.set('trust proxy', …)` to match the production reverse proxy, otherwise the failure budget is shared by everyone.
+Four testers scanned ~10 valid codes each in quick succession; after ~7-8 each the kiosk showed the generic error. Cause: `/enter` and `/place-block` limiters (20 req / 15 min per IP) counted successful requests too, and behind the Vite dev proxy every request comes from `localhost`, so all testers shared one bucket. The 429 body was plain text, so the client fell back to the generic message. Fix: `skipSuccessfulRequests: true` on both limiters (only failures count, which is what brute-forcing looks like), 429 now returns JSON `{ error: 'rate_limited' }`, and Kiosk.tsx maps it to "Previše neuspjelih pokušaja — pričekajte nekoliko minuta pa pokušajte ponovno." `trust proxy` was set the same day (see the hardening entry above).
 
 ## RESOLVED: 80 black test QR PNGs for the gradimir.kod.hr test app (2026-10-07)
 
