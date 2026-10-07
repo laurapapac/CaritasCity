@@ -11,6 +11,11 @@ const enterLimiter = rateLimit({
   limit: 20, // per IP — codes are short, so brute-forcing must stay expensive
   standardHeaders: true,
   legacyHeaders: false,
+  // Only failed attempts count. Brute-forcing is all failures, while valid
+  // entries must never be throttled: many real users share one public IP
+  // (mobile carrier NAT, school Wi-Fi, a reverse proxy).
+  skipSuccessfulRequests: true,
+  message: { error: 'rate_limited' },
 });
 
 const enterBody = z.object({ code: z.string().min(1) });

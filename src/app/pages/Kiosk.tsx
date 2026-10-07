@@ -634,7 +634,9 @@ export default function Kiosk() {
         const message =
           err instanceof ApiError && err.code === "invalid_or_expired_code"
             ? "Taj kod nije važeći ili je istekao."
-            : "Nešto je pošlo po zlu — pokušajte ponovno.";
+            : err instanceof ApiError && err.code === "rate_limited"
+              ? "Previše neuspjelih pokušaja — pričekajte nekoliko minuta pa pokušajte ponovno."
+              : "Nešto je pošlo po zlu — pokušajte ponovno.";
         setState({ phase: "entry", error: message });
       });
   }
@@ -694,6 +696,7 @@ export default function Kiosk() {
                 category_complete: "Ova kategorija je već završena!",
                 block_already_placed: "Ovaj blok je već postavljen.",
                 invalid_or_expired_code: "Taj kod nije važeći ili je istekao.",
+                rate_limited: "Previše neuspjelih pokušaja — pričekajte nekoliko minuta pa pokušajte ponovno.",
               }[err.code] ?? "Nešto je pošlo po zlu — pokušajte ponovno."
             : "Nešto je pošlo po zlu — pokušajte ponovno.";
         setState({ phase: "needs_school", code, category, variant: getActiveVariant(category), error: message });

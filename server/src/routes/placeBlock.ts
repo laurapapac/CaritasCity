@@ -11,6 +11,8 @@ const placeBlockLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: 'rate_limited' },
 });
 
 const placeBlockBody = z.object({
