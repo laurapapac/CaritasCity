@@ -2,6 +2,14 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: "Nešto je pošlo po zlu" after ~20 rapid scans: rate limiter counted valid entries (2026-10-07)
+
+Four testers scanned ~10 valid codes each in quick succession; after ~7-8 each the kiosk showed the generic error. Cause: `/enter` and `/place-block` limiters (20 req / 15 min per IP) counted successful requests too, and behind the Vite dev proxy every request comes from `localhost`, so all testers shared one bucket. The 429 body was plain text, so the client fell back to the generic message. Fix: `skipSuccessfulRequests: true` on both limiters (only failures count, which is what brute-forcing looks like), 429 now returns JSON `{ error: 'rate_limited' }`, and Kiosk.tsx maps it to "Previše neuspjelih pokušaja — pričekajte nekoliko minuta pa pokušajte ponovno." Still open: set `app.set('trust proxy', …)` to match the production reverse proxy, otherwise the failure budget is shared by everyone.
+
+## RESOLVED: 80 black test QR PNGs for the gradimir.kod.hr test app (2026-10-07)
+
+20 random **unused** codes per category (no `blocks` row and no `desktop_codes` row) taken from the **local** dev DB (user confirmed the local DB is the right source for the test server). Encoded as `https://gradimir.kod.hr/s/<token>`, black on white, 600x600, margin 2. CSV: `server/qr-exports/kod-test-black-2026-10-07T11-46-00Z.csv`; images: `server/qr-exports/images/kod-test-black-2026-10-07T11-46-00Z/<category>/<token>.png`. One-off script `server/src/scripts/generate-qr-images-black.ts` (untracked, not committed by design).
+
 ## RESOLVED: city ground recolored from grey concrete to beige #bca99a, compensated so it actually renders as the swatch (2026-10-05)
 
 User asked to change the city ground color to `#bca99a`.
