@@ -1,27 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
 import { pool } from '../db.js';
 import { asyncRoute } from '../lib/asyncRoute.js';
 import { findLiveDesktopCode } from '../lib/desktopCode.js';
+import { codeFailureLimiter } from '../lib/codeFailureLimiter.js';
 
 export const enterRouter = Router();
 
-const enterLimiter = rateLimit({
-  windowMs: 15 * 60_000,
-  limit: 20, // per IP — codes are short, so brute-forcing must stay expensive
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Only failed attempts count. Brute-forcing is all failures, while valid
-  // entries must never be throttled: many real users share one public IP
-  // (mobile carrier NAT, school Wi-Fi, a reverse proxy).
-  skipSuccessfulRequests: true,
-  message: { error: 'rate_limited' },
-});
-
 const enterBody = z.object({ code: z.string().min(1) });
 
-enterRouter.post('/enter', enterLimiter, asyncRoute(async (req, res) => {
+enterRouter.post('/enter', codeFailureLimiter, asyncRoute(async (req, res) => {
   const parsed = enterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_request' });
@@ -31,6 +19,7 @@ enterRouter.post('/enter', enterLimiter, asyncRoute(async (req, res) => {
 
   const desktopCode = await findLiveDesktopCode(code);
   if (!desktopCode) {
+    res.locals.codeFailure = true;
     res.status(400).json({ error: 'invalid_or_expired_code' });
     return;
   }

@@ -23,7 +23,11 @@ app.use('/api', schoolsRouter);
 app.use('/api', buildingsRouter);
 app.use('/api', statsRouter);
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err?.type === 'entity.parse.failed' || err?.type === 'entity.too.large') {
+    res.status(err.status).json({ error: 'invalid_request' });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: 'internal_error' });
 });

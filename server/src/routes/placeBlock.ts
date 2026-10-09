@@ -1,27 +1,18 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
 import { pool } from '../db.js';
 import { asyncRoute } from '../lib/asyncRoute.js';
 import { findLiveDesktopCode } from '../lib/desktopCode.js';
+import { codeFailureLimiter } from '../lib/codeFailureLimiter.js';
 
 export const placeBlockRouter = Router();
-
-const placeBlockLimiter = rateLimit({
-  windowMs: 15 * 60_000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-  message: { error: 'rate_limited' },
-});
 
 const placeBlockBody = z.object({
   code: z.string().min(1),
   schoolId: z.number().int().positive(),
 });
 
-placeBlockRouter.post('/place-block', placeBlockLimiter, asyncRoute(async (req, res) => {
+placeBlockRouter.post('/place-block', codeFailureLimiter, asyncRoute(async (req, res) => {
   const parsed = placeBlockBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_request' });
@@ -38,6 +29,7 @@ placeBlockRouter.post('/place-block', placeBlockLimiter, asyncRoute(async (req, 
     const desktopCode = await findLiveDesktopCode(code, client);
     if (!desktopCode) {
       await client.query('ROLLBACK');
+      res.locals.codeFailure = true;
       res.status(400).json({ error: 'invalid_or_expired_code' });
       return;
     }
@@ -61,18 +53,19 @@ placeBlockRouter.post('/place-block', placeBlockLimiter, asyncRoute(async (req, 
     }
 
     // Serializes concurrent placements within the same category on this row lock.
-    const buildingResult = await client.query<{
-      id: string;
-      variant: string;
-      total_blocks: number;
-      completed_blocks: number;
-    }>(
-      `SELECT id, variant, total_blocks, completed_blocks FROM buildings
-       WHERE category = $1 AND status = 'in_progress'
-       FOR UPDATE`,
-      [qr.category],
-    );
-    const building = buildingResult.rows[0];
+    // A request that waited on the row lock re-checks it after the previous transaction commits.
+    // If that transaction completed the building, the row no longer matches 'in_progress' and comes back
+    // empty, although the next building is active now. A new statement sees the new state, so try again.
+    let building: { id: string; variant: string; total_blocks: number; completed_blocks: number } | undefined;
+    for (let attempt = 0; attempt < 3 && !building; attempt++) {
+      const buildingResult = await client.query<{ id: string; variant: string; total_blocks: number; completed_blocks: number }>(
+        `SELECT id, variant, total_blocks, completed_blocks FROM buildings
+         WHERE category = $1 AND status = 'in_progress'
+         FOR UPDATE`,
+        [qr.category],
+      );
+      building = buildingResult.rows[0];
+    }
     if (!building) {
       await client.query('ROLLBACK');
       res.status(409).json({ error: 'category_complete' });
