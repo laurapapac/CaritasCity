@@ -2,6 +2,14 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: issues found by the many-users-on-one-day load test (2026-10-09)
+
+Load test run 2026-10-08 (simulated thousands of players on the same day). Fixes committed in `b654eea`; **the backend still has to be redeployed** for 2–4 to go live on the server.
+1. **7,903 `-` tokens unscannable on the server DB.** They were stored as `'-WZ_n5np…`: the tokens had passed through a spreadsheet/CSV import, which prefixes values starting with `-` (the only formula-trigger character in the nanoid alphabet) with an apostrophe. The code never adds it; staging was clean. Fixed by hand on the server DB: `UPDATE qr_codes SET public_token = substr(public_token, 2) WHERE public_token LIKE '''-%'` after checking lengths (all 21, the bad ones 22) and that no cleaned token collided. All 500,000 tokens verified to match the prints. Prints unchanged. Optional, not done: a `CHECK (public_token ~ '^[A-Za-z0-9_-]{21}$')` constraint to stop a bad import early.
+2. **Rate limiter turned slowdowns into lockouts.** express-rate-limit counts a request as soon as it starts (`skipSuccessfulRequests` only undoes it after a success), so with slow responses >20 in-flight requests from one IP → 429, which itself counted as a failure → IP locked for 15 min. Would hit any school behind one IP. Replaced both limiters with `server/src/lib/codeFailureLimiter.ts`: counts only `invalid_or_expired_code` responses (routes set `res.locals.codeFailure`), only after the response finishes; limit 200 per IP / 15 min (`CODE_FAILURE_LIMIT`). With 887M possible codes and a 5-min lifetime that's still ~0.2% chance to hit a live code. In-memory, per process (fine for the single server). `express-rate-limit` is now unused but still in `package.json`.
+3. **Building handoff race in `/place-block`.** When building 137 filled up, 12 of 20 concurrent students got "Ova kategorija je već završena!" although 149 had just become active. Requests waiting on the `FOR UPDATE` row lock re-check the old row after commit; it's no longer `in_progress`, so they got no row, and their statement can't see 149. Fix: retry the lookup up to 3 times (a new statement sees the new state). Everything else at the boundary was already correct (137 ended at exactly total, 149 the only active one, indexes 0–6 without gaps).
+4. **Invalid JSON returned 500.** The error handler in `server/src/index.ts` now passes through body-parser's status for `entity.parse.failed` (400) / `entity.too.large` (413) as `invalid_request`. Edge-case suite was otherwise 32/33, including both expired-code checks.
+
 ## RESOLVED: backend hardened for thousands of concurrent users (2026-10-07)
 
 Audit after the rate-limiter incident, given that ~500k QR codes are going out nationwide. Fixed:
@@ -12,7 +20,7 @@ Audit after the rate-limiter incident, given that ~500k QR codes are going out n
 
 Verified locally: endpoints + scan flow OK; 21st wrong code from one IP → 429 `rate_limited`, other IPs unaffected; 40 failing place-block requests without slowdown (no client leak); Postgres stopped mid-run → 500s, process stayed up, recovered when the DB came back.
 
-Not done yet: a real load test (autocannon/k6) of scan → enter → place-block. Known but accepted: placements are serialized per category by the `FOR UPDATE` on the active building (est. a few hundred/s total); expired-unused `desktop_codes` rows stay in the partial unique index forever (harmless at this scale, `/scan` retries collisions).
+Load test done 2026-10-08, see the entry above (the 20-failure limiter described here was replaced). Known but accepted: placements are serialized per category by the `FOR UPDATE` on the active building (est. a few hundred/s total); expired-unused `desktop_codes` rows stay in the partial unique index forever (harmless at this scale, `/scan` retries collisions).
 
 ## RESOLVED: "Nešto je pošlo po zlu" after ~20 rapid scans: rate limiter counted valid entries (2026-10-07)
 
