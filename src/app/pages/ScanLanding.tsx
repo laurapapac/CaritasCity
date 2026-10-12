@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
+import { Check, Copy } from "lucide-react";
 import { ApiError, scanQr, type ScanResponse } from "../../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -25,6 +26,50 @@ function useCountdown(expiresAt: string): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+// navigator.clipboard only exists in secure contexts (HTTPS/localhost), so
+// fall back to execCommand for phones hitting the dev server over LAN HTTP.
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  return ok;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(id);
+  }, [copied]);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={copied ? "Kod kopiran" : "Kopiraj kod"}
+      onClick={() => copyText(text).then(setCopied)}
+    >
+      {copied ? <Check className="text-green-600" /> : <Copy />}
+    </Button>
+  );
+}
+
 function CodeCard({ data }: { data: ScanResponse }) {
   const countdown = useCountdown(data.expiresAt);
   const expired = countdown === "0:00";
@@ -41,7 +86,10 @@ function CodeCard({ data }: { data: ScanResponse }) {
         <p className="text-muted-foreground text-center text-sm">
           Upišite kod prikazan na vašem telefonu.
         </p>
-        <div className="text-3xl font-extrabold tracking-[0.3em]">{data.code}</div>
+        <div className="flex items-center gap-2">
+          <div className="text-3xl font-extrabold tracking-[0.3em]">{data.code}</div>
+          <CopyButton text={data.code} />
+        </div>
         <p className={expired ? "text-destructive" : "text-muted-foreground"}>
           {expired ? "This code has expired" : `Valid for ${countdown}`}
         </p>

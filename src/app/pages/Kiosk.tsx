@@ -73,7 +73,7 @@ const VARIANT_WORD_HR: Record<string, string> = {
 };
 
 // Nominative-case display name per variant, for the placed/existing block
-// card ("Bolnica — Mala bolnica"). Falls back to the raw variant string
+// card ("Mala bolnica"). Falls back to the raw variant string
 // (see ProgressBlock) if a variant is ever added here without a translation.
 const VARIANT_LABEL_HR: Record<string, string> = {
   house: "Kuća",
@@ -138,8 +138,8 @@ function StatsPanel({
               <Progress value={pct(categoryCompleted[category], CATEGORY_BLOCKS_TARGET)} />
             </div>
           ))}
-          <div className="flex justify-between border-t pt-2 text-muted-foreground">
-            <span>Škole postavile</span>
+          <div className="flex flex-col gap-1 justify-between border-t pt-2 text-muted-foreground">
+            <span>Škole postavile:</span>
             <span>
               {schoolBlocksPlaced ?? "…"}/{SCHOOL_BLOCKS_TARGET}
             </span>
@@ -202,11 +202,11 @@ function ProgressBlock({ block }: { block: BlockInfo }) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-sm">
-        {CATEGORY_LABEL_HR[block.category]} — {VARIANT_LABEL_HR[block.buildingVariant] ?? block.buildingVariant}
+        {VARIANT_LABEL_HR[block.buildingVariant] ?? block.buildingVariant}
       </p>
       <Progress value={pct} />
       <p className="text-muted-foreground text-xs">
-        {block.completedBlocks}/{block.totalBlocks} kockica stavljeno
+        {block.completedBlocks}/{block.totalBlocks} kockica stavljeno za ovu građevinu
       </p>
     </div>
   );
