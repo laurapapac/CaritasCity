@@ -50,10 +50,24 @@ interface CityState {
 type CityAction =
   | { type: "BLOCK_ADDED"; buildingId: string; completedBlocks: number }
   | { type: "RESET";        buildings: CityBuilding[]; queue: ConstructionQueue }
+  | { type: "SYNC_PROGRESS"; counts: Map<string, number>; queue: ConstructionQueue }
 
 function cityReducer(state: CityState, action: CityAction): CityState {
   if (action.type === "RESET") {
     return { buildings: action.buildings, queue: action.queue }
+  }
+
+  if (action.type === "SYNC_PROGRESS") {
+    // Only ever raises a count — a server reply can't undo a block this
+    // client already revealed locally (e.g. its own just-placed block).
+    // Buildings whose count doesn't change keep their object identity, so
+    // only those Building components re-sync their meshes.
+    const buildings = state.buildings.map((b) => {
+      const next = action.counts.get(b.id)
+      if (next === undefined || next <= b.completedBlocks) return b
+      return { ...b, completedBlocks: Math.min(next, b.totalBlocks) }
+    })
+    return { buildings, queue: action.queue }
   }
 
   if (action.type === "BLOCK_ADDED") {
@@ -123,6 +137,12 @@ export interface CityHandle {
   resetCamera(): void
   /** Instantly set a building's visible block count. See CitySceneHandle. */
   setVisibleCount(buildingId: string, count: number): void
+  /**
+   * Catch buildings up to fresh server counts (by building id) without
+   * touching the camera — only buildings whose count went up are rebuilt.
+   * Ids not in `counts` (decor, landmarks) are left alone.
+   */
+  syncProgress(counts: Map<string, number>, queue: ConstructionQueue): void
   /** Reset all buildings to completedBlocks = 0 and restore the initial queue. */
   reset(): void
   /** Read current buildings (for HUD rendering outside the component). */
@@ -223,6 +243,10 @@ export const City = forwardRef<CityHandle, CityProps>(function City(
 
     setVisibleCount(buildingId, count) {
       rendererRef.current?.setVisibleCount(buildingId, count)
+    },
+
+    syncProgress(counts, queue) {
+      dispatch({ type: "SYNC_PROGRESS", counts, queue })
     },
 
     reset() {

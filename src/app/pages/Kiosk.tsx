@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, KeyRound, MapPin, Menu, Volume2, VolumeX, X } from "lucide-react";
+import { Check, ChevronsUpDown, KeyRound, MapPin, Menu, RefreshCw, Volume2, VolumeX, X } from "lucide-react";
 import logoUrl from "../../assets/logo-gradimir.png";
 import { playSound, useMuted } from "../../lib/sound";
 import { DROP_FALL_DUR_OWN } from "../../components/city/utils";
@@ -184,6 +184,18 @@ function buildCityBuilding(b: BuildingState): CityBuilding | null {
     // active building per category).
     completedBlocks: b.status === "in_progress" ? Math.max(0, b.completedBlocks - 1) : b.completedBlocks,
   };
+}
+
+// Only the in_progress row per category drives the active queue — rows also
+// include every queued/completed building (2026-08-13, widened from
+// "in_progress only"), so this can't just take whichever row of a category
+// comes last in the array.
+function queueFromRows(rows: BuildingState[]): ConstructionQueue {
+  const queue: ConstructionQueue = {};
+  for (const row of rows) {
+    if (row.status === "in_progress") queue[row.category] = row.id;
+  }
+  return queue;
 }
 
 type Phase =
@@ -568,19 +580,35 @@ export default function Kiosk() {
         const buildings = rows
           .map(buildCityBuilding)
           .filter((b): b is CityBuilding => b !== null);
-        // Only the in_progress row per category drives the active queue —
-        // rows also now include every queued/completed building (2026-08-13,
-        // widened from "in_progress only"), so this can't just take
-        // whichever row of a category comes last in the array anymore.
-        const queue: ConstructionQueue = {};
-        for (const row of rows) {
-          if (row.status === "in_progress") queue[row.category] = row.id;
-        }
+        const queue = queueFromRows(rows);
         setCityData({ rows, buildings: [...buildings, ...STATIC_LANDMARKS, ...STATIC_DECOR_BUILDINGS], queue });
         setState({ phase: "welcome" });
       })
       .catch(() => setState({ phase: "load_error" }));
   }, []);
+
+  // Manual "refresh" button: pulls fresh counts and raises only the buildings
+  // that grew, in place — no remount, so the camera and the player's view stay
+  // exactly where they are. Deliberately manual rather than polled, to keep
+  // weak devices and the server free of background work. cityData.rows is
+  // updated too (getActiveVariant/realBuildingIds read it), but
+  // cityData.buildings is kept as-is: City only reads it on mount.
+  const [refreshing, setRefreshing] = useState(false);
+  function refreshCity() {
+    if (refreshing) return;
+    setRefreshing(true);
+    refreshStats();
+    getBuildings()
+      .then((rows) => {
+        cityRef.current?.syncProgress(
+          new Map(rows.map((r) => [r.id, r.completedBlocks])),
+          queueFromRows(rows),
+        );
+        setCityData((prev) => (prev ? { ...prev, rows } : prev));
+      })
+      .catch(() => {})
+      .finally(() => setRefreshing(false));
+  }
 
   // Boot animation: replay the most recent real block on each category's
   // active building so the kiosk always opens with a "here's what's been
@@ -833,7 +861,7 @@ export default function Kiosk() {
       {/* Rendered last (on top of the modal steps' full-screen blurred
           backdrop, see showsModal above) so it stays visible and clickable
           on every phase, not just ones without a backdrop overlay. */}
-      <div className="pointer-events-none absolute top-4 left-4">
+      <div className="pointer-events-none absolute top-4 left-4 flex gap-2">
         <Button
           size="icon"
           variant="outline"
@@ -843,6 +871,24 @@ export default function Kiosk() {
         >
           {muted ? <VolumeX /> : <Volume2 />}
         </Button>
+        {/* Hidden mid-construction: a sync landing on the building whose
+            montage is playing would rebuild it and cut the animation. */}
+        {cityData && state.phase !== "constructing" && (
+          <Button
+            size="icon"
+            variant="outline"
+            className="pointer-events-auto bg-card/90 backdrop-blur"
+            onClick={() => {
+              playSound("buttonClick");
+              refreshCity();
+            }}
+            disabled={refreshing}
+            aria-label="Osvježi grad"
+            title="Osvježi grad"
+          >
+            <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+          </Button>
+        )}
       </div>
 
       {/* Shown below 1200px (see StatsPanel's own doc comment) — the stats
