@@ -686,16 +686,18 @@ const NEIGHBOR_CLEARANCE_MARGIN = 2
 // A block revisited after its building has grown further can end up fully
 // buried — the inner sub-layer of a 2-thick wall ring, a floor slab under
 // later floors, a multi-layer roof cap. focusOnBlock then cuts a small
-// "window" to it: every block of the SAME building placed AFTER the target
-// whose cell sits within CUTAWAY_RADIUS of the camera→target sightline, and
-// in front of the target, is hidden (instance scaled to 0 — not faded: stacked translucent
+// "window" to it: every block of the SAME building whose cell sits within
+// CUTAWAY_RADIUS of the camera→target sightline, and in front of the
+// target, is hidden (instance scaled to 0 — not faded: stacked translucent
 // wall/roof layers read as mud, and per-instance opacity isn't possible on
-// a shared material anyway). Only later blocks, never earlier ones: blocks
-// placed before the target were already there when it was placed and
-// focusOnBlock's normal framing works around them — so the cutaway restores
-// exactly the view the block had at placement time, and a fresh placement
-// (nothing after it yet) is never touched. Recomputed whenever the camera
-// moves or the building's blocks change, cleared by resetCamera. Purely
+// a shared material anyway). Only once the building has grown past the
+// target (anything placed after it): a fresh placement, or a block nothing
+// was built after, keeps focusOnBlock's normal framing untouched. Once it
+// has, earlier blocks are cut too, not just later ones — limiting it to
+// later blocks (first version) left e.g. the outer wall block directly in
+// front of an inner-wall target in place, covering it from almost every
+// angle (tall_apartment block 3916). Recomputed whenever the camera moves
+// or the building's blocks change, cleared by resetCamera. Purely
 // client-side.
 
 // Distance (world units) from the sightline within which a block counts as
@@ -708,13 +710,53 @@ const CUTAWAY_RADIUS = 1.6
 // a block must sit before it's hidden — keeps the target's own neighbors on
 // its wall/floor (projection ≈ 0) so it's still seen in context, not floating.
 const CUTAWAY_MIN_DEPTH = 0.75
-// Tighter radius for blocks on the target's OWN layer. The camera always
-// looks down at least a little, so same-layer neighbors mostly cover the
-// target's side faces, not the top — at the full CUTAWAY_RADIUS a floor-slab
-// target ended up on a pillar with the slab around it cut away. 0.6 still
-// removes the one block dead ahead (e.g. an outer wall block in front of an
-// inner one), just not its diagonal neighbors.
-const CUTAWAY_SAME_LAYER_RADIUS = 0.6
+// Blocks on the target's OWN layer get a separate, flat (XZ-only) test. They
+// sit level with the target, so they can only ever cover its side face,
+// never its top — the 3D sightline radius was wrong for them both ways: at
+// the full CUTAWAY_RADIUS a floor-slab target ended up on a pillar with the
+// slab around it cut away, and a tighter 3D radius (0.6, second version) put
+// the outer wall block directly in front of an inner-wall target right on
+// the edge at the usual 35° elevation, so it covered the target or not
+// depending on a few degrees of orbit (tall_apartment block 3916). Now a
+// same-layer block is hidden if either:
+//  - it's the block directly in front horizontally — within
+//    CUTAWAY_SAME_LAYER_HALF_WIDTH of the sightline's XZ projection, and
+//    adjacent (projection in 0.5..1.5) — at any camera height, so it never
+//    flickers on/off while orbiting; or
+//  - the sightline itself passes through it (box inflated by
+//    CUTAWAY_SAME_LAYER_HIT_MARGIN). At normal elevations the sightline
+//    leaves the layer within a block, so this adds nothing; at a low,
+//    near-level camera looking along a wall it stays in the layer for
+//    several blocks, and those are exactly the ones in the way.
+// Diagonal and farther same-layer neighbors off the sightline stay.
+const CUTAWAY_SAME_LAYER_HALF_WIDTH = 0.6
+const CUTAWAY_SAME_LAYER_HIT_MARGIN = 0.1
+
+// Whether the segment o + d·t, t ∈ [0, len], passes through the axis-aligned
+// box centered on c with half-size h (standard slab test).
+function segmentHitsBox(
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  len: number,
+  cx: number, cy: number, cz: number,
+  h: number
+): boolean {
+  let tMin = 0, tMax = len
+  const axes: Array<[number, number, number]> = [[ox, dx, cx], [oy, dy, cy], [oz, dz, cz]]
+  for (const [o, d, c] of axes) {
+    if (Math.abs(d) < 1e-9) {
+      if (Math.abs(o - c) > h) return false
+      continue
+    }
+    let t1 = (c - h - o) / d
+    let t2 = (c + h - o) / d
+    if (t1 > t2) [t1, t2] = [t2, t1]
+    tMin = Math.max(tMin, t1)
+    tMax = Math.min(tMax, t2)
+    if (tMin > tMax) return false
+  }
+  return true
+}
 const CUTAWAY_STEP = 0.3
 
 // Integer-packed cell key — block x/z are world-space cube centers (city
@@ -725,7 +767,7 @@ function cellKey(x: number, y: number, z: number): number {
 }
 
 // Block indices of `occ` (cell → block index, current visible blocks only)
-// placed after targetIdx that cover the sightline from blocks[targetIdx]'s center to the camera.
+// that cover the sightline from blocks[targetIdx]'s center to the camera.
 // Only marches as far as the building itself extends (`maxReach`) — beyond
 // that the ray can't hit this building's blocks, however far the camera is
 // zoomed out.
@@ -751,6 +793,12 @@ function findCutawayBlocks(
   const offX = t0.x - Math.round(t0.x)
   const offZ = t0.z - Math.round(t0.z)
 
+  // Sightline's horizontal direction, for the same-layer test (skipped when
+  // looking near-straight down, where same-layer blocks can't be in front).
+  const hLen = Math.hypot(dx, dz)
+  const hx = hLen > 1e-3 ? dx / hLen : 0
+  const hz = hLen > 1e-3 ? dz / hLen : 0
+
   const found = new Set<number>()
   const span = Math.ceil(CUTAWAY_RADIUS + 0.5)
   for (let s = CUTAWAY_MIN_DEPTH; s <= reach; s += CUTAWAY_STEP) {
@@ -761,12 +809,22 @@ function findCutawayBlocks(
       for (let cy = py - span; cy <= py + span; cy++) {
         for (let gz = pz - span; gz <= pz + span; gz++) {
           const idx = occ.get(cellKey(gx, cy, gz))
-          if (idx === undefined || idx <= targetIdx || found.has(idx)) continue
+          if (idx === undefined || idx === targetIdx || found.has(idx)) continue
           const vx = gx + offX - ox, vy = cy + 0.5 - oy, vz = gz + offZ - oz
+          if (cy === t0.y) {
+            const tH = vx * hx + vz * hz
+            const perpH = Math.abs(vx * hz - vz * hx)
+            const deadAhead = hLen > 1e-3 && tH >= 0.5 && tH <= 1.5 && perpH <= CUTAWAY_SAME_LAYER_HALF_WIDTH
+            if (deadAhead || segmentHitsBox(
+              ox, oy, oz, dx, dy, dz, len,
+              gx + offX, cy + 0.5, gz + offZ, 0.5 + CUTAWAY_SAME_LAYER_HIT_MARGIN
+            )) found.add(idx)
+            continue
+          }
           const t = vx * dx + vy * dy + vz * dz
           if (t < CUTAWAY_MIN_DEPTH || t > len) continue
           const perp = Math.hypot(vx - dx * t, vy - dy * t, vz - dz * t)
-          if (perp <= (cy === t0.y ? CUTAWAY_SAME_LAYER_RADIUS : CUTAWAY_RADIUS)) found.add(idx)
+          if (perp <= CUTAWAY_RADIUS) found.add(idx)
         }
       }
     }
@@ -1205,7 +1263,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     ) return
 
     const target = node.blocks[cutaway.blockIndex]
-    const next = target
+    const grown = node.visibleCount > cutaway.blockIndex + 1
+    const next = target && grown
       ? findCutawayBlocks(occupancyOf(node), node.blocks, cutaway.blockIndex, p, cutawayReach(node, target))
       : []
     const nextSet = new Set(next)
@@ -1785,13 +1844,13 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
 
       // The side that was open when the block was placed. At placement time
-      // (and for any block nothing has been built over since) nothing covers
-      // it, so this is the shot — unchanged from before the cutaway existed.
+      // (and for any block nothing has been built after since) this is the
+      // shot, unchanged from before the cutaway existed — no cutaway at all.
       // On a later revisit the building may have grown over that side; then
-      // the cutaway has to cut through, and the camera instead picks whichever
-      // of TOP_VIEW_AZIMUTHS (at TOP_VIEW_TILT_DEG — looking down into the
-      // building) the cutaway would have to hide the fewest later blocks
-      // for. Only elevated angles on purpose: a flat side-on angle "wins" by
+      // the cutaway has to cut through, and if the original side needs any
+      // cutting the camera instead picks whichever of TOP_VIEW_AZIMUTHS (at
+      // TOP_VIEW_TILT_DEG — looking down into the building) the cutaway would
+      // have to hide the fewest blocks for. Only elevated angles on purpose: a flat side-on angle "wins" by
       // count for a floor-slab block but reads as a one-block-wide tunnel,
       // where looking down through a wall onto the floor reads as peeking
       // inside. These alternates skip the tree dodge (it only matters near
@@ -1805,9 +1864,10 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         p.x > node.bboxXZ.minX && p.x < node.bboxXZ.maxX &&
         p.z > node.bboxXZ.minZ && p.z < node.bboxXZ.maxZ &&
         p.y < node.maxY
+      const grown = node.visibleCount > blockIndex + 1
       let bestPos = positionFor(offsetFor(findExposedFaceNormal(node.blocks, blockIndex)))
-      let bestCost = findCutawayBlocks(occ, node.blocks, blockIndex, bestPos, reach).length
-      if (insideBuilding(bestPos)) bestCost = Infinity
+      let bestCost = grown ? findCutawayBlocks(occ, node.blocks, blockIndex, bestPos, reach).length : 0
+      if (grown && insideBuilding(bestPos)) bestCost = Infinity
       if (bestCost > 0) {
         const { vertical, horizontal } = topViewSteepComponents()
         for (const [ax, az] of TOP_VIEW_AZIMUTHS) {
