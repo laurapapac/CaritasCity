@@ -153,6 +153,18 @@ export const OWN_BLOCK_BLEND_MIN = 0.1      // fraction of OWN_BLOCK_LIT_HEX at 
 export const OWN_BLOCK_BLEND_MAX = 0.3      // fraction of OWN_BLOCK_LIT_HEX at the pulse's bright point — capped low so the block's own colour stays clearly visible even at peak
 export const OWN_BLOCK_PULSE_PERIOD = 2.0   // seconds per breathing cycle
 
+// Thin white frame along the own block's 12 edges (2026-10-13, user request:
+// stronger marker that still looks good — the colour blend alone was easy
+// to miss inside a cutaway hole, and raising OWN_BLOCK_BLEND_MAX would wash
+// the block's colour out, which the user already rejected). Built from thin
+// stretched cubes, not lines (WebGL ignores lineWidth, always 1px), unlit
+// (MeshBasicMaterial) so it reads as light rather than shaded geometry, and
+// breathing on the same pulse as the colour blend. Leaves the block's own
+// colour untouched — only the edges light up.
+export const OWN_BLOCK_FRAME_THICKNESS = 0.07  // bar cross-section, in block units
+export const OWN_BLOCK_FRAME_PAD = 0.02        // how far each face's bars sit outside the block (avoids z-fighting with its faces)
+export const OWN_BLOCK_FRAME_DIM = 0.7         // frame brightness (fraction of white) at the pulse's dim point; full white at its bright point
+
 export const TYPE_COLORS: Record<string, number> = {
   wall:    0xc05030,
   brick:   0xc05030,

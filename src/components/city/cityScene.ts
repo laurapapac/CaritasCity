@@ -35,6 +35,9 @@ import {
   OWN_BLOCK_BLEND_MIN,
   OWN_BLOCK_BLEND_MAX,
   OWN_BLOCK_PULSE_PERIOD,
+  OWN_BLOCK_FRAME_THICKNESS,
+  OWN_BLOCK_FRAME_PAD,
+  OWN_BLOCK_FRAME_DIM,
   resolveColor,
   isGlass,
   computeUpTo,
@@ -869,8 +872,9 @@ export interface CitySceneHandle {
   /**
    * Marks exactly one block in the whole scene as "this is your block" — a
    * persistent, gently-pulsing blend of the block's OWN instance colour
-   * toward white at a capped fraction (see OWN_BLOCK_* in utils.ts), not
-   * any separate glow geometry. There is only ever one: a
+   * toward white at a capped fraction (see OWN_BLOCK_* in utils.ts), plus
+   * a thin white frame along its edges pulsing in step (OWN_BLOCK_FRAME_*)
+   * — no separate glow sprite. There is only ever one: a
    * later call restores the previous block's true colour and moves the
    * mark, so a kiosk cycling between different real users' own codes always
    * shows just the current one's block, with no history left behind on any
@@ -1055,6 +1059,36 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   }
   dustMesh.instanceMatrix.needsUpdate = true
   scene.add(dustMesh)
+
+  // ── Own-block frame (see OWN_BLOCK_FRAME_* in utils.ts) ──────────────────
+  // 12 bars along a unit cube's edges, laid out once around the origin; the
+  // whole mesh is then just moved onto the marked block each frame. Hidden
+  // whenever there's no visible marked block.
+  const frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
+  const frameMesh = new THREE.InstancedMesh(voxelGeo, frameMat, 12)
+  frameMesh.frustumCulled = false
+  frameMesh.visible = false
+  {
+    const half = 0.5 + OWN_BLOCK_FRAME_PAD
+    const len = 2 * half + OWN_BLOCK_FRAME_THICKNESS
+    const t = OWN_BLOCK_FRAME_THICKNESS
+    let k = 0
+    for (const axis of [0, 1, 2]) {
+      for (const a of [-half, half]) {
+        for (const c of [-half, half]) {
+          const pos = [a, c]
+          pos.splice(axis, 0, 0)
+          dummy.position.set(pos[0], pos[1], pos[2])
+          dummy.scale.set(axis === 0 ? len : t, axis === 1 ? len : t, axis === 2 ? len : t)
+          dummy.updateMatrix()
+          frameMesh.setMatrixAt(k++, dummy.matrix)
+        }
+      }
+    }
+    dummy.scale.set(1, 1, 1)
+    frameMesh.instanceMatrix.needsUpdate = true
+  }
+  scene.add(frameMesh)
 
   // Spawns DUST_PARTICLES_PER_BURST debris cubes at a block's own base —
   // called once per landing, from the animate loop's drop-entry "elapsed >=
@@ -1331,11 +1365,14 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     // "Your own block" marker's gentle breathing pulse — blends the block's
     // OWN instance colour toward white at a capped fraction (like a
     // translucent overlay's opacity, not an unbounded brightness boost —
-    // see OWN_BLOCK_* in utils.ts for why) rather than adding any separate
-    // geometry. Skipped while this exact block has an active drop in
+    // see OWN_BLOCK_* in utils.ts for why), plus the thin edge frame below
+    // (no glow sprite — see utils.ts for that history). Skipped while this exact block has an active drop in
     // progress (rare — only right at the moment of a fresh placement) since
     // the drop loop above already owns that slot's colour/matrix for
     // its short window.
+    // The white edge frame rides on the same pulse (see OWN_BLOCK_FRAME_*),
+    // and only shows once the block has landed.
+    frameMesh.visible = false
     if (ownMark) {
       const node = nodes.get(ownMark.buildingId)
       const b = node?.blocks[ownMark.blockIndex]
@@ -1346,6 +1383,10 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         finColor.set(resolveColor(b)).lerp(litColor, blend)
         node.solidMesh.setColorAt(si, finColor)
         if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
+
+        frameMesh.position.set(b.x, b.y + 0.5, b.z)
+        frameMat.color.setScalar(OWN_BLOCK_FRAME_DIM + (1 - OWN_BLOCK_FRAME_DIM) * pulse)
+        frameMesh.visible = true
       }
     }
 
@@ -1833,6 +1874,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       scene.remove(dustMesh)
       dustGeo.dispose()
       dustMat.dispose()
+      scene.remove(frameMesh)
+      frameMat.dispose()
       scene.remove(groundGroup)
       disposeDecorGroup(groundGroup)
       if (decorGroup) {
