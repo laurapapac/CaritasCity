@@ -676,6 +676,101 @@ function nearestOccupiedNeighborEntryDistance(
 // footprint, rather than stopping exactly at its edge. Tune live.
 const NEIGHBOR_CLEARANCE_MARGIN = 2
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Cutaway (2026-10-13)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// A block revisited after its building has grown further can end up fully
+// buried — the inner sub-layer of a 2-thick wall ring, a floor slab under
+// later floors, a multi-layer roof cap. focusOnBlock then cuts a small
+// "window" to it: every block of the SAME building placed AFTER the target
+// whose cell sits within CUTAWAY_RADIUS of the camera→target sightline, and
+// in front of the target, is hidden (instance scaled to 0 — not faded: stacked translucent
+// wall/roof layers read as mud, and per-instance opacity isn't possible on
+// a shared material anyway). Only later blocks, never earlier ones: blocks
+// placed before the target were already there when it was placed and
+// focusOnBlock's normal framing works around them — so the cutaway restores
+// exactly the view the block had at placement time, and a fresh placement
+// (nothing after it yet) is never touched. Recomputed whenever the camera
+// moves or the building's blocks change, cleared by resetCamera. Purely
+// client-side.
+
+// Distance (world units) from the sightline within which a block counts as
+// in the way. 1.6 opens a ~3-block-wide window — wide enough to read as a
+// window rather than a slot and see the target whole, narrow enough that
+// the building still reads as intact around it. 1.2 (tried first) often cut
+// just one block, which read as a barely-visible notch. Tune live.
+const CUTAWAY_RADIUS = 1.6
+// How far along the sightline (from the target's center toward the camera)
+// a block must sit before it's hidden — keeps the target's own neighbors on
+// its wall/floor (projection ≈ 0) so it's still seen in context, not floating.
+const CUTAWAY_MIN_DEPTH = 0.75
+// Tighter radius for blocks on the target's OWN layer. The camera always
+// looks down at least a little, so same-layer neighbors mostly cover the
+// target's side faces, not the top — at the full CUTAWAY_RADIUS a floor-slab
+// target ended up on a pillar with the slab around it cut away. 0.6 still
+// removes the one block dead ahead (e.g. an outer wall block in front of an
+// inner one), just not its diagonal neighbors.
+const CUTAWAY_SAME_LAYER_RADIUS = 0.6
+const CUTAWAY_STEP = 0.3
+
+// Integer-packed cell key — block x/z are world-space cube centers (city
+// fits well inside ±1024), y is the layer (0..255). Numeric rather than
+// string keys since the cutaway rescans on every camera move while orbiting.
+function cellKey(x: number, y: number, z: number): number {
+  return ((Math.round(x) + 1024) * 2048 + (Math.round(z) + 1024)) * 256 + Math.round(y)
+}
+
+// Block indices of `occ` (cell → block index, current visible blocks only)
+// placed after targetIdx that cover the sightline from blocks[targetIdx]'s center to the camera.
+// Only marches as far as the building itself extends (`maxReach`) — beyond
+// that the ray can't hit this building's blocks, however far the camera is
+// zoomed out.
+function findCutawayBlocks(
+  occ: Map<number, number>,
+  blocks: Block[],
+  targetIdx: number,
+  cam: THREE.Vector3,
+  maxReach: number
+): number[] {
+  const t0 = blocks[targetIdx]
+  const ox = t0.x, oy = t0.y + 0.5, oz = t0.z
+  let dx = cam.x - ox, dy = cam.y - oy, dz = cam.z - oz
+  const len = Math.hypot(dx, dy, dz)
+  if (len < 1e-6) return []
+  dx /= len; dy /= len; dz /= len
+  const reach = Math.min(len, maxReach)
+
+  // Block centers sit on a building-wide grid that can be offset by half a
+  // unit (processBlueprint centers the footprint) — march in whole grid
+  // steps relative to it. Math.round(x - off) === Math.round(x) for every
+  // block of the building, so cellKey's own rounding still matches `occ`.
+  const offX = t0.x - Math.round(t0.x)
+  const offZ = t0.z - Math.round(t0.z)
+
+  const found = new Set<number>()
+  const span = Math.ceil(CUTAWAY_RADIUS + 0.5)
+  for (let s = CUTAWAY_MIN_DEPTH; s <= reach; s += CUTAWAY_STEP) {
+    const px = Math.round(ox + dx * s - offX)
+    const py = Math.floor(oy + dy * s)
+    const pz = Math.round(oz + dz * s - offZ)
+    for (let gx = px - span; gx <= px + span; gx++) {
+      for (let cy = py - span; cy <= py + span; cy++) {
+        for (let gz = pz - span; gz <= pz + span; gz++) {
+          const idx = occ.get(cellKey(gx, cy, gz))
+          if (idx === undefined || idx <= targetIdx || found.has(idx)) continue
+          const vx = gx + offX - ox, vy = cy + 0.5 - oy, vz = gz + offZ - oz
+          const t = vx * dx + vy * dy + vz * dz
+          if (t < CUTAWAY_MIN_DEPTH || t > len) continue
+          const perp = Math.hypot(vx - dx * t, vy - dy * t, vz - dz * t)
+          if (perp <= (cy === t0.y ? CUTAWAY_SAME_LAYER_RADIUS : CUTAWAY_RADIUS)) found.add(idx)
+        }
+      }
+    }
+  }
+  return [...found]
+}
+
 interface BuildingNode {
   solidMesh: THREE.InstancedMesh
   glassMesh: THREE.InstancedMesh
@@ -685,6 +780,11 @@ interface BuildingNode {
   visibleCount: number
   drops: Map<number, DropEntry>
   bboxXZ: BBoxXZ
+  /** Top of the building's tallest block (world Y) — full blueprint, like bboxXZ. */
+  maxY: number
+  /** Bumped by every rebuildNode/revealBlockAt — lets the cutaway notice its
+   *  hidden instances were overwritten (or new blocks now cover the target). */
+  version: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -984,6 +1084,105 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // a new mark restores this one's true colour before moving on.
   let ownMark: { buildingId: string; blockIndex: number } | null = null
 
+  // Cutaway window to a focused block — see the Cutaway section near the top
+  // of this file. `hidden` is what's currently scaled to 0; the camX/Y/Z +
+  // version + drops snapshot is what it was computed against, so animate()
+  // only rescans when one of them actually changes.
+  let cutaway: {
+    buildingId: string
+    blockIndex: number
+    hidden: number[]
+    camX: number
+    camY: number
+    camZ: number
+    version: number
+    drops: number
+  } | null = null
+
+  // Occupancy (cell → block index) of a node's currently visible blocks,
+  // cached against node.version — rebuilt only when blocks are revealed or
+  // rewound, not on every camera move.
+  const occCache = new WeakMap<BuildingNode, { version: number; occ: Map<number, number> }>()
+  function occupancyOf(node: BuildingNode): Map<number, number> {
+    const cached = occCache.get(node)
+    if (cached && cached.version === node.version) return cached.occ
+    const occ = new Map<number, number>()
+    for (let i = 0; i < node.visibleCount; i++) {
+      const b = node.blocks[i]
+      occ.set(cellKey(b.x, b.y, b.z), i)
+    }
+    occCache.set(node, { version: node.version, occ })
+    return occ
+  }
+
+  // Farthest the sightline from a block can travel and still be inside its
+  // own building — findCutawayBlocks' march limit.
+  function cutawayReach(node: BuildingNode, b: Block): number {
+    const { minX, maxX, minZ, maxZ } = node.bboxXZ
+    const ddx = Math.max(Math.abs(b.x - minX), Math.abs(b.x - maxX))
+    const ddz = Math.max(Math.abs(b.z - minZ), Math.abs(b.z - maxZ))
+    const ddy = Math.max(b.y + 0.5, node.maxY - b.y - 0.5)
+    return Math.hypot(ddx, ddy, ddz) + 1
+  }
+
+  // Sets block i's instance to its resting matrix (show) or a zero-scale one
+  // (hide). Leaves mid-drop blocks alone — the drop loop owns their matrix.
+  function setBlockShown(node: BuildingNode, i: number, shown: boolean) {
+    if (i >= node.visibleCount || node.drops.has(i)) return
+    const b = node.blocks[i]
+    const glass = isGlass(b)
+    const mesh = glass ? node.glassMesh : node.solidMesh
+    const slot = glass ? node.glassUpTo[i] : node.solidUpTo[i]
+    dummy.position.set(b.x, b.y + 0.5, b.z)
+    const s = shown ? 1 : 0
+    dummy.scale.set(s, s, s)
+    dummy.updateMatrix()
+    mesh.setMatrixAt(slot, dummy.matrix)
+    mesh.instanceMatrix.needsUpdate = true
+    dummy.scale.set(1, 1, 1)
+  }
+
+  function clearCutaway() {
+    if (!cutaway) return
+    const node = nodes.get(cutaway.buildingId)
+    if (node) for (const i of cutaway.hidden) setBlockShown(node, i, true)
+    cutaway = null
+  }
+
+  // Called every frame from animate(); a no-op unless the camera moved or
+  // the building changed since the last scan.
+  function updateCutaway() {
+    if (!cutaway) return
+    const node = nodes.get(cutaway.buildingId)
+    if (!node) {
+      cutaway = null
+      return
+    }
+    const p = camera.position
+    if (
+      Math.abs(p.x - cutaway.camX) < 0.01 &&
+      Math.abs(p.y - cutaway.camY) < 0.01 &&
+      Math.abs(p.z - cutaway.camZ) < 0.01 &&
+      node.version === cutaway.version &&
+      node.drops.size === cutaway.drops
+    ) return
+
+    const target = node.blocks[cutaway.blockIndex]
+    const next = target
+      ? findCutawayBlocks(occupancyOf(node), node.blocks, cutaway.blockIndex, p, cutawayReach(node, target))
+      : []
+    const nextSet = new Set(next)
+    for (const i of cutaway.hidden) if (!nextSet.has(i)) setBlockShown(node, i, true)
+    for (const i of next) setBlockShown(node, i, false)
+
+    cutaway.hidden = next
+    cutaway.camX = p.x
+    cutaway.camY = p.y
+    cutaway.camZ = p.z
+    cutaway.version = node.version
+    cutaway.drops = node.drops.size
+  }
+
   // ── Resize ───────────────────────────────────────────────────────────────
   const ro = new ResizeObserver(() => {
     const ww = container.clientWidth  || 1
@@ -1150,6 +1349,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
     }
 
+    updateCutaway()
+
     renderer.render(scene, camera)
   }
   animate()
@@ -1159,6 +1360,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     const target = Math.min(count, node.blocks.length)
     node.visibleCount = target
     node.drops.clear()
+    node.version++
 
     // dummy is shared/reused across rebuildNode, revealBlockAt and the
     // per-frame drop-animation loop below — reset scale explicitly rather
@@ -1200,6 +1402,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     const duration = opts.duration ?? DROP_FALL_DUR
     const b = node.blocks[i]
     node.visibleCount = Math.max(node.visibleCount, i + 1)
+    node.version++
 
     if (isGlass(b)) {
       const gi = node.glassUpTo[i]
@@ -1320,6 +1523,8 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           visibleCount: 0,
           drops: new Map(),
           bboxXZ: computeBBoxXZ(blocks),
+          maxY: blocks.reduce((m, b) => Math.max(m, b.y + 1), 0),
+          version: 0,
         }
         nodes.set(building.id, node)
       }
@@ -1333,6 +1538,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     unregisterBuilding(id) {
       const node = nodes.get(id)
       if (!node) return
+      if (cutaway?.buildingId === id) cutaway = null
       scene.remove(node.solidMesh)
       scene.remove(node.glassMesh)
       nodes.delete(id)
@@ -1487,43 +1693,91 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       const block = node.blocks[blockIndex]
       if (!block) return
 
-      const [nx, ny, nz] = findExposedFaceNormal(node.blocks, blockIndex)
       const cx = block.x, cy = block.y + 0.5, cz = block.z
 
-      // Floor AND ceiling (any vertical exposure) are framed from above, never
-      // below — controls.maxPolarAngle forbids the camera from ever going
-      // beneath the target's horizontal plane, so offsetting downward for a
-      // "ceiling" (nothing below) normal would get silently clamped into a
-      // useless in-between position instead of the intended look-up shot.
-      // Tilted, not straight up, so the block's side face shows a little instead
-      // of blending flat into the floor/rooftop plane — and steered away from
-      // whichever azimuth would put a tree canopy right in front of the camera.
-      const isVertical = nx === 0 && nz === 0
-      const [ox, oy, oz] = isVertical
-        ? pickTopViewOffset(cx, cy, cz, topViewTrees)
-        : pickLateralOffset(cx, cy, cz, nx, nz, topViewTrees)
+      // Camera direction for framing the block from the side `normal` faces.
+      const offsetFor = ([nx, , nz]: [number, number, number]): [number, number, number] => {
+        // Floor AND ceiling (any vertical exposure) are framed from above, never
+        // below — controls.maxPolarAngle forbids the camera from ever going
+        // beneath the target's horizontal plane, so offsetting downward for a
+        // "ceiling" (nothing below) normal would get silently clamped into a
+        // useless in-between position instead of the intended look-up shot.
+        // Tilted, not straight up, so the block's side face shows a little instead
+        // of blending flat into the floor/rooftop plane — and steered away from
+        // whichever azimuth would put a tree canopy right in front of the camera.
+        const isVertical = nx === 0 && nz === 0
+        return isVertical
+          ? pickTopViewOffset(cx, cy, cz, topViewTrees)
+          : pickLateralOffset(cx, cy, cz, nx, nz, topViewTrees)
+      }
 
-      // Don't let FOCUS_OFFSET's fixed distance fly the camera past the real
-      // (often much narrower, ~ROAD_GAP=8) gap to a neighboring building into
-      // its already-built geometry — pull the camera in instead of letting a
-      // nearer building cover the target block.
-      //
-      // Applied to BOTH branches (2026-08-25 bug fix — previously vertical/
-      // top-view shots were exempted on the reasoning that their horizontal
-      // displacement, sin(TOP_VIEW_TILT_DEG)*FOCUS_OFFSET ≈ 8 units at the
-      // original fixed 22° tilt, was comfortably inside typical building
-      // gaps. That reasoning silently broke when TOP_VIEW_TILT_LOW_DEG=55°
-      // was added (2026-08-18) for low blocks: sin(55°)*22 ≈ 18 units of
-      // horizontal reach, nearly double ROAD_GAP=8, which could fly the
-      // camera straight into a neighboring building's solid geometry —
-      // found live via /dev/kiosk-progress (food_bank_0's second block
-      // rendered as an extreme close-up of a neighboring building's dark
-      // interior wall, not the target at all).
-      let dist = FOCUS_OFFSET
-      const entry = nearestOccupiedNeighborEntryDistance(nodes, buildingId, cx, cz, ox, oz)
-      if (entry < FOCUS_OFFSET) dist = Math.max(controls.minDistance, entry - NEIGHBOR_CLEARANCE_MARGIN)
+      const positionFor = ([ox, oy, oz]: [number, number, number]): THREE.Vector3 => {
+        // Don't let FOCUS_OFFSET's fixed distance fly the camera past the real
+        // (often much narrower, ~ROAD_GAP=8) gap to a neighboring building into
+        // its already-built geometry — pull the camera in instead of letting a
+        // nearer building cover the target block.
+        //
+        // Applied to BOTH branches (2026-08-25 bug fix — previously vertical/
+        // top-view shots were exempted on the reasoning that their horizontal
+        // displacement, sin(TOP_VIEW_TILT_DEG)*FOCUS_OFFSET ≈ 8 units at the
+        // original fixed 22° tilt, was comfortably inside typical building
+        // gaps. That reasoning silently broke when TOP_VIEW_TILT_LOW_DEG=55°
+        // was added (2026-08-18) for low blocks: sin(55°)*22 ≈ 18 units of
+        // horizontal reach, nearly double ROAD_GAP=8, which could fly the
+        // camera straight into a neighboring building's solid geometry —
+        // found live via /dev/kiosk-progress (food_bank_0's second block
+        // rendered as an extreme close-up of a neighboring building's dark
+        // interior wall, not the target at all).
+        let dist = FOCUS_OFFSET
+        const entry = nearestOccupiedNeighborEntryDistance(nodes, buildingId, cx, cz, ox, oz)
+        if (entry < FOCUS_OFFSET) dist = Math.max(controls.minDistance, entry - NEIGHBOR_CLEARANCE_MARGIN)
 
-      camera.position.set(cx + ox * dist, cy + oy * dist, cz + oz * dist)
+        return new THREE.Vector3(cx + ox * dist, cy + oy * dist, cz + oz * dist)
+      }
+
+      // The side that was open when the block was placed. At placement time
+      // (and for any block nothing has been built over since) nothing covers
+      // it, so this is the shot — unchanged from before the cutaway existed.
+      // On a later revisit the building may have grown over that side; then
+      // the cutaway has to cut through, and the camera instead picks whichever
+      // of TOP_VIEW_AZIMUTHS (at TOP_VIEW_TILT_DEG — looking down into the
+      // building) the cutaway would have to hide the fewest later blocks
+      // for. Only elevated angles on purpose: a flat side-on angle "wins" by
+      // count for a floor-slab block but reads as a one-block-wide tunnel,
+      // where looking down through a wall onto the floor reads as peeking
+      // inside. These alternates skip the tree dodge (it only matters near
+      // the ground, and the cutaway's buried blocks are mostly inside taller
+      // buildings); the neighbor-building clamp still applies via
+      // positionFor. A camera that would land inside the building's own
+      // volume is skipped — it'd be looking out from inside the walls.
+      const occ = occupancyOf(node)
+      const reach = cutawayReach(node, block)
+      const insideBuilding = (p: THREE.Vector3) =>
+        p.x > node.bboxXZ.minX && p.x < node.bboxXZ.maxX &&
+        p.z > node.bboxXZ.minZ && p.z < node.bboxXZ.maxZ &&
+        p.y < node.maxY
+      let bestPos = positionFor(offsetFor(findExposedFaceNormal(node.blocks, blockIndex)))
+      let bestCost = findCutawayBlocks(occ, node.blocks, blockIndex, bestPos, reach).length
+      if (insideBuilding(bestPos)) bestCost = Infinity
+      if (bestCost > 0) {
+        const { vertical, horizontal } = topViewSteepComponents()
+        for (const [ax, az] of TOP_VIEW_AZIMUTHS) {
+          const pos = positionFor([ax * horizontal, vertical, az * horizontal])
+          if (insideBuilding(pos)) continue
+          const cost = findCutawayBlocks(occ, node.blocks, blockIndex, pos, reach).length
+          if (cost < bestCost) {
+            bestCost = cost
+            bestPos = pos
+          }
+        }
+      }
+
+      clearCutaway()
+      cutaway = {
+        buildingId, blockIndex, hidden: [],
+        camX: NaN, camY: NaN, camZ: NaN, version: -1, drops: -1, // forces the first scan
+      }
+      camera.position.copy(bestPos)
       controls.target.set(cx, cy, cz)
       controls.update()
     },
@@ -1551,6 +1805,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     },
 
     resetCamera() {
+      clearCutaway()
       camera.position.set(DEFAULT_CAMERA_POS.x, DEFAULT_CAMERA_POS.y, DEFAULT_CAMERA_POS.z)
       controls.target.set(DEFAULT_CAMERA_TARGET.x, DEFAULT_CAMERA_TARGET.y, DEFAULT_CAMERA_TARGET.z)
       controls.update()

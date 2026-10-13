@@ -118,6 +118,17 @@ export default function DevPreview() {
     cityRef.current?.markOwnBlock(variant.key, idx);
   }
 
+  // Same, but with the whole building already built — what a kiosk revisit
+  // ("Već postavljeno") sees for a block that's since been built over, so
+  // the cutaway window has something to cut through.
+  function handleRevisitTest() {
+    const idx = Math.max(0, Math.min(variant.totalBlocks - 1, Math.round(focusIndex)));
+    setCount(variant.totalBlocks);
+    cityRef.current?.setVisibleCount(variant.key, variant.totalBlocks);
+    cityRef.current?.focusOnBlock(variant.key, idx);
+    cityRef.current?.markOwnBlock(variant.key, idx);
+  }
+
   function handleCountChange(next: number) {
     if (Number.isNaN(next)) return;
     const clamped = Math.max(0, Math.min(variant.totalBlocks, Math.round(next)));
@@ -265,6 +276,9 @@ export default function DevPreview() {
           </div>
 
           <Button onClick={handleFocusTest}>Focus camera on block</Button>
+          <Button variant="outline" onClick={handleRevisitTest}>
+            Focus as a revisit (building fully built)
+          </Button>
         </CardContent>
       </Card>
     </div>
