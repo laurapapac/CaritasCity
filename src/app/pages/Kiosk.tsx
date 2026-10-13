@@ -29,6 +29,7 @@ import {
 } from "../../components/city/constructionMontageConfig";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { ControlsHint } from "../components/ControlsHint";
 import { Progress } from "../components/ui/progress";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../components/ui/input-otp";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -848,6 +849,16 @@ export default function Kiosk() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Camera-controls tutorial — only while the city can actually be moved
+          (no modal backdrop over it). Below lg, the placed/existing card is
+          centered at the bottom across most of the width, so the hint steps
+          aside there rather than overlapping it. */}
+      {cityData && (state.phase === "browsing" || state.phase === "placed" || state.phase === "existing") && (
+        <ControlsHint
+          className={`absolute right-4 bottom-6 ${state.phase === "browsing" ? "" : "max-lg:hidden"}`}
+        />
       )}
 
       {cityData && (
