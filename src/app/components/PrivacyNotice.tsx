@@ -66,7 +66,7 @@ export function PrivacyButton({ className }: { className?: string }) {
             sami promijenite.
           </p>
           <p>
-            Za sva pitanja vezana uz zaštitu osobnih podataka možete se obratiti na sljedeću e-mail adresu: <a href={`${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            Za sva pitanja vezana uz zaštitu osobnih podataka možete se obratiti na sljedeću e-mail adresu: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
           </p>
         </div>
       </DialogContent>
