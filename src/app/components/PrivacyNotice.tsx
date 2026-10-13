@@ -18,9 +18,9 @@ import {
 //
 // TODO before going live — fill these in (they show up in the dialog as-is):
 const CONTROLLER = "[Naziv organizacije, adresa]";
-const CONTACT_EMAIL = "[e-mail adresa]";
+const CONTACT_EMAIL = "caritas.croatia@caritas.hr";
 const HOSTING_PROVIDER = "[naziv pružatelja hostinga]";
-const LOG_RETENTION = "[14 dana]"; // must match how long the server logs are really kept
+const LOG_RETENTION = "14 dana"; // must match how long the server logs are really kept
 
 /** White counterpart of the red "Unesi kod" button; opens the privacy dialog. */
 export function PrivacyButton({ className }: { className?: string }) {
@@ -61,25 +61,13 @@ export function PrivacyButton({ className }: { className?: string }) {
             Zapisi poslužitelja brišu se nakon {LOG_RETENTION}.
           </p>
           <p>
-            <span className="font-semibold">Tko ih vidi: </span>
-            Samo mi i naš pružatelj hostinga ({HOSTING_PROVIDER}), koji podatke obrađuje u naše ime
-            unutar EU.
-          </p>
-          <p>
             <span className="font-semibold">U pregledniku </span>
             se spremaju samo vaše postavke (zvuk uključen/isključen, prikaz uputa), i to tek kad ih
             sami promijenite.
           </p>
           <p>
-            <span className="font-semibold">Vaša prava: </span>
-            Možete zatražiti pristup podacima, njihovo brisanje ili uložiti prigovor na{" "}
-            {CONTACT_EMAIL}. Pritužbu možete podnijeti Agenciji za zaštitu osobnih podataka (
-            <a href="https://azop.hr" target="_blank" rel="noreferrer" className="underline">
-              azop.hr
-            </a>
-            ).
+            Za sva pitanja vezana uz zaštitu osobnih podataka možete se obratiti na sljedeću e-mail adresu: <a href={`${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
           </p>
-          <p className="text-muted-foreground">Voditelj obrade: {CONTROLLER}</p>
         </div>
       </DialogContent>
     </Dialog>
