@@ -647,7 +647,8 @@ export default function Kiosk() {
       .then((res) => {
         if (res.status === "existing") {
           cityRef.current?.focusOnBlock(res.block.buildingId, res.block.blockIndex);
-          cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
+          // Revisit: edge frame on top of the pulse (newly placed blocks get just the pulse).
+          cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex, true);
           setState({ phase: "existing", block: res.block });
         } else {
           setState({

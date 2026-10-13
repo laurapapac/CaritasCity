@@ -46,8 +46,9 @@ export interface CityRendererHandle {
   stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
   focusOnBlock(buildingId: string, blockIndex: number): void
-  /** Marks a block as "this is your block" with a persistent lit-up glow. See CitySceneHandle. */
-  markOwnBlock(buildingId: string, blockIndex: number): void
+  /** Marks a block as "this is your block" with a persistent lit-up glow (+ an edge frame when
+   *  `withFrame` — revisits only). See CitySceneHandle. */
+  markOwnBlock(buildingId: string, blockIndex: number, withFrame?: boolean): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
   /** Instantly set a building's visible block count. See CitySceneHandle. */
@@ -118,8 +119,8 @@ export const CityRenderer = forwardRef<CityRendererHandle, CityRendererProps>(
       focusOnBlock(buildingId, blockIndex) {
         sceneRef.current?.focusOnBlock(buildingId, blockIndex)
       },
-      markOwnBlock(buildingId, blockIndex) {
-        sceneRef.current?.markOwnBlock(buildingId, blockIndex)
+      markOwnBlock(buildingId, blockIndex, withFrame) {
+        sceneRef.current?.markOwnBlock(buildingId, blockIndex, withFrame)
       },
       resetCamera() {
         sceneRef.current?.resetCamera()

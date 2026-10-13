@@ -126,7 +126,7 @@ export default function DevPreview() {
     setCount(variant.totalBlocks);
     cityRef.current?.setVisibleCount(variant.key, variant.totalBlocks);
     cityRef.current?.focusOnBlock(variant.key, idx);
-    cityRef.current?.markOwnBlock(variant.key, idx);
+    cityRef.current?.markOwnBlock(variant.key, idx, true);
   }
 
   function handleCountChange(next: number) {

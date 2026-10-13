@@ -872,18 +872,21 @@ export interface CitySceneHandle {
   /**
    * Marks exactly one block in the whole scene as "this is your block" — a
    * persistent, gently-pulsing blend of the block's OWN instance colour
-   * toward white at a capped fraction (see OWN_BLOCK_* in utils.ts), plus
-   * a thin white frame along its edges pulsing in step (OWN_BLOCK_FRAME_*)
-   * — no separate glow sprite. There is only ever one: a
+   * toward white at a capped fraction (see OWN_BLOCK_* in utils.ts) — no
+   * separate glow sprite. With `withFrame` (revisits only — 2026-10-13,
+   * user request: a freshly placed block gets just the pulse) it also gets
+   * a thin white frame along its edges pulsing in step (OWN_BLOCK_FRAME_*).
+   * There is only ever one: a
    * later call restores the previous block's true colour and moves the
    * mark, so a kiosk cycling between different real users' own codes always
    * shows just the current one's block, with no history left behind on any
    * earlier one (2026-08-28, user request — must look entirely normal to
-   * anyone else viewing the same building). No-op on a glass block (they
-   * carry no instance colour to blend). Purely client-side/local; never
+   * anyone else viewing the same building). Glass blocks carry no instance
+   * colour, so they get no pulse — only the frame, when `withFrame`.
+   * Purely client-side/local; never
    * touches the database and has no effect on any other kiosk's own view.
    */
-  markOwnBlock(buildingId: string, blockIndex: number): void
+  markOwnBlock(buildingId: string, blockIndex: number, withFrame?: boolean): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
   getVisibleCount(buildingId: string): number
@@ -1116,7 +1119,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
   // "This is your block" marker — see markOwnBlock. At most one at a time;
   // a new mark restores this one's true colour before moving on.
-  let ownMark: { buildingId: string; blockIndex: number } | null = null
+  let ownMark: { buildingId: string; blockIndex: number; withFrame: boolean } | null = null
 
   // Cutaway window to a focused block — see the Cutaway section near the top
   // of this file. `hidden` is what's currently scaled to 0; the camX/Y/Z +
@@ -1376,17 +1379,22 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     if (ownMark) {
       const node = nodes.get(ownMark.buildingId)
       const b = node?.blocks[ownMark.blockIndex]
-      const si = node ? node.solidUpTo[ownMark.blockIndex] : -1
-      if (node && b && si >= 0 && si < node.solidMesh.count && !node.drops.has(ownMark.blockIndex)) {
+      if (node && b && ownMark.blockIndex < node.visibleCount && !node.drops.has(ownMark.blockIndex)) {
         const pulse = 0.5 + 0.5 * Math.sin(now * ((2 * Math.PI) / OWN_BLOCK_PULSE_PERIOD))
-        const blend = OWN_BLOCK_BLEND_MIN + (OWN_BLOCK_BLEND_MAX - OWN_BLOCK_BLEND_MIN) * pulse
-        finColor.set(resolveColor(b)).lerp(litColor, blend)
-        node.solidMesh.setColorAt(si, finColor)
-        if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
-
-        frameMesh.position.set(b.x, b.y + 0.5, b.z)
-        frameMat.color.setScalar(OWN_BLOCK_FRAME_DIM + (1 - OWN_BLOCK_FRAME_DIM) * pulse)
-        frameMesh.visible = true
+        // Glass has no instance colour (and solidUpTo[i] of a glass block is
+        // the NEXT solid block's slot), so the colour pulse is solid-only.
+        if (!isGlass(b)) {
+          const si = node.solidUpTo[ownMark.blockIndex]
+          const blend = OWN_BLOCK_BLEND_MIN + (OWN_BLOCK_BLEND_MAX - OWN_BLOCK_BLEND_MIN) * pulse
+          finColor.set(resolveColor(b)).lerp(litColor, blend)
+          node.solidMesh.setColorAt(si, finColor)
+          if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
+        }
+        if (ownMark.withFrame) {
+          frameMesh.position.set(b.x, b.y + 0.5, b.z)
+          frameMat.color.setScalar(OWN_BLOCK_FRAME_DIM + (1 - OWN_BLOCK_FRAME_DIM) * pulse)
+          frameMesh.visible = true
+        }
       }
     }
 
@@ -1823,14 +1831,15 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       controls.update()
     },
 
-    markOwnBlock(buildingId, blockIndex) {
+    markOwnBlock(buildingId, blockIndex, withFrame = false) {
       // Restore whichever block was previously marked (if any) to its true
       // colour before moving the mark — there's only ever one at a time.
+      // (A glass block never had its colour touched.)
       if (ownMark) {
         const prevNode = nodes.get(ownMark.buildingId)
         const prevBlock = prevNode?.blocks[ownMark.blockIndex]
         const prevSi = prevNode ? prevNode.solidUpTo[ownMark.blockIndex] : -1
-        if (prevNode && prevBlock && prevSi >= 0 && prevSi < prevNode.solidMesh.count) {
+        if (prevNode && prevBlock && !isGlass(prevBlock) && prevSi >= 0 && prevSi < prevNode.solidMesh.count) {
           prevNode.solidMesh.setColorAt(prevSi, finColor.set(resolveColor(prevBlock)))
           if (prevNode.solidMesh.instanceColor) prevNode.solidMesh.instanceColor.needsUpdate = true
         }
@@ -1839,10 +1848,10 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
       const node = nodes.get(buildingId)
       const b = node?.blocks[blockIndex]
-      // Glass blocks never carry instance colour (see revealBlockAt) — there's
-      // no "lit up" appearance to give one, so leave nothing marked.
-      if (!node || !b || isGlass(b)) return
-      ownMark = { buildingId, blockIndex }
+      // A glass block without the frame would have nothing to show (no
+      // instance colour to pulse — see revealBlockAt), so leave it unmarked.
+      if (!node || !b || (isGlass(b) && !withFrame)) return
+      ownMark = { buildingId, blockIndex, withFrame }
     },
 
     resetCamera() {
