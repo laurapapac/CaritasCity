@@ -29,7 +29,7 @@ import {
 } from "../../components/city/constructionMontageConfig";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { ControlsHint } from "../components/ControlsHint";
+import { ControlsHintCard, ControlsHintToggle, useControlsHintOpen } from "../components/ControlsHint";
 import { Progress } from "../components/ui/progress";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../components/ui/input-otp";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -733,6 +733,10 @@ export default function Kiosk() {
       });
   }
 
+  const [hintOpen, setHintOpen] = useControlsHintOpen();
+  const hintAvailable =
+    !!cityData && (state.phase === "browsing" || state.phase === "placed" || state.phase === "existing");
+
   const showsModal =
     state.phase === "welcome" || state.phase === "entry" || state.phase === "needs_school";
 
@@ -852,13 +856,19 @@ export default function Kiosk() {
       )}
 
       {/* Camera-controls tutorial — only while the city can actually be moved
-          (no modal backdrop over it). Below lg, the placed/existing card is
-          centered at the bottom across most of the width, so the hint steps
-          aside there rather than overlapping it. */}
-      {cityData && (state.phase === "browsing" || state.phase === "placed" || state.phase === "existing") && (
-        <ControlsHint
-          className={`absolute right-4 bottom-6 ${state.phase === "browsing" ? "" : "max-lg:hidden"}`}
-        />
+          (no modal backdrop over it). From 1200px up: bottom-right card, or a
+          round button there once closed. Below 1200px (same cutoff as the
+          stats hamburger) the bottom placed/existing card would cover that
+          corner, so the toggle sits left of the hamburger instead and the
+          card opens under the top-right buttons — see that block below. */}
+      {hintAvailable && (
+        <div className="pointer-events-none absolute right-4 bottom-6 max-[1200px]:hidden">
+          {hintOpen ? (
+            <ControlsHintCard onClose={() => setHintOpen(false)} />
+          ) : (
+            <ControlsHintToggle open={false} onToggle={() => setHintOpen(true)} className="rounded-full" />
+          )}
+        </div>
       )}
 
       {cityData && (
@@ -911,17 +921,37 @@ export default function Kiosk() {
           screen, so the two never overlap. */}
       {cityData && (
         <div
-          className={`pointer-events-none absolute right-4 min-[1200px]:hidden ${state.phase === "browsing" ? "top-20" : "top-4"}`}
+          className={`pointer-events-none absolute right-4 flex flex-col items-end gap-3 min-[1200px]:hidden ${state.phase === "browsing" ? "top-20" : "top-4"}`}
         >
-          <Button
-            size="icon"
-            variant="outline"
-            className="pointer-events-auto bg-card/90 backdrop-blur"
-            onClick={() => setStatsOpen((v) => !v)}
-            aria-label={statsOpen ? "Zatvori statistiku" : "Otvori statistiku"}
-          >
-            {statsOpen ? <X /> : <Menu />}
-          </Button>
+          <div className="flex gap-2">
+            {/* Controls-hint toggle, left of the hamburger (narrow screens —
+                see the bottom-right block above for wide ones). The hint and
+                the stats panel take turns: opening one closes the other, so
+                they never stack on a small screen. */}
+            {hintAvailable && (
+              <ControlsHintToggle
+                open={hintOpen && !statsOpen}
+                onToggle={() => {
+                  if (hintOpen && !statsOpen) {
+                    setHintOpen(false);
+                  } else {
+                    setStatsOpen(false);
+                    setHintOpen(true);
+                  }
+                }}
+              />
+            )}
+            <Button
+              size="icon"
+              variant="outline"
+              className="pointer-events-auto bg-card/90 backdrop-blur"
+              onClick={() => setStatsOpen((v) => !v)}
+              aria-label={statsOpen ? "Zatvori statistiku" : "Otvori statistiku"}
+            >
+              {statsOpen ? <X /> : <Menu />}
+            </Button>
+          </div>
+          {hintAvailable && hintOpen && !statsOpen && <ControlsHintCard onClose={() => setHintOpen(false)} />}
         </div>
       )}
     </div>
