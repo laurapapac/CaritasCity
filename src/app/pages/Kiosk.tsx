@@ -30,6 +30,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { ControlsHintCard, ControlsHintToggle, useControlsHintOpen } from "../components/ControlsHint";
+import { PrivacyButton } from "../components/PrivacyNotice";
 import { Progress } from "../components/ui/progress";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../components/ui/input-otp";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -803,22 +804,6 @@ export default function Kiosk() {
         </div>
       )}
 
-      {state.phase === "browsing" && (
-        <div className="pointer-events-none absolute top-4 right-4">
-          <Button
-            size="lg"
-            className="pointer-events-auto bg-red-600 text-white shadow-xl hover:bg-red-700"
-            onClick={() => {
-              playSound("buttonClick");
-              setState({ phase: "entry" });
-            }}
-          >
-            <KeyRound />
-            Unesi kod
-          </Button>
-        </div>
-      )}
-
       {(state.phase === "placed" || state.phase === "existing") && (
         <div className="absolute inset-x-0 bottom-6 flex justify-center px-4">
           <Card className="w-full max-w-lg bg-card/90 backdrop-blur">
@@ -913,15 +898,36 @@ export default function Kiosk() {
         )}
       </div>
 
+      {/* Top-right row: red "Unesi kod" while browsing, and the white
+          "Privatnost" button (privacy notice dialog) at the far right on
+          every phase — rendered after the modal backdrop so it's reachable
+          from the welcome screen too. */}
+      <div className="pointer-events-none absolute top-4 right-4 flex gap-2">
+        {state.phase === "browsing" && (
+          <Button
+            size="lg"
+            className="pointer-events-auto bg-red-600 text-white shadow-xl hover:bg-red-700"
+            onClick={() => {
+              playSound("buttonClick");
+              setState({ phase: "entry" });
+            }}
+          >
+            <KeyRound />
+            Unesi kod
+          </Button>
+        )}
+        <PrivacyButton className="pointer-events-auto" />
+      </div>
+
       {/* Shown below 1200px (see StatsPanel's own doc comment) — the stats
           panel overlaps the centered modal at tablet widths too, not just
           phones, so the cutoff for "desktop shows it unconditionally" is
-          wider than Tailwind's own sm breakpoint. Shifted down when the
-          browsing phase's own top-right "Unesi kod" button is also on
-          screen, so the two never overlap. */}
+          wider than Tailwind's own sm breakpoint. Always one row down
+          (top-20), below the top-right "Unesi kod" / "Privatnost" row, so
+          the two never overlap. */}
       {cityData && (
         <div
-          className={`pointer-events-none absolute right-4 flex flex-col items-end gap-3 min-[1200px]:hidden ${state.phase === "browsing" ? "top-20" : "top-4"}`}
+          className="pointer-events-none absolute top-20 right-4 flex flex-col items-end gap-3 min-[1200px]:hidden"
         >
           <div className="flex gap-2">
             {/* Controls-hint toggle, left of the hamburger (narrow screens —
