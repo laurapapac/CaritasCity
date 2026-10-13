@@ -6,6 +6,7 @@ import { placeBlockRouter } from './routes/placeBlock.js';
 import { schoolsRouter } from './routes/schools.js';
 import { buildingsRouter } from './routes/buildings.js';
 import { statsRouter } from './routes/stats.js';
+import { startDesktopCodeCleanup } from './lib/cleanupDesktopCodes.js';
 
 const app = express();
 // Exactly one reverse proxy (the host's nginx) sits in front of this server,
@@ -34,4 +35,5 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 app.listen(config.port, () => {
   console.log(`caritas-city-server listening on :${config.port}`);
+  startDesktopCodeCleanup();
 });
