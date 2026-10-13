@@ -2,6 +2,10 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## RESOLVED: placement montage shortened, 100 → 50 replayed blocks (2026-10-13, same day, follow-up)
+
+User edit, committed and pushed to `master`. **Frontend still has to be redeployed.** `MONTAGE_BLOCK_COUNT` in `constructionMontageConfig.ts` lowered 100 → 50. That's how many of the blocks before a fresh placement get hidden and replayed one at a time (popping in, not dropping) before the user's own block falls in. At the unchanged `MONTAGE_STAGGER_MS` = 20 ms, the replay goes from ~2 s to ~1 s, so confirm → landed is now ~2.1 s instead of ~3.1 s (+ `MONTAGE_FINAL_BLOCK_DELAY_MS` 400 ms pause + `DROP_FALL_DUR_OWN` ~0.72 s fall, both unchanged). Shared with `/dev/preview`'s "Simulate placing next block", so it changes there too. Still purely visual: buildings with fewer than 50 blocks before the new one replay from block 0.
+
 ## RESOLVED: own-block edge frame — revisits only, glass included (2026-10-13, same day, follow-up)
 
 Commits `46b42dd` (frame) and `dd47c35` (revisit-only + glass), pushed to `master`. **Frontend still has to be redeployed.** Follow-up to the cutaway entry below: the white colour pulse alone was easy to miss inside a hole.
