@@ -852,6 +852,31 @@ interface BuildingNode {
 // Public handle
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Everything needed to reproduce a camera shot exactly: position + target
+ * (OrbitControls orbits around the target, so those two fully fix the view
+ * direction) + vertical fov. Dev tooling only — see DevCityPreview's camera
+ * logger panel.
+ */
+export interface CameraState {
+  position: { x: number; y: number; z: number }
+  target: { x: number; y: number; z: number }
+  /** Vertical field of view, degrees. */
+  fov: number
+}
+
+/** CameraState plus derived, human-readable numbers (read-only — not needed to restore). */
+export interface CameraSnapshot extends CameraState {
+  /** Camera→target distance (world units). */
+  distance: number
+  /** Compass heading the camera looks toward: 0 = north (+Z), 90 = east (+X), 180 = south, 270 = west. */
+  headingDeg: number
+  /** Degrees the view points below the horizon: 0 = level, 90 = straight down. */
+  tiltDeg: number
+  /** Canvas size in CSS px — the same camera shows more/less sideways at another aspect ratio. */
+  viewport: { width: number; height: number; aspect: number }
+}
+
 export interface CitySceneHandle {
   /**
    * Create (first call) or sync (subsequent calls) a building's mesh to match
@@ -947,6 +972,16 @@ export interface CitySceneHandle {
   markOwnBlock(buildingId: string, blockIndex: number, withFrame?: boolean): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
+  /** Current camera position/target/fov plus derived heading/tilt/distance. Dev tooling only. */
+  getCameraState(): CameraSnapshot
+  /**
+   * Snap the camera to an exact position/target (and fov, if given). Still
+   * subject to the usual per-frame limits (maxPolarAngle, zoom cap, PAN_LIMIT),
+   * so a shot logged from this scene always restores identically.
+   */
+  setCameraState(state: Partial<CameraState> & Pick<CameraState, "position" | "target">): void
+  /** Renders a fresh frame and returns it as a PNG data URL. */
+  captureScreenshot(): string
   getVisibleCount(buildingId: string): number
   dispose(): void
 }
@@ -1919,6 +1954,50 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       camera.position.set(DEFAULT_CAMERA_POS.x, DEFAULT_CAMERA_POS.y, DEFAULT_CAMERA_POS.z)
       controls.target.set(DEFAULT_CAMERA_TARGET.x, DEFAULT_CAMERA_TARGET.y, DEFAULT_CAMERA_TARGET.z)
       controls.update()
+    },
+
+    getCameraState() {
+      const p = camera.position
+      const t = controls.target
+      const dx = t.x - p.x, dy = t.y - p.y, dz = t.z - p.z
+      const distance = Math.hypot(dx, dy, dz)
+      const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d
+      const headingDeg = (THREE.MathUtils.radToDeg(Math.atan2(dx, dz)) + 360) % 360
+      const tiltDeg = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(-dy / (distance || 1), -1, 1)))
+      const el = renderer.domElement
+      return {
+        position: { x: round(p.x), y: round(p.y), z: round(p.z) },
+        target: { x: round(t.x), y: round(t.y), z: round(t.z) },
+        fov: round(camera.fov, 2),
+        distance: round(distance),
+        headingDeg: round(headingDeg, 2) % 360,
+        tiltDeg: round(tiltDeg, 2),
+        viewport: { width: el.clientWidth, height: el.clientHeight, aspect: round(camera.aspect) },
+      }
+    },
+
+    setCameraState(state) {
+      clearCutaway()
+      camera.position.set(state.position.x, state.position.y, state.position.z)
+      controls.target.set(state.target.x, state.target.y, state.target.z)
+      if (state.fov !== undefined && state.fov !== camera.fov) {
+        camera.fov = state.fov
+        camera.updateProjectionMatrix()
+      }
+      // Pick the zoom cap for the NEW tilt before update() — lastPhi still
+      // holds the old shot's, which could clamp the restored distance.
+      const off = camera.position.clone().sub(controls.target)
+      const len = off.length()
+      if (len > 1e-6) lastPhi = Math.acos(THREE.MathUtils.clamp(off.y / len, -1, 1))
+      controls.maxDistance = maxDistanceForPhi(lastPhi)
+      controls.update()
+    },
+
+    captureScreenshot() {
+      // No preserveDrawingBuffer on the renderer, so the canvas is only
+      // readable in the same task as a render — render right before reading.
+      renderer.render(scene, camera)
+      return renderer.domElement.toDataURL("image/png")
     },
 
     getVisibleCount(buildingId) {

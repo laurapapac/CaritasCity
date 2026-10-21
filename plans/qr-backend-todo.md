@@ -2,6 +2,13 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: camera logger panel on `/dev/city` (2026-10-21)
+
+**Committed to `master`, not pushed.** User request: a dev tool to set the camera up by hand and log everything needed to reproduce that shot exactly. Dev-only, so no redeploy is needed.
+- **Scene API:** `cityScene.ts` adds `getCameraState()`, `setCameraState()` and `captureScreenshot()`, passed through `CityRenderer.tsx` and `City.tsx`. A shot is `position` + `target` + `fov`. That's enough to restore it, because OrbitControls always looks from `position` at `target`. `getCameraState` also returns read-only extras: `distance`, `headingDeg` (compass, 0 = north/+Z, 90 = east/+X), `tiltDeg` (degrees below the horizon) and `viewport` (the canvas size; a different aspect ratio shows more or less of the scene at the sides). Before `controls.update()`, `setCameraState` picks the zoom cap (`maxDistanceForPhi`) for the new tilt, so a far shot isn't clamped by the previous tilt's limit. The per-frame limits still apply: maxPolarAngle and PAN_LIMIT. `captureScreenshot` renders a frame and reads it back straight away (the renderer has no `preserveDrawingBuffer`).
+- **Panel** (`DevCityPreview.tsx`, top-right): live readout, an editable fov, **Log camera** (logs to the console, copies the shot JSON, downloads a PNG), Reset, an **Apply** box for pasted shot JSON, and a list of logged shots with Go to / Copy / PNG.
+- **Verified live on `/dev/city`:** logged a shot, reset, then Go to restored the same position/target to 3 decimals. Applying typed JSON with fov 35 worked. No console errors.
+
 ## RESOLVED: pointer cursor on everything clickable (2026-10-13, same day, follow-up)
 
 Commit `032f14d`, pushed to `master`. **Frontend still has to be redeployed.** User noticed no button showed the hand cursor. Cause: Tailwind v4's preflight resets buttons to `cursor: default`.

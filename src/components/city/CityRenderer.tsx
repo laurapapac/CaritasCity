@@ -18,7 +18,7 @@ import {
   useRef,
   type ReactNode,
 } from "react"
-import { createCityScene, type CitySceneHandle } from "./cityScene"
+import { createCityScene, type CameraSnapshot, type CameraState, type CitySceneHandle } from "./cityScene"
 import { CityContext, type CityContextValue } from "./CityContext"
 import type { Block, CityBuilding, CityDecor } from "./types"
 
@@ -51,6 +51,12 @@ export interface CityRendererHandle {
   markOwnBlock(buildingId: string, blockIndex: number, withFrame?: boolean): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void
+  /** Current camera position/target/fov + derived angles. See CitySceneHandle. */
+  getCameraState(): CameraSnapshot | null
+  /** Snap the camera to an exact logged shot. See CitySceneHandle. */
+  setCameraState(state: Partial<CameraState> & Pick<CameraState, "position" | "target">): void
+  /** Fresh frame as a PNG data URL. See CitySceneHandle. */
+  captureScreenshot(): string | null
   /** Instantly set a building's visible block count. See CitySceneHandle. */
   setVisibleCount(buildingId: string, count: number): void
 }
@@ -124,6 +130,15 @@ export const CityRenderer = forwardRef<CityRendererHandle, CityRendererProps>(
       },
       resetCamera() {
         sceneRef.current?.resetCamera()
+      },
+      getCameraState() {
+        return sceneRef.current?.getCameraState() ?? null
+      },
+      setCameraState(state) {
+        sceneRef.current?.setCameraState(state)
+      },
+      captureScreenshot() {
+        return sceneRef.current?.captureScreenshot() ?? null
       },
       setVisibleCount(buildingId, count) {
         sceneRef.current?.setVisibleCount(buildingId, count)
