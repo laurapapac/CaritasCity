@@ -108,9 +108,9 @@ const fmt = (n: number) => n.toFixed(2);
 
 // Dev-only camera logger (2026-10-21, user request): orbit/pan/zoom to an
 // exact shot, then "Log camera" prints position/target/fov (+ heading, tilt,
-// distance, viewport) to the console, copies it as JSON, and downloads a
-// screenshot. Logged shots can be jumped back to, or any shot JSON pasted
-// into "Apply" to reproduce it.
+// distance, viewport) to the console and keeps it, with a screenshot, in the
+// panel's shot list. Each logged shot can be jumped back to, copied as JSON or
+// saved as a PNG; any shot JSON pasted into "Apply" reproduces it.
 function CameraLogger({ cityRef }: { cityRef: React.RefObject<CityHandle | null> }) {
   const [live, setLive] = useState<CameraSnapshot | null>(null);
   const [shots, setShots] = useState<LoggedShot[]>([]);
@@ -133,8 +133,6 @@ function CameraLogger({ cityRef }: { cityRef: React.RefObject<CityHandle | null>
     const time = new Date().toISOString().replace(/[:.]/g, "-");
     console.log(`[camera] shot #${id}`, snapshot);
     console.log(`[camera] shot #${id} JSON\n${shotJson(snapshot)}`);
-    copyText(shotJson(snapshot));
-    downloadDataUrl(screenshot, `camera-shot-${id}-${time}.png`);
     setShots((prev) => [{ id, time, snapshot, screenshot }, ...prev]);
   }
 
@@ -210,7 +208,7 @@ function CameraLogger({ cityRef }: { cityRef: React.RefObject<CityHandle | null>
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Logs to the console, copies the shot JSON to the clipboard and downloads a screenshot.
+            Logs to the console and adds the shot to the list below. Copy the JSON or save the screenshot from there.
           </p>
 
           <div className="space-y-2">
