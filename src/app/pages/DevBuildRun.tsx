@@ -75,6 +75,8 @@ export default function DevBuildRun() {
       : CITY_LAYOUT;
   }, [filter]);
 
+  const shownSelected = visibleEntries.filter((e) => counts.has(e.buildingId)).length;
+
   function setCount(id: string, n: number) {
     setCounts((prev) => (prev.has(id) ? new Map(prev).set(id, n) : prev));
   }
@@ -98,6 +100,24 @@ export default function DevBuildRun() {
         return next;
       });
     }
+  }
+
+  // Header checkbox: unbuilds (or restores) every building the filter shows.
+  function toggleAllShown(unbuild: boolean) {
+    const ids = visibleEntries.map((e) => e.buildingId);
+    if (!unbuild && runningId && ids.includes(runningId)) stopRun();
+    for (const e of visibleEntries) {
+      if (counts.has(e.buildingId) === unbuild) continue;
+      cityRef.current?.setVisibleCount(e.buildingId, unbuild ? 0 : e.totalBlocks);
+    }
+    setCounts((prev) => {
+      const next = new Map(prev);
+      for (const id of ids) {
+        if (!unbuild) next.delete(id);
+        else if (!next.has(id)) next.set(id, 0);
+      }
+      return next;
+    });
   }
 
   function restoreAll() {
@@ -164,6 +184,22 @@ export default function DevBuildRun() {
               placeholder="Filter — e.g. hospital, house_12"
             />
             <ul className="max-h-48 overflow-y-auto rounded-md border p-1">
+              {visibleEntries.length > 0 && (
+                <li className="border-b pb-1">
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 hover:bg-muted">
+                    <Checkbox
+                      checked={shownSelected === visibleEntries.length}
+                      onCheckedChange={(v) => toggleAllShown(v === true)}
+                    />
+                    <span className="text-xs font-medium">
+                      {filter.trim() ? `All ${visibleEntries.length} shown` : `All ${visibleEntries.length} buildings`}
+                      {shownSelected > 0 && shownSelected < visibleEntries.length && (
+                        <span className="font-normal text-muted-foreground"> · {shownSelected} selected</span>
+                      )}
+                    </span>
+                  </label>
+                </li>
+              )}
               {visibleEntries.map((e) => (
                 <li key={e.buildingId}>
                   <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 hover:bg-muted">
@@ -184,7 +220,11 @@ export default function DevBuildRun() {
           {unbuiltIds.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <Label>2. Building to build</Label>
-              <RadioGroup value={activeId ?? ""} onValueChange={setChosenId} className="gap-1">
+              <RadioGroup
+                value={activeId ?? ""}
+                onValueChange={setChosenId}
+                className="max-h-48 gap-1 overflow-y-auto"
+              >
                 {unbuiltIds.map((id) => {
                   const e = ENTRY_BY_ID.get(id)!;
                   return (
