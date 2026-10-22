@@ -5,6 +5,7 @@ import Kiosk from "./app/pages/Kiosk.tsx";
 import DevPreview from "./app/pages/DevPreview.tsx";
 import DevCityPreview from "./app/pages/DevCityPreview.tsx";
 import DevKioskProgress from "./app/pages/DevKioskProgress.tsx";
+import DevBuildRun from "./app/pages/DevBuildRun.tsx";
 import "./styles/index.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -19,6 +20,7 @@ createRoot(document.getElementById("root")!).render(
       {import.meta.env.DEV && <Route path="/dev/preview" element={<DevPreview />} />}
       {import.meta.env.DEV && <Route path="/dev/city" element={<DevCityPreview />} />}
       {import.meta.env.DEV && <Route path="/dev/kiosk-progress" element={<DevKioskProgress />} />}
+      {import.meta.env.DEV && <Route path="/dev/build" element={<DevBuildRun />} />}
     </Routes>
   </BrowserRouter>,
 );

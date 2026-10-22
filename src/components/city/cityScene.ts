@@ -944,7 +944,23 @@ export interface CitySceneHandle {
     staggerMs: number,
     onComplete?: () => void
   ): void
-  /** Cancels a building's pending ambient cycle, if any. */
+  /**
+   * Builds the next `count` blocks of a building on top of what's visible,
+   * one per `staggerMs`, each dropping in exactly like playAmbientCycle's
+   * decoration blocks (DROP_HEIGHT/DROP_FALL_DUR). Stops early at the
+   * building's last block. Dev tooling only (see DevBuildRun.tsx) — never
+   * touches completedBlocks. Shares playAmbientCycle's per-building timer, so
+   * stopAmbientCycle cancels it and it replaces any cycle already running there.
+   * Fires onProgress(newVisibleCount) per block, onComplete once done.
+   */
+  playBuildRun(
+    buildingId: string,
+    count: number,
+    staggerMs: number,
+    onProgress?: (newCount: number) => void,
+    onComplete?: () => void
+  ): void
+  /** Cancels a building's pending ambient cycle (or playBuildRun), if any. */
   stopAmbientCycle(buildingId: string): void
   /**
    * Snap the camera close to and facing a specific already-placed block (no
@@ -1817,6 +1833,25 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         revealBlockAt(node, i)
         i++
         if (i >= total) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
+        ambientTimeouts.set(buildingId, setTimeout(step, staggerMs))
+      }
+      step()
+    },
+
+    playBuildRun(buildingId, count, staggerMs, onProgress, onComplete) {
+      const existing = ambientTimeouts.get(buildingId)
+      if (existing) { clearTimeout(existing); ambientTimeouts.delete(buildingId) }
+
+      const node = nodes.get(buildingId)
+      if (!node) { onComplete?.(); return }
+      const end = Math.min(node.blocks.length, node.visibleCount + Math.max(0, Math.floor(count)))
+      if (node.visibleCount >= end) { onComplete?.(); return }
+
+      const step = () => {
+        const i = node.visibleCount
+        revealBlockAt(node, i)
+        onProgress?.(i + 1)
+        if (i + 1 >= end) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
         ambientTimeouts.set(buildingId, setTimeout(step, staggerMs))
       }
       step()

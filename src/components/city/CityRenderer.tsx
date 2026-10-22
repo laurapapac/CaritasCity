@@ -42,7 +42,15 @@ export interface CityRendererHandle {
     staggerMs: number,
     onComplete?: () => void
   ): void
-  /** Cancels a building's pending ambient cycle, if any. */
+  /** Builds the next `count` blocks with the decoration drop-in. See CitySceneHandle. */
+  playBuildRun(
+    buildingId: string,
+    count: number,
+    staggerMs: number,
+    onProgress?: (newCount: number) => void,
+    onComplete?: () => void
+  ): void
+  /** Cancels a building's pending ambient cycle (or playBuildRun), if any. */
   stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
   focusOnBlock(buildingId: string, blockIndex: number): void
@@ -118,6 +126,9 @@ export const CityRenderer = forwardRef<CityRendererHandle, CityRendererProps>(
       },
       playAmbientCycle(buildingId, staggerMs, onComplete) {
         sceneRef.current?.playAmbientCycle(buildingId, staggerMs, onComplete)
+      },
+      playBuildRun(buildingId, count, staggerMs, onProgress, onComplete) {
+        sceneRef.current?.playBuildRun(buildingId, count, staggerMs, onProgress, onComplete)
       },
       stopAmbientCycle(buildingId) {
         sceneRef.current?.stopAmbientCycle(buildingId)

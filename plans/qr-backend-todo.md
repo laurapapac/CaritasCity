@@ -2,6 +2,18 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: new dev-only `/dev/build` route — unbuild chosen buildings, then auto-build N blocks (2026-10-22)
+
+**Committed to `master`, not pushed.** User request: like `/dev/kiosk-progress`, but the city starts fully built. You pick one or more buildings to unbuild (to 0), choose one of them, and build its next N blocks automatically, falling like the ambient decoration-building blocks. Dev-only, so no redeploy is needed.
+- **Scene API:** `cityScene.ts` adds `playBuildRun(buildingId, count, staggerMs, onProgress?, onComplete?)`, passed through `CityRenderer.tsx`/`City.tsx`. It reveals the next `count` blocks on top of what's visible, one per `staggerMs`, through `revealBlockAt`'s default drop. That's the same `DROP_HEIGHT`/`DROP_FALL_DUR` as `playAmbientCycle`, not the taller real-placement drop. It stops at the building's last block and never touches `completedBlocks`. It shares `playAmbientCycle`'s per-building timer map, so `stopAmbientCycle` cancels it.
+- **Page** (`src/app/pages/DevBuildRun.tsx`, route in `main.tsx`):
+  1. A filterable checkbox list of all 160 real buildings. Ticking one sets it to 0 blocks; unticking restores it fully built.
+  2. A radio list of the unbuilt ones, auto-selected when there's only one, plus "Restore all to built".
+  3. Inputs for blocks and ms per block (default 50 blocks, 1000 ms, the decoration loop's pace), plus Build/Stop, Focus camera (frames the next block to be built) and Back to 0.
+- **Verified live:** the city loads fully built. Unticking two medium hospitals listed both in step 2. With one ticked it was auto-selected. 50 blocks at 100 ms built exactly 50, each one dropping in, and then the run stopped by itself. Stop partway through held the count (59 stayed 59). Unticking restored the hospital fully built. No console errors.
+- **Camera logger added here too (user request):** the panel moved out of `DevCityPreview.tsx` into a shared `src/app/components/CameraLogger.tsx`, used by both `/dev/city` and `/dev/build` (top-right). Verified on both routes: the panel shows, Log camera adds a shot, no console errors.
+- **Fixed while testing:** the number inputs clamped on every keystroke, so clearing "ms per block" snapped it to 16 and typing "100" gave 1600. They now keep the raw text and clamp only when used.
+
 ## Status: camera logger panel on `/dev/city` (2026-10-21)
 
 Commit `3c08f9d` on `master`, **not pushed yet**. User request: a dev tool to set the camera up by hand and log everything needed to reproduce that shot exactly. Dev-only, so no redeploy is needed.
