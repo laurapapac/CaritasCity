@@ -160,9 +160,10 @@ export const OWN_BLOCK_PULSE_PERIOD = 2.0   // seconds per breathing cycle
 // stretched cubes, not lines (WebGL ignores lineWidth, always 1px), unlit
 // (MeshBasicMaterial) so it reads as light rather than shaded geometry, and
 // breathing on the same pulse as the colour blend. Leaves the block's own
-// colour untouched — only the edges light up. Revisits only (markOwnBlock's
-// `withFrame`); a freshly placed block gets just the colour pulse. Also the
-// only marker a glass block gets, since glass has no instance colour.
+// colour untouched — only the edges light up. Always on revisits; after a
+// fresh placement only once the building has blocks after it (the cutaway's
+// own condition, see markOwnBlock) — until then just the colour pulse. Also
+// the only marker a glass block gets, since glass has no instance colour.
 export const OWN_BLOCK_FRAME_THICKNESS = 0.05  // bar cross-section, in block units
 export const OWN_BLOCK_FRAME_PAD = 0.02        // how far each face's bars sit outside the block (avoids z-fighting with its faces)
 export const OWN_BLOCK_FRAME_DIM = 0.7         // frame brightness (fraction of white) at the pulse's dim point; full white at its bright point

@@ -140,8 +140,8 @@ export interface CityHandle {
   stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
   focusOnBlock(buildingId: string, blockIndex: number, opts?: { cutaway?: boolean }): void
-  /** Marks a block as "this is your block" with a persistent lit-up glow (+ an edge frame when
-   *  `withFrame` — revisits only). See CitySceneHandle. */
+  /** Marks a block as "this is your block" with a persistent lit-up glow (+ an edge frame: always
+   *  with `withFrame` — revisits — otherwise once blocks are built after it). See CitySceneHandle. */
   markOwnBlock(buildingId: string, blockIndex: number, withFrame?: boolean): void
   /** Snap the camera back to the wide establishing shot. */
   resetCamera(): void

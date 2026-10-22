@@ -975,16 +975,20 @@ export interface CitySceneHandle {
    * Marks exactly one block in the whole scene as "this is your block" — a
    * persistent, gently-pulsing blend of the block's OWN instance colour
    * toward white at a capped fraction (see OWN_BLOCK_* in utils.ts) — no
-   * separate glow sprite. With `withFrame` (revisits only — 2026-10-13,
-   * user request: a freshly placed block gets just the pulse) it also gets
-   * a thin white frame along its edges pulsing in step (OWN_BLOCK_FRAME_*).
+   * separate glow sprite. It also gets a thin white frame along its edges
+   * pulsing in step (OWN_BLOCK_FRAME_*): always with `withFrame` (revisits),
+   * otherwise only while its building has blocks after it — exactly when the
+   * cutaway (see CUTAWAY_RADIUS) has something to cut. Checked every frame,
+   * so a refresh after a fresh placement that brings in later blocks adds the
+   * frame on the spot (2026-10-22, user request); while a freshly placed
+   * block is still the building's newest it gets just the pulse.
    * There is only ever one: a
    * later call restores the previous block's true colour and moves the
    * mark, so a kiosk cycling between different real users' own codes always
    * shows just the current one's block, with no history left behind on any
    * earlier one (2026-08-28, user request — must look entirely normal to
    * anyone else viewing the same building). Glass blocks carry no instance
-   * colour, so they get no pulse — only the frame, when `withFrame`.
+   * colour, so they get no pulse — only the frame, when it shows.
    * Purely client-side/local; never
    * touches the database and has no effect on any other kiosk's own view.
    */
@@ -1487,7 +1491,9 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
     // the drop loop above already owns that slot's colour/matrix for
     // its short window.
     // The white edge frame rides on the same pulse (see OWN_BLOCK_FRAME_*),
-    // and only shows once the block has landed.
+    // and only shows once the block has landed — always for a revisit
+    // (withFrame), otherwise once something was built after it, the same
+    // condition updateCutaway uses to start cutting.
     frameMesh.visible = false
     if (ownMark) {
       const node = nodes.get(ownMark.buildingId)
@@ -1503,7 +1509,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
           node.solidMesh.setColorAt(si, finColor)
           if (node.solidMesh.instanceColor) node.solidMesh.instanceColor.needsUpdate = true
         }
-        if (ownMark.withFrame) {
+        if (ownMark.withFrame || node.visibleCount > ownMark.blockIndex + 1) {
           frameMesh.position.set(b.x, b.y + 0.5, b.z)
           frameMat.color.setScalar(OWN_BLOCK_FRAME_DIM + (1 - OWN_BLOCK_FRAME_DIM) * pulse)
           frameMesh.visible = true
@@ -1983,9 +1989,9 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
 
       const node = nodes.get(buildingId)
       const b = node?.blocks[blockIndex]
-      // A glass block without the frame would have nothing to show (no
-      // instance colour to pulse — see revealBlockAt), so leave it unmarked.
-      if (!node || !b || (isGlass(b) && !withFrame)) return
+      // A glass block shows nothing until its frame does (no instance colour
+      // to pulse — see revealBlockAt).
+      if (!node || !b) return
       ownMark = { buildingId, blockIndex, withFrame }
     },
 

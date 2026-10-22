@@ -649,7 +649,8 @@ export default function Kiosk() {
       .then((res) => {
         if (res.status === "existing") {
           cityRef.current?.focusOnBlock(res.block.buildingId, res.block.blockIndex);
-          // Revisit: edge frame on top of the pulse (newly placed blocks get just the pulse).
+          // Revisit: edge frame on top of the pulse, always (a fresh placement gets it
+          // only once blocks are built after it — see markOwnBlock).
           cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex, true);
           setState({ phase: "existing", block: res.block });
         } else {
