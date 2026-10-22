@@ -53,7 +53,7 @@ export interface CityRendererHandle {
   /** Cancels a building's pending ambient cycle (or playBuildRun), if any. */
   stopAmbientCycle(buildingId: string): void
   /** Snap the camera close to a specific already-placed block. See CitySceneHandle. */
-  focusOnBlock(buildingId: string, blockIndex: number): void
+  focusOnBlock(buildingId: string, blockIndex: number, opts?: { cutaway?: boolean }): void
   /** Marks a block as "this is your block" with a persistent lit-up glow (+ an edge frame when
    *  `withFrame` — revisits only). See CitySceneHandle. */
   markOwnBlock(buildingId: string, blockIndex: number, withFrame?: boolean): void
@@ -133,8 +133,8 @@ export const CityRenderer = forwardRef<CityRendererHandle, CityRendererProps>(
       stopAmbientCycle(buildingId) {
         sceneRef.current?.stopAmbientCycle(buildingId)
       },
-      focusOnBlock(buildingId, blockIndex) {
-        sceneRef.current?.focusOnBlock(buildingId, blockIndex)
+      focusOnBlock(buildingId, blockIndex, opts) {
+        sceneRef.current?.focusOnBlock(buildingId, blockIndex, opts)
       },
       markOwnBlock(buildingId, blockIndex, withFrame) {
         sceneRef.current?.markOwnBlock(buildingId, blockIndex, withFrame)

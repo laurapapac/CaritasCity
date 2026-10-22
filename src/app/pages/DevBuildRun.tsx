@@ -115,9 +115,13 @@ export default function DevBuildRun() {
   }
 
   // Frames the block that would be built next (or the top one once full).
+  // No cutaway: it would hide every block that lands between the camera and
+  // the focused block as the building grows in front of it.
   function focusActive() {
     if (!active) return;
-    cityRef.current?.focusOnBlock(active.buildingId, Math.min(activeCount, active.totalBlocks - 1));
+    cityRef.current?.focusOnBlock(active.buildingId, Math.min(activeCount, active.totalBlocks - 1), {
+      cutaway: false,
+    });
   }
 
   function build() {

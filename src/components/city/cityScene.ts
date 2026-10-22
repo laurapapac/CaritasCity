@@ -965,9 +965,12 @@ export interface CitySceneHandle {
   /**
    * Snap the camera close to and facing a specific already-placed block (no
    * animation — an instant cut). Deterministic: same buildingId + blockIndex
-   * always produces the same framing.
+   * always produces the same framing. Also starts the cutaway on that block
+   * (see CUTAWAY_RADIUS) unless `opts.cutaway` is false — /dev/build turns it
+   * off, since there the building keeps growing in front of the focused block
+   * and each block landing in the sightline would be hidden.
    */
-  focusOnBlock(buildingId: string, blockIndex: number): void
+  focusOnBlock(buildingId: string, blockIndex: number, opts?: { cutaway?: boolean }): void
   /**
    * Marks exactly one block in the whole scene as "this is your block" — a
    * persistent, gently-pulsing blend of the block's OWN instance colour
@@ -1865,7 +1868,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
     },
 
-    focusOnBlock(buildingId, blockIndex) {
+    focusOnBlock(buildingId, blockIndex, opts) {
       const node = nodes.get(buildingId)
       if (!node) return
       const block = node.blocks[blockIndex]
@@ -1952,9 +1955,11 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
 
       clearCutaway()
-      cutaway = {
-        buildingId, blockIndex, hidden: [],
-        camX: NaN, camY: NaN, camZ: NaN, version: -1, drops: -1, // forces the first scan
+      if (opts?.cutaway !== false) {
+        cutaway = {
+          buildingId, blockIndex, hidden: [],
+          camX: NaN, camY: NaN, camZ: NaN, version: -1, drops: -1, // forces the first scan
+        }
       }
       camera.position.copy(bestPos)
       controls.target.set(cx, cy, cz)
