@@ -2,9 +2,19 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: `/dev/sequence` camera fly-through on Play (2026-10-23)
+
+Not committed yet. User request: take N camera-logger shots and move the camera from one to the next over set times, starting on Play.
+- **Where:** `CAMERA_PATH` constant in `DevBuildSequence.tsx`. Paste the logger's Copy JSON in order (its derived fields are recomputed from position/target, so zoom = camera–target distance is kept and interpolated). Every shot after the first gets `durationMs`, the time to travel there from the previous shot. Play snaps to the first shot, and an empty path leaves the camera alone. `CAMERA_EASE` (default true) eases the start and end of the *whole* path, so it doesn't stop at in-between shots.
+- **How:** `src/components/city/cameraPath.ts` exports `cameraStateAt(path, elapsedMs, ease?)`. It interpolates in orbit terms, not raw position: target, distance, heading (shortest way round), tilt and fov. That way the camera swings around what it looks at instead of cutting straight through the scene. The page applies it every animation frame via `setCameraState`, the same call as the logger's "Go to". The previous flight is cancelled on replay and on unmount.
+- **Verified:**
+  - Math in the browser: endpoints exact; the midpoint distance is the average of the two distances; a heading of 350°→10° goes through 0°; easing and 3-shot paths behave; time past the end clamps to the last shot.
+  - The page still loads with only Play, with no console errors.
+  - A real flight wasn't run, because no shots have been pasted yet.
+
 ## Status: new dev-only `/dev/sequence` route — scripted three-phase build of one building (2026-10-23)
 
-User request: the whole city is built except one building, which starts empty. A lone Play button (no panels; the user edits values in code) builds it in three phases:
+Commit `24c76b8`, not pushed. User request: the whole city is built except one building, which starts empty. A lone Play button (no panels; the user edits values in code) builds it in three phases:
 1. The first block falls immediately with a real placement's tall drop.
 2. `FALLING_BLOCKS` more start `FALLING_DELAY_MS` after it and fall with the decoration drop, one every `FALLING_STAGGER_MS`.
 3. Every remaining block starts `REST_DELAY_MS` after the last falling one and pops in without animation, one every `REST_STAGGER_MS`.
