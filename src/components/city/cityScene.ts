@@ -852,6 +852,14 @@ interface BuildingNode {
 // Public handle
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** playBuildRun options — dev tooling only (DevBuildRun / DevBuildSequence). */
+export interface BuildRunOpts {
+  /** "decor" (default) = DROP_HEIGHT fall, "own" = addBlock's DROP_HEIGHT_OWN fall, "none" = pop in place. */
+  drop?: "decor" | "own" | "none"
+  /** Wait this long before the first block. */
+  startDelayMs?: number
+}
+
 /**
  * Everything needed to reproduce a camera shot exactly: position + target
  * (OrbitControls orbits around the target, so those two fully fix the view
@@ -952,13 +960,17 @@ export interface CitySceneHandle {
    * touches completedBlocks. Shares playAmbientCycle's per-building timer, so
    * stopAmbientCycle cancels it and it replaces any cycle already running there.
    * Fires onProgress(newVisibleCount) per block, onComplete once done.
+   * opts.drop picks the drop-in ("decor" default, "own" = addBlock's tall
+   * fall, "none" = pop in place); opts.startDelayMs holds the first block
+   * back (also cancelled by stopAmbientCycle). See DevBuildSequence.tsx.
    */
   playBuildRun(
     buildingId: string,
     count: number,
     staggerMs: number,
     onProgress?: (newCount: number) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    opts?: BuildRunOpts
   ): void
   /** Cancels a building's pending ambient cycle (or playBuildRun), if any. */
   stopAmbientCycle(buildingId: string): void
@@ -1847,7 +1859,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       step()
     },
 
-    playBuildRun(buildingId, count, staggerMs, onProgress, onComplete) {
+    playBuildRun(buildingId, count, staggerMs, onProgress, onComplete, opts) {
       const existing = ambientTimeouts.get(buildingId)
       if (existing) { clearTimeout(existing); ambientTimeouts.delete(buildingId) }
 
@@ -1856,14 +1868,21 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       const end = Math.min(node.blocks.length, node.visibleCount + Math.max(0, Math.floor(count)))
       if (node.visibleCount >= end) { onComplete?.(); return }
 
+      const drop = opts?.drop ?? "decor"
+      const revealOpts =
+        drop === "own" ? { height: DROP_HEIGHT_OWN, duration: DROP_FALL_DUR_OWN }
+        : drop === "none" ? { animate: false }
+        : {}
       const step = () => {
         const i = node.visibleCount
-        revealBlockAt(node, i)
+        revealBlockAt(node, i, revealOpts)
         onProgress?.(i + 1)
         if (i + 1 >= end) { ambientTimeouts.delete(buildingId); onComplete?.(); return }
         ambientTimeouts.set(buildingId, setTimeout(step, staggerMs))
       }
-      step()
+      const delay = opts?.startDelayMs ?? 0
+      if (delay > 0) ambientTimeouts.set(buildingId, setTimeout(step, delay))
+      else step()
     },
 
     stopAmbientCycle(buildingId) {

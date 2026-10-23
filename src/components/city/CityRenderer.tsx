@@ -18,7 +18,7 @@ import {
   useRef,
   type ReactNode,
 } from "react"
-import { createCityScene, type CameraSnapshot, type CameraState, type CitySceneHandle } from "./cityScene"
+import { createCityScene, type BuildRunOpts, type CameraSnapshot, type CameraState, type CitySceneHandle } from "./cityScene"
 import { CityContext, type CityContextValue } from "./CityContext"
 import type { Block, CityBuilding, CityDecor } from "./types"
 
@@ -48,7 +48,8 @@ export interface CityRendererHandle {
     count: number,
     staggerMs: number,
     onProgress?: (newCount: number) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    opts?: BuildRunOpts
   ): void
   /** Cancels a building's pending ambient cycle (or playBuildRun), if any. */
   stopAmbientCycle(buildingId: string): void
@@ -127,8 +128,8 @@ export const CityRenderer = forwardRef<CityRendererHandle, CityRendererProps>(
       playAmbientCycle(buildingId, staggerMs, onComplete) {
         sceneRef.current?.playAmbientCycle(buildingId, staggerMs, onComplete)
       },
-      playBuildRun(buildingId, count, staggerMs, onProgress, onComplete) {
-        sceneRef.current?.playBuildRun(buildingId, count, staggerMs, onProgress, onComplete)
+      playBuildRun(buildingId, count, staggerMs, onProgress, onComplete, opts) {
+        sceneRef.current?.playBuildRun(buildingId, count, staggerMs, onProgress, onComplete, opts)
       },
       stopAmbientCycle(buildingId) {
         sceneRef.current?.stopAmbientCycle(buildingId)

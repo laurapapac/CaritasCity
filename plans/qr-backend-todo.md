@@ -2,6 +2,22 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: new dev-only `/dev/sequence` route — scripted three-phase build of one building (2026-10-23)
+
+User request: the whole city is built except one building, which starts empty. A lone Play button (no panels; the user edits values in code) builds it in three phases:
+1. The first block falls immediately with a real placement's tall drop.
+2. `FALLING_BLOCKS` more start `FALLING_DELAY_MS` after it and fall with the decoration drop, one every `FALLING_STAGGER_MS`.
+3. Every remaining block starts `REST_DELAY_MS` after the last falling one and pops in without animation, one every `REST_STAGGER_MS`.
+
+Each delay counts from the previous block's *start*, as the user chose. The constants (and `BUILDING_ID`, currently `house_4` with the user's own values) are at the top of `src/app/pages/DevBuildSequence.tsx`. Dev-only, so no redeploy is needed.
+- **Scene API:** `playBuildRun` takes an optional last argument, `opts?: BuildRunOpts`:
+  - `drop`: `"decor"` (the default) or `"own"` (`DROP_HEIGHT_OWN`/`DROP_FALL_DUR_OWN`, as in `addBlock`) or `"none"` (`animate: false`).
+  - `startDelayMs`: a pending delay is stored in `ambientTimeouts`, so `stopAmbientCycle` cancels it too.
+  
+  With the defaults it behaves exactly as before, so `/dev/build` is unchanged. The page chains three runs through `onComplete`, and Play resets to 0 first.
+- **Verified live:** the page shows only the Play button, which reads "Building…" while it runs and returns to Play when done. school_7 (5,000 blocks) completed. No console errors.
+  - Note: on this machine, while the full city renders, a 30 ms browser timer actually fires about every 50 ms, so stagger B at 30 ms took over 4 minutes instead of about 2.5. Small staggers are capped by the frame/timer rate.
+
 ## Status: own-block edge frame after a fresh placement now follows the cutaway (2026-10-22)
 
 Committed and pushed to `master`. **Frontend still has to be redeployed.** User request: when a kiosk refreshes the city after a fresh placement and blocks have been added after the user's block, that block should get the edge frame. Before this, a fresh placement never got it. Revisits keep the frame always (user clarified: the new rule is only for refreshing after placing a new block; a first version also dropped the frame on revisits to a still-newest block, reverted).
@@ -17,7 +33,7 @@ Commit `2543ccc`, pushed to `master`. User request: like `/dev/kiosk-progress`, 
   2. A radio list of the unbuilt ones, auto-selected when there's only one, plus "Restore all to built".
   3. Inputs for blocks and ms per block (default 50 blocks, 1000 ms, the decoration loop's pace), plus Build/Stop, Focus camera (frames the next block to be built) and Back to 0.
 - **Verified live:** the city loads fully built. Unticking two medium hospitals listed both in step 2. With one ticked it was auto-selected. 50 blocks at 100 ms built exactly 50, each one dropping in, and then the run stopped by itself. Stop partway through held the count (59 stayed 59). Unticking restored the hospital fully built. No console errors.
-- **Select all (2026-10-22, user request, not committed yet):** a header checkbox at the top of step 1's list unbuilds (or restores) every building the filter currently shows. Empty filter = all 160, `school` = all 25 schools. It's ticked only when all shown buildings are selected; otherwise its label adds "· N selected" (the shared `ui/checkbox.tsx` has no indeterminate look, so I left it untouched). Unticking it while a shown building is being built stops that run. Step 2's radio list now scrolls (`max-h-48`), so 160 entries don't stretch the panel. Verified live: all → 160 unbuilt; `school` filter, untick → 25 restored, 135 left; clear filter → "All 160 buildings · 135 selected"; tick → 160 again. No console errors. Decoration buildings and landmarks aren't in the list (never were), so they stay standing.
+- **Select all (2026-10-22, user request, committed as `3725d7b`, not pushed):** a header checkbox at the top of step 1's list unbuilds (or restores) every building the filter currently shows. Empty filter = all 160, `school` = all 25 schools. It's ticked only when all shown buildings are selected; otherwise its label adds "· N selected" (the shared `ui/checkbox.tsx` has no indeterminate look, so I left it untouched). Unticking it while a shown building is being built stops that run. Step 2's radio list now scrolls (`max-h-48`), so 160 entries don't stretch the panel. Verified live: all → 160 unbuilt; `school` filter, untick → 25 restored, 135 left; clear filter → "All 160 buildings · 135 selected"; tick → 160 again. No console errors. Decoration buildings and landmarks aren't in the list (never were), so they stay standing.
 - **Camera logger added here too (user request):** the panel moved out of `DevCityPreview.tsx` into a shared `src/app/components/CameraLogger.tsx`, used by both `/dev/city` and `/dev/build` (top-right). Verified on both routes: the panel shows, Log camera adds a shot, no console errors.
 - **Bug fix (user-reported, commit `d0b7f3a`, pushed): school_7's 20th block vanished when it landed.** It wasn't lost; the cutaway hid it. **Focus camera** called `focusOnBlock`, which also starts the kiosk's revisit cutaway on that block. Once the building grows past the focused block, every block that lands within `CUTAWAY_RADIUS` of the camera→block sightline gets hidden, rescanned on each landing. Confirmed live: re-applying the same camera through the logger (which clears the cutaway) made the block reappear. Fix: `focusOnBlock(buildingId, blockIndex, opts?)` takes `{ cutaway: false }`, threaded through `CityRenderer`/`City`; only `/dev/build` passes it, so the kiosk is unchanged. Verified: the same school_7 run, now 40 blocks at 100 ms, has no gaps and no console errors.
 - **Fixed while testing:** the number inputs clamped on every keystroke, so clearing "ms per block" snapped it to 16 and typing "100" gave 1600. They now keep the raw text and clamp only when used.
