@@ -2,6 +2,20 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: `/dev/sequence` hide list (2026-10-26)
+
+Not committed yet. User request: a way to hide buildings that block the camera.
+- **What it does:** add their ids to the `HIDDEN_BUILDINGS` constant in `DevBuildSequence.tsx`, the same way `CAMERA_PATH` is filled. Hidden buildings are filtered out of `initialBuildings`, so they're never added to the scene.
+- **Which ids work:** real buildings (`house_12`), decoration-only ones (`deco_school_0`) and the landmarks (`church`, `fountain`). `BUILDING_ID` is never hidden.
+- The user picks the ids themselves.
+
+## Status: user's own changes — blue logo, city-complete text, privacy text hidden (2026-10-26)
+
+Made and pushed by the user, not by Claude; recorded here so later sessions don't undo them. **Needs a frontend redeploy.**
+- **`f198020`, logo:** both `Kiosk.tsx` and `ScanLanding.tsx` now import `src/assets/logo-gradimir-blue.png`. The old `logo-gradimir.png` is still in `src/assets/` but nothing references it any more.
+- **`f198020`, city-complete card:** `CityCompleteStep`'s body text is now final copy, not a placeholder: "Zahvaljujući vašoj velikodušnosti zajedno smo izgradili bolji svijet." (was "Grad GRADiMIR je u potpunosti izgrađen zahvaljujući vašoj velikodušnosti."). The user has since dropped the "placeholder" wording from the comment above `CityCompleteStep`.
+- **`307d56d`, privacy dialog:** in `PrivacyNotice.tsx`, the `DialogDescription` and the "Što se obrađuje / Zašto / Koliko dugo / U pregledniku" sections (one comment block) are commented out until the real privacy content arrives. Right now the dialog shows only the "Privatnost" title and the contact line ("Za sva pitanja … caritas.croatia@caritas.hr").
+
 ## Status: last English UI strings translated to Croatian (2026-10-26)
 
 Commit `b3a5ed5`, pushed. **Needs a frontend redeploy.** User request: find every visible English string in the shipped app (`/` and `/s/:token`; the `/dev/*` routes aren't in production builds). User reviewed the drafts and changed #2 and #5.

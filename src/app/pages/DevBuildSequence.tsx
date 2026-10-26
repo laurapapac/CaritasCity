@@ -35,7 +35,7 @@ import { Button } from "../components/ui/button";
 // where it is. Log shots at the same window size you'll play at — fov is
 // vertical, so a different aspect shows more or less at the sides.
 
-const BUILDING_ID = "house_4";
+const BUILDING_ID = "house_25";
 const FALLING_DELAY_MS = 1500;
 const FALLING_BLOCKS = 30;
 const FALLING_STAGGER_MS = 100;
@@ -45,64 +45,59 @@ const REST_STAGGER_MS = 1;
 const CAMERA_PATH: CameraKeyframe[] = [
   {
     position: {
-      x: 33.782,
-      y: 10.755,
-      z: -70.015,
+      x: -17.761,
+      y: 10.862,
+      z: 69.485,
     },
     target: {
-      x: 34.253,
+      x: -18.989,
       y: 10,
-      z: -68.808,
+      z: 69.507,
     },
     fov: 50,
   },
   {
     position: {
-      x: 33.782,
-      y: 10.755,
-      z: -70.015,
+      x: -17.761,
+      y: 10.862,
+      z: 69.485,
     },
     target: {
-      x: 34.253,
+      x: -18.989,
       y: 10,
-      z: -68.808,
+      z: 69.507,
     },
     fov: 50,
-    durationMs: 800,
+    durationMs: 1000,
   },
   {
     position: {
-      x: 46.67,
-      y: 10.942,
-      z: -65.079,
+      x: -35.655,
+      y: 10.854,
+      z: 52.711,
     },
     target: {
-      x: 45.91,
+      x: -34.326,
       y: 10,
-      z: -64.193,
+      z: 56.68,
     },
     fov: 50,
     durationMs: 2000,
   },
-  {
-    position: {
-      x: 53.251,
-      y: 15.447,
-      z: -63.752,
-    },
-    target: {
-      x: 48.072,
-      y: 10,
-      z: -59.989,
-    },
-    fov: 50,
-    durationMs: 2000,
-  },
+
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50 },
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50, durationMs: 4000 },
 ];
 // Gentle start and stop over the whole path; set to false for constant speed.
 const CAMERA_EASE = true;
+
+// Buildings left out of the scene entirely, e.g. ones blocking the camera
+// path. Any building id works: real ones ("house_12"), decoration-only
+// ones ("deco_school_0") and the landmarks ("church", "fountain").
+// BUILDING_ID is never hidden.
+const HIDDEN_BUILDINGS: string[] = [
+  // "house_12",
+];
 
 export default function DevBuildSequence() {
   const cityRef = useRef<CityHandle>(null);
@@ -145,7 +140,7 @@ export default function DevBuildSequence() {
       ),
       ...STATIC_LANDMARKS,
       ...STATIC_DECOR_BUILDINGS,
-    ],
+    ].filter((b) => b.id === BUILDING_ID || !HIDDEN_BUILDINGS.includes(b.id)),
     [],
   );
 

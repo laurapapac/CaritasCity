@@ -264,8 +264,7 @@ function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse:
 
 // Replaces WelcomeStep once the city hits 100% (see Kiosk()'s cityComplete)
 // — there's nothing left to place a code toward, so "Imam kod" gives way to
-// looking up where your own already-placed block ended up. Copy is a
-// placeholder; content here is expected to change later.
+// looking up where your own already-placed block ended up.
 function CityCompleteStep({ onVisitBlock, onBrowse }: { onVisitBlock: () => void; onBrowse: () => void }) {
   return (
     <Card className="pointer-events-auto w-full max-w-md bg-card/95 backdrop-blur">
