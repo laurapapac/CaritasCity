@@ -4,7 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { ApiError, scanQr, type ScanResponse } from "../../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import logoUrl from "../../assets/logo-gradimir.png";
+import logoUrl from "../../assets/logo-gradimir-blue.png";
 
 type State =
   | { phase: "loading" }

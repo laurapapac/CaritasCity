@@ -4,7 +4,7 @@ Use this to re-prompt Claude if the conversation is lost. Paste it in and say "c
 
 ## Status: last English UI strings translated to Croatian (2026-10-26)
 
-Not committed yet. **Needs a frontend redeploy.** User request: find every visible English string in the shipped app (`/` and `/s/:token`; the `/dev/*` routes aren't in production builds). User reviewed the drafts and changed #2 and #5.
+Commit `b3a5ed5`, pushed. **Needs a frontend redeploy.** User request: find every visible English string in the shipped app (`/` and `/s/:token`; the `/dev/*` routes aren't in production builds). User reviewed the drafts and changed #2 and #5.
 - `ScanLanding.tsx`:
   - Učitavanje…
   - Kod vrijedi još {countdown} / Ovaj kod je istekao

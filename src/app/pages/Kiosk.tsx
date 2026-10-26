@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, KeyRound, MapPin, Menu, RefreshCw, Volume2, VolumeX, X } from "lucide-react";
-import logoUrl from "../../assets/logo-gradimir.png";
+import logoUrl from "../../assets/logo-gradimir-blue.png";
 import { playSound, useMuted } from "../../lib/sound";
 import { DROP_FALL_DUR_OWN } from "../../components/city/utils";
 import {
@@ -275,7 +275,7 @@ function CityCompleteStep({ onVisitBlock, onBrowse }: { onVisitBlock: () => void
         <div className="flex flex-col items-center gap-1 text-center">
           <p className="text-lg font-bold">Hvala vam! 🙏</p>
           <p className="text-muted-foreground text-sm">
-            Grad GRADiMIR je u potpunosti izgrađen zahvaljujući vašoj velikodušnosti.
+            Zahvaljujući vašoj velikodušnosti zajedno smo izgradili bolji svijet.
           </p>
         </div>
 
