@@ -2,9 +2,27 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: last English UI strings translated to Croatian (2026-10-26)
+
+Not committed yet. **Needs a frontend redeploy.** User request: find every visible English string in the shipped app (`/` and `/s/:token`; the `/dev/*` routes aren't in production builds). User reviewed the drafts and changed #2 and #5.
+- `ScanLanding.tsx`:
+  - Učitavanje…
+  - Kod vrijedi još {countdown} / Ovaj kod je istekao
+  - QR kod nije prepoznat + "Ovaj kod ne odgovara nijednoj kockici. Pokušajte ga ponovno skenirati." (the volunteer mention was dropped)
+  - Nešto je pošlo po zlu / Trenutačno nije moguće dobiti kod. / Pokušaj ponovno
+- `Kiosk.tsx`: Učitavanje… / Grad nije moguće učitati / Pokušajte ponovno učitati stranicu.
+- `index.html`:
+  - `lang="hr"`
+  - title `GRADiMIR`
+  - description "GRADiMIR – zajedno gradimo grad, kockicu po kockicu. Svaka kockica predstavlja donaciju koja pomaže obiteljima u potrebi."
+- `ui/dialog.tsx`: the close button's screen-reader label Close → Zatvori. This is a shared component, so dev pages change too.
+- **Unchanged:** the expired check still compares against "0:00", which is untouched.
+- **Already Croatian:** everything else, including all API error codes, which are mapped to Croatian or fall back to the generic message.
+- **Not checked live:** servers were off. A grep shows none of the old strings remain.
+
 ## Status: site marked noindex/nofollow until launch (2026-10-26)
 
-Not committed yet. **Needs a frontend redeploy.** User request. There was no robots meta tag, `robots.txt` or `X-Robots-Tag` anywhere in the app; the only one was in the unused `Updated voxel designs/` Figma export.
+Commit `7ca90cb`, pushed. **Needs a frontend redeploy.** User request. There was no robots meta tag, `robots.txt` or `X-Robots-Tag` anywhere in the app; the only one was in the unused `Updated voxel designs/` Figma export.
 - **Change:** `nginx.caritascity.conf` (baked into the frontend image by `Dockerfile`) sends `X-Robots-Tag: noindex, nofollow` on every response, `always`, so error pages are covered too.
 - **At public launch:** delete that line and redeploy. Re-indexing then takes days to weeks; Search Console speeds it up.
 - **Not covered:** API calls go straight to the backend (port 3001) through the host's reverse proxy, which doesn't pass through this file. JSON responses don't get indexed as pages, so this was left alone.
@@ -12,7 +30,7 @@ Not committed yet. **Needs a frontend redeploy.** User request. There was no rob
 
 ## Status: `/dev/sequence` camera fly-through on Play (2026-10-23)
 
-Commit `cf938c9`, not pushed. User request: take N camera-logger shots and move the camera from one to the next over set times, starting on Play.
+Commit `cf938c9`, pushed. User request: take N camera-logger shots and move the camera from one to the next over set times, starting on Play.
 - **Where:** `CAMERA_PATH` constant in `DevBuildSequence.tsx`. Paste the logger's Copy JSON in order (its derived fields are recomputed from position/target, so zoom = camera–target distance is kept and interpolated). Every shot after the first gets `durationMs`, the time to travel there from the previous shot. Play snaps to the first shot, and an empty path leaves the camera alone. `CAMERA_EASE` (default true) eases the start and end of the *whole* path, so it doesn't stop at in-between shots.
 - **How:** `src/components/city/cameraPath.ts` exports `cameraStateAt(path, elapsedMs, ease?)`. It interpolates in orbit terms, not raw position: target, distance, heading (shortest way round), tilt and fov. That way the camera swings around what it looks at instead of cutting straight through the scene. The page applies it every animation frame via `setCameraState`, the same call as the logger's "Go to". The previous flight is cancelled on replay and on unmount.
 - **Verified:**
@@ -22,7 +40,7 @@ Commit `cf938c9`, not pushed. User request: take N camera-logger shots and move 
 
 ## Status: new dev-only `/dev/sequence` route — scripted three-phase build of one building (2026-10-23)
 
-Commit `24c76b8`, not pushed. User request: the whole city is built except one building, which starts empty. A lone Play button (no panels; the user edits values in code) builds it in three phases:
+Commit `24c76b8`, pushed. User request: the whole city is built except one building, which starts empty. A lone Play button (no panels; the user edits values in code) builds it in three phases:
 1. The first block falls immediately with a real placement's tall drop.
 2. `FALLING_BLOCKS` more start `FALLING_DELAY_MS` after it and fall with the decoration drop, one every `FALLING_STAGGER_MS`.
 3. Every remaining block starts `REST_DELAY_MS` after the last falling one and pops in without animation, one every `REST_STAGGER_MS`.
@@ -51,7 +69,7 @@ Commit `2543ccc`, pushed to `master`. User request: like `/dev/kiosk-progress`, 
   2. A radio list of the unbuilt ones, auto-selected when there's only one, plus "Restore all to built".
   3. Inputs for blocks and ms per block (default 50 blocks, 1000 ms, the decoration loop's pace), plus Build/Stop, Focus camera (frames the next block to be built) and Back to 0.
 - **Verified live:** the city loads fully built. Unticking two medium hospitals listed both in step 2. With one ticked it was auto-selected. 50 blocks at 100 ms built exactly 50, each one dropping in, and then the run stopped by itself. Stop partway through held the count (59 stayed 59). Unticking restored the hospital fully built. No console errors.
-- **Select all (2026-10-22, user request, committed as `3725d7b`, not pushed):** a header checkbox at the top of step 1's list unbuilds (or restores) every building the filter currently shows. Empty filter = all 160, `school` = all 25 schools. It's ticked only when all shown buildings are selected; otherwise its label adds "· N selected" (the shared `ui/checkbox.tsx` has no indeterminate look, so I left it untouched). Unticking it while a shown building is being built stops that run. Step 2's radio list now scrolls (`max-h-48`), so 160 entries don't stretch the panel. Verified live: all → 160 unbuilt; `school` filter, untick → 25 restored, 135 left; clear filter → "All 160 buildings · 135 selected"; tick → 160 again. No console errors. Decoration buildings and landmarks aren't in the list (never were), so they stay standing.
+- **Select all (2026-10-22, user request, committed as `3725d7b`, pushed):** a header checkbox at the top of step 1's list unbuilds (or restores) every building the filter currently shows. Empty filter = all 160, `school` = all 25 schools. It's ticked only when all shown buildings are selected; otherwise its label adds "· N selected" (the shared `ui/checkbox.tsx` has no indeterminate look, so I left it untouched). Unticking it while a shown building is being built stops that run. Step 2's radio list now scrolls (`max-h-48`), so 160 entries don't stretch the panel. Verified live: all → 160 unbuilt; `school` filter, untick → 25 restored, 135 left; clear filter → "All 160 buildings · 135 selected"; tick → 160 again. No console errors. Decoration buildings and landmarks aren't in the list (never were), so they stay standing.
 - **Camera logger added here too (user request):** the panel moved out of `DevCityPreview.tsx` into a shared `src/app/components/CameraLogger.tsx`, used by both `/dev/city` and `/dev/build` (top-right). Verified on both routes: the panel shows, Log camera adds a shot, no console errors.
 - **Bug fix (user-reported, commit `d0b7f3a`, pushed): school_7's 20th block vanished when it landed.** It wasn't lost; the cutaway hid it. **Focus camera** called `focusOnBlock`, which also starts the kiosk's revisit cutaway on that block. Once the building grows past the focused block, every block that lands within `CUTAWAY_RADIUS` of the camera→block sightline gets hidden, rescanned on each landing. Confirmed live: re-applying the same camera through the logger (which clears the cutaway) made the block reappear. Fix: `focusOnBlock(buildingId, blockIndex, opts?)` takes `{ cutaway: false }`, threaded through `CityRenderer`/`City`; only `/dev/build` passes it, so the kiosk is unchanged. Verified: the same school_7 run, now 40 blocks at 100 ms, has no gaps and no console errors.
 - **Fixed while testing:** the number inputs clamped on every keystroke, so clearing "ms per block" snapped it to 16 and typing "100" gave 1600. They now keep the raw text and clamp only when used.

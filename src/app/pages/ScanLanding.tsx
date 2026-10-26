@@ -91,7 +91,7 @@ function CodeCard({ data }: { data: ScanResponse }) {
           <CopyButton text={data.code} />
         </div>
         <p className={expired ? "text-destructive" : "text-muted-foreground"}>
-          {expired ? "This code has expired" : `Valid for ${countdown}`}
+          {expired ? "Ovaj kod je istekao" : `Kod vrijedi još ${countdown}`}
         </p>
         <Button asChild className="w-full">
           <Link to="/">Idi na gradilište</Link>
@@ -125,17 +125,16 @@ export default function ScanLanding() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-background px-4 py-8">
-      {state.phase === "loading" && <p className="text-muted-foreground">Loading…</p>}
+      {state.phase === "loading" && <p className="text-muted-foreground">Učitavanje…</p>}
 
       {state.phase === "ready" && <CodeCard data={state.data} />}
 
       {state.phase === "unknown" && (
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle>QR code not recognized</CardTitle>
+            <CardTitle>QR kod nije prepoznat</CardTitle>
             <CardDescription>
-              This code doesn't match any block we know about. Try scanning again, or ask a
-              volunteer for help.
+              Ovaj kod ne odgovara nijednoj kockici. Pokušajte ga ponovno skenirati.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -144,11 +143,11 @@ export default function ScanLanding() {
       {state.phase === "error" && (
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>Couldn't get a code right now.</CardDescription>
+            <CardTitle>Nešto je pošlo po zlu</CardTitle>
+            <CardDescription>Trenutačno nije moguće dobiti kod.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={load}>Try again</Button>
+            <Button onClick={load}>Pokušaj ponovno</Button>
           </CardContent>
         </Card>
       )}

@@ -757,7 +757,7 @@ export default function Kiosk() {
 
       {state.phase === "loading" && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-muted-foreground">Loading…</p>
+          <p className="text-muted-foreground">Učitavanje…</p>
         </div>
       )}
 
@@ -765,8 +765,8 @@ export default function Kiosk() {
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <Card className="w-full max-w-sm">
             <CardHeader>
-              <CardTitle>Couldn't load the city</CardTitle>
-              <CardDescription>Try refreshing the page.</CardDescription>
+              <CardTitle>Grad nije moguće učitati</CardTitle>
+              <CardDescription>Pokušajte ponovno učitati stranicu.</CardDescription>
             </CardHeader>
           </Card>
         </div>
