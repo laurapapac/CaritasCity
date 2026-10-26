@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { City, type CityHandle } from "../../components/city/City";
-import { cameraPathDuration, cameraStateAt, easeInOut, type CameraKeyframe } from "../../components/city/cameraPath";
+import {
+  cameraPathDuration,
+  cameraStateAt,
+  easeInOut,
+  type CameraKeyframe,
+} from "../../components/city/cameraPath";
 import type { CityBuilding } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
-import { STATIC_CITY_DECOR, STATIC_LANDMARKS, STATIC_DECOR_BUILDINGS } from "../../components/city/staticCityData";
+import {
+  STATIC_CITY_DECOR,
+  STATIC_LANDMARKS,
+  STATIC_DECOR_BUILDINGS,
+} from "../../components/city/staticCityData";
 import { CITY_LAYOUT } from "../../data/cityLayout";
 import { Button } from "../components/ui/button";
 
@@ -34,6 +43,61 @@ const REST_DELAY_MS = 600;
 const REST_STAGGER_MS = 1;
 
 const CAMERA_PATH: CameraKeyframe[] = [
+  {
+    position: {
+      x: 33.782,
+      y: 10.755,
+      z: -70.015,
+    },
+    target: {
+      x: 34.253,
+      y: 10,
+      z: -68.808,
+    },
+    fov: 50,
+  },
+  {
+    position: {
+      x: 33.782,
+      y: 10.755,
+      z: -70.015,
+    },
+    target: {
+      x: 34.253,
+      y: 10,
+      z: -68.808,
+    },
+    fov: 50,
+    durationMs: 800,
+  },
+  {
+    position: {
+      x: 46.67,
+      y: 10.942,
+      z: -65.079,
+    },
+    target: {
+      x: 45.91,
+      y: 10,
+      z: -64.193,
+    },
+    fov: 50,
+    durationMs: 2000,
+  },
+  {
+    position: {
+      x: 53.251,
+      y: 15.447,
+      z: -63.752,
+    },
+    target: {
+      x: 48.072,
+      y: 10,
+      z: -59.989,
+    },
+    fov: 50,
+    durationMs: 2000,
+  },
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50 },
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50, durationMs: 4000 },
 ];
@@ -68,15 +132,21 @@ export default function DevBuildSequence() {
           id: entry.buildingId,
           category: entry.category,
           position: { x: entry.x, z: entry.z },
-          blueprint: blueprintForVariant(entry.variant, entry.category, entry.totalBlocks, entry.buildingId),
+          blueprint: blueprintForVariant(
+            entry.variant,
+            entry.category,
+            entry.totalBlocks,
+            entry.buildingId,
+          ),
           totalBlocks: entry.totalBlocks,
-          completedBlocks: entry.buildingId === BUILDING_ID ? 0 : entry.totalBlocks,
-        })
+          completedBlocks:
+            entry.buildingId === BUILDING_ID ? 0 : entry.totalBlocks,
+        }),
       ),
       ...STATIC_LANDMARKS,
       ...STATIC_DECOR_BUILDINGS,
     ],
-    []
+    [],
   );
 
   function play() {
@@ -87,20 +157,32 @@ export default function DevBuildSequence() {
     playCamera(city);
     setRunning(true);
     const done = () => setRunning(false);
-    city.playBuildRun(BUILDING_ID, 1, 0, undefined, () =>
-      city.playBuildRun(
-        BUILDING_ID,
-        FALLING_BLOCKS,
-        FALLING_STAGGER_MS,
-        undefined,
-        () =>
-          city.playBuildRun(BUILDING_ID, Infinity, REST_STAGGER_MS, undefined, done, {
-            drop: "none",
-            startDelayMs: REST_DELAY_MS,
-          }),
-        { drop: "decor", startDelayMs: FALLING_DELAY_MS }
-      ),
-      { drop: "own" }
+    city.playBuildRun(
+      BUILDING_ID,
+      1,
+      0,
+      undefined,
+      () =>
+        city.playBuildRun(
+          BUILDING_ID,
+          FALLING_BLOCKS,
+          FALLING_STAGGER_MS,
+          undefined,
+          () =>
+            city.playBuildRun(
+              BUILDING_ID,
+              Infinity,
+              REST_STAGGER_MS,
+              undefined,
+              done,
+              {
+                drop: "none",
+                startDelayMs: REST_DELAY_MS,
+              },
+            ),
+          { drop: "decor", startDelayMs: FALLING_DELAY_MS },
+        ),
+      { drop: "own" },
     );
   }
 
@@ -112,7 +194,12 @@ export default function DevBuildSequence() {
         decor={STATIC_CITY_DECOR}
         style={{ position: "absolute", inset: 0 }}
       />
-      <Button size="lg" className="absolute bottom-6 left-1/2 -translate-x-1/2" onClick={play} disabled={running}>
+      <Button
+        size="lg"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2"
+        onClick={play}
+        disabled={running}
+      >
         {running ? "Building…" : "Play"}
       </Button>
     </div>
