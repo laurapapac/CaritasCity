@@ -2,9 +2,17 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: site marked noindex/nofollow until launch (2026-10-26)
+
+Not committed yet. **Needs a frontend redeploy.** User request. There was no robots meta tag, `robots.txt` or `X-Robots-Tag` anywhere in the app; the only one was in the unused `Updated voxel designs/` Figma export.
+- **Change:** `nginx.caritascity.conf` (baked into the frontend image by `Dockerfile`) sends `X-Robots-Tag: noindex, nofollow` on every response, `always`, so error pages are covered too.
+- **At public launch:** delete that line and redeploy. Re-indexing then takes days to weeks; Search Console speeds it up.
+- **Not covered:** API calls go straight to the backend (port 3001) through the host's reverse proxy, which doesn't pass through this file. JSON responses don't get indexed as pages, so this was left alone.
+- **Not verified:** couldn't run `nginx -t`, because Docker was off.
+
 ## Status: `/dev/sequence` camera fly-through on Play (2026-10-23)
 
-Not committed yet. User request: take N camera-logger shots and move the camera from one to the next over set times, starting on Play.
+Commit `cf938c9`, not pushed. User request: take N camera-logger shots and move the camera from one to the next over set times, starting on Play.
 - **Where:** `CAMERA_PATH` constant in `DevBuildSequence.tsx`. Paste the logger's Copy JSON in order (its derived fields are recomputed from position/target, so zoom = camera–target distance is kept and interpolated). Every shot after the first gets `durationMs`, the time to travel there from the previous shot. Play snaps to the first shot, and an empty path leaves the camera alone. `CAMERA_EASE` (default true) eases the start and end of the *whole* path, so it doesn't stop at in-between shots.
 - **How:** `src/components/city/cameraPath.ts` exports `cameraStateAt(path, elapsedMs, ease?)`. It interpolates in orbit terms, not raw position: target, distance, heading (shortest way round), tilt and fov. That way the camera swings around what it looks at instead of cutting straight through the scene. The page applies it every animation frame via `setCameraState`, the same call as the logger's "Go to". The previous flight is cancelled on replay and on unmount.
 - **Verified:**
