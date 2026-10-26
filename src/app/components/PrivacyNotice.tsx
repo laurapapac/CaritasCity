@@ -39,13 +39,13 @@ export function PrivacyButton({ className }: { className?: string }) {
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Privatnost</DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             Ova stranica ne koristi kolačiće, analitiku ni alate za praćenje i ne traži nikakve
             osobne podatke.
-          </DialogDescription>
+          </DialogDescription> */}
         </DialogHeader>
         <div className="flex flex-col gap-3 text-sm">
-          <p>
+          {/* <p>
             <span className="font-semibold">Što se obrađuje: </span>
             Kao i svaki web poslužitelj, naš poslužitelj bilježi IP adresu i vrstu preglednika pri
             svakom posjetu (zapisi poslužitelja). Pri pogrešno unesenom kodu IP adresa se nakratko
@@ -64,7 +64,7 @@ export function PrivacyButton({ className }: { className?: string }) {
             <span className="font-semibold">U pregledniku </span>
             se spremaju samo vaše postavke (zvuk uključen/isključen, prikaz uputa), i to tek kad ih
             sami promijenite.
-          </p>
+          </p> */}
           <p>
             Za sva pitanja vezana uz zaštitu osobnih podataka možete se obratiti na sljedeću e-mail adresu: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
           </p>
