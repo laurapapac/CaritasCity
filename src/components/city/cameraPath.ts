@@ -32,11 +32,27 @@ function toOrbit(s: CameraState, fallbackFov: number): Orbit {
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
-// Shortest way round, so 350° → 10° turns 20°, not 340°.
-function lerpAngle(a: number, b: number, t: number) {
-  let d = (b - a) % (2 * Math.PI)
-  if (d > Math.PI) d -= 2 * Math.PI
-  if (d < -Math.PI) d += 2 * Math.PI
+/**
+ * Which way the camera swings between shots. "shortest" takes the smaller
+ * turn (350° → 10° turns 20°, not 340°), which can reverse direction from
+ * one shot to the next. "clockwise"/"counterclockwise" are as the city
+ * appears to turn on screen; clockwise = heading increasing (N → E → S → W),
+ * checked by projecting points through a three.js camera. Either can turn
+ * more than 180° to keep going the same way.
+ */
+export type CameraSpin = "shortest" | "clockwise" | "counterclockwise"
+
+const TAU = 2 * Math.PI
+const mod = (n: number) => ((n % TAU) + TAU) % TAU
+
+function lerpAngle(a: number, b: number, t: number, spin: CameraSpin) {
+  let d: number
+  if (spin === "clockwise") d = mod(b - a) // heading increases
+  else if (spin === "counterclockwise") d = -mod(a - b) // heading decreases
+  else {
+    d = mod(b - a)
+    if (d > Math.PI) d -= TAU
+  }
   return a + d * t
 }
 
@@ -56,7 +72,8 @@ export function cameraPathDuration(path: CameraKeyframe[]) {
 export function cameraStateAt(
   path: CameraKeyframe[],
   elapsedMs: number,
-  ease: (t: number) => number = (t) => t
+  ease: (t: number) => number = (t) => t,
+  spin: CameraSpin = "shortest"
 ): CameraState {
   const fallbackFov = path[0].fov ?? 50
   const total = cameraPathDuration(path)
@@ -75,7 +92,7 @@ export function cameraStateAt(
         z: lerp(a.target.z, b.target.z, t),
       }
       const distance = lerp(a.distance, b.distance, t)
-      const heading = lerpAngle(a.heading, b.heading, t)
+      const heading = lerpAngle(a.heading, b.heading, t, spin)
       const tilt = lerp(a.tilt, b.tilt, t)
       const horiz = distance * Math.cos(tilt)
       return {

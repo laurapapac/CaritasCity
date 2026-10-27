@@ -2,9 +2,21 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: `/dev/sequence` camera spin direction (2026-10-26)
+
+Not committed yet. User report: on the last move, the camera bounced and reversed direction.
+- **Cause:** each segment took the shortest turn. The shots face 136.7° → 46.9° → 198.5°, so the first move turned down 90° and the last turned up 152°.
+- **Change:** `cameraStateAt(path, elapsedMs, ease?, spin?)` takes a new last argument, a `CameraSpin` of `"shortest"` (the default, the old behaviour), `"clockwise"` or `"counterclockwise"`. It's set from `CAMERA_SPIN` in `DevBuildSequence.tsx` (`"clockwise"`, as the user asked). The forced directions turn more than 180° when needed.
+- **Direction is as seen on screen:** clockwise = heading increasing. Verified by projecting points through a three.js camera; my first version had this reversed and was fixed before handing over.
+- **Headings traced with the user's shots:**
+  - shortest: 137 → 47 → 198 (reverses)
+  - clockwise: 137 → 272 → 47 → 198 (the first move goes 270° the long way)
+  - counterclockwise: 137 → 47 → 303 → 198 (the last move goes 208° the long way)
+- **Play button hidden while playing** (follow-up user request, same day). It's unmounted until both the build (`building`) and the camera flight (`cameraMoving`) finish, so it stays out of the shot. The "Building…" disabled state is gone. Not checked in the browser.
+
 ## Status: `/dev/sequence` hide list (2026-10-26)
 
-Not committed yet. User request: a way to hide buildings that block the camera.
+Commit `0e19dd9`, pushed. User request: a way to hide buildings that block the camera.
 - **What it does:** add their ids to the `HIDDEN_BUILDINGS` constant in `DevBuildSequence.tsx`, the same way `CAMERA_PATH` is filled. Hidden buildings are filtered out of `initialBuildings`, so they're never added to the scene.
 - **Which ids work:** real buildings (`house_12`), decoration-only ones (`deco_school_0`) and the landmarks (`church`, `fountain`). `BUILDING_ID` is never hidden.
 - The user picks the ids themselves.

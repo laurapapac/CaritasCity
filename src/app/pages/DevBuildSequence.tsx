@@ -5,6 +5,7 @@ import {
   cameraStateAt,
   easeInOut,
   type CameraKeyframe,
+  type CameraSpin,
 } from "../../components/city/cameraPath";
 import type { CityBuilding } from "../../components/city/types";
 import { blueprintForVariant } from "../../components/city/blueprintForVariant";
@@ -36,72 +37,202 @@ import { Button } from "../components/ui/button";
 // vertical, so a different aspect shows more or less at the sides.
 
 const BUILDING_ID = "house_25";
-const FALLING_DELAY_MS = 1500;
-const FALLING_BLOCKS = 30;
-const FALLING_STAGGER_MS = 100;
-const REST_DELAY_MS = 600;
+const FALLING_DELAY_MS = 1800;
+const FALLING_BLOCKS = 0;
+const FALLING_STAGGER_MS = 200;
+const REST_DELAY_MS = 1800;
 const REST_STAGGER_MS = 1;
 
 const CAMERA_PATH: CameraKeyframe[] = [
   {
     position: {
-      x: -17.761,
-      y: 10.862,
-      z: 69.485,
+      x: -27.725,
+      y: 3.089,
+      z: 64.427,
     },
     target: {
-      x: -18.989,
-      y: 10,
-      z: 69.507,
+      x: -32.5,
+      y: 0.5,
+      z: 69.5,
     },
     fov: 50,
   },
   {
     position: {
-      x: -17.761,
-      y: 10.862,
-      z: 69.485,
+      x: -27.725,
+      y: 3.089,
+      z: 64.427,
     },
     target: {
-      x: -18.989,
-      y: 10,
-      z: 69.507,
+      x: -32.5,
+      y: 0.5,
+      z: 69.5,
     },
     fov: 50,
-    durationMs: 1000,
+    durationMs: 1500,
   },
   {
     position: {
-      x: -35.655,
-      y: 10.854,
-      z: 52.711,
+      x: -19.232,
+      y: 10.047,
+      z: 83.834,
     },
     target: {
-      x: -34.326,
-      y: 10,
-      z: 56.68,
+      x: -29.09,
+      y: 0.5,
+      z: 74.595,
+    },
+    fov: 50,
+    durationMs: 5500,
+  },
+  {
+    position: {
+      x: -46.451,
+      y: 12.958,
+      z: 88.432,
+    },
+    target: {
+      x: -29.093,
+      y: 0.5,
+      z: 74.598,
+    },
+    fov: 50,
+    durationMs: 5500,
+  },
+  {
+    position: {
+      x: -38.518,
+      y: 13.364,
+      z: 47.479,
+    },
+    target: {
+      x: -26.646,
+      y: 0.5,
+      z: 72.597,
+    },
+    fov: 50,
+    durationMs: 5500,
+  },
+  // {
+  //   position: {
+  //     x: -39.404,
+  //     y: 10.041,
+  //     z: 46.646,
+  //   },
+  //   target: {
+  //     x: -19.743,
+  //     y: 0.5,
+  //     z: 91.724,
+  //   },
+  //   fov: 50,
+  //   durationMs: 2500,
+  // },
+  // {
+  //   position: {
+  //     x: -45.082,
+  //     y: 10.438,
+  //     z: 44.342,
+  //   },
+  //   target: {
+  //     x: -17.162,
+  //     y: 0.5,
+  //     z: 96.806,
+  //   },
+  //   fov: 50,
+  //   durationMs: 2500,
+  // },
+  {
+    position: {
+      x: -49.347,
+      y: 19.58,
+      z: 21.245,
+    },
+    target: {
+      x: -17.795,
+      y: 0.5,
+      z: 94.454,
     },
     fov: 50,
     durationMs: 2000,
   },
+  // {
+  //   position: {
+  //     x: -57.972,
+  //     y: 50.784,
+  //     z: 3.394,
+  //   },
+  //   target: {
+  //     x: -17.795,
+  //     y: 0.5,
+  //     z: 94.454,
+  //   },
+  //   fov: 50,
+  //   durationMs: 2000,
+  // },
+  {
+    position: {
+      x: -159.813,
+      y: 286.199,
+      z: -250.271,
+    },
+    target: {
+      x: -40.316,
+      y: 0.5,
+      z: -5.704,
+    },
+    fov: 50,
+    durationMs: 11500,
+  },
+
+  // {
+  //   position: {
+  //     x: -45.294,
+  //     y: 11.345,
+  //     z: 63.356,
+  //   },
+  //   target: {
+  //     x: -29.09,
+  //     y: 0.5,
+  //     z: 74.595,
+  //   },
+  //   fov: 50,
+  //   durationMs: 8000,
+  // },
+  // {
+  //   position: {
+  //     x: -35.655,
+  //     y: 10.854,
+  //     z: 52.711,
+  //   },
+  //   target: {
+  //     x: -34.326,
+  //     y: 10,
+  //     z: 56.68,
+  //   },
+  //   fov: 50,
+  //   durationMs: 7000,
+  // },
 
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50 },
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50, durationMs: 4000 },
 ];
 // Gentle start and stop over the whole path; set to false for constant speed.
-const CAMERA_EASE = true;
+const CAMERA_EASE = false;
+// Turn direction between shots, as the city appears to spin on screen:
+// "clockwise", "counterclockwise", or "shortest" (smallest turn each time,
+// which can reverse direction between shots).
+const CAMERA_SPIN: CameraSpin = "shortest";
 
 // Buildings left out of the scene entirely, e.g. ones blocking the camera
 // path. Any building id works: real ones ("house_12"), decoration-only
 // ones ("deco_school_0") and the landmarks ("church", "fountain").
 // BUILDING_ID is never hidden.
-const HIDDEN_BUILDINGS: string[] = [
-  // "house_12",
-];
+const HIDDEN_BUILDINGS: string[] = ["school_21"];
 
 export default function DevBuildSequence() {
   const cityRef = useRef<CityHandle>(null);
-  const [running, setRunning] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [cameraMoving, setCameraMoving] = useState(false);
   const cameraFrame = useRef(0);
 
   useEffect(() => () => cancelAnimationFrame(cameraFrame.current), []);
@@ -112,35 +243,40 @@ export default function DevBuildSequence() {
     const total = cameraPathDuration(CAMERA_PATH);
     const ease = CAMERA_EASE ? easeInOut : undefined;
     const start = performance.now();
+    setCameraMoving(true);
     const tick = () => {
       const elapsed = performance.now() - start;
-      city.setCameraState(cameraStateAt(CAMERA_PATH, elapsed, ease));
+      city.setCameraState(
+        cameraStateAt(CAMERA_PATH, elapsed, ease, CAMERA_SPIN),
+      );
       if (elapsed < total) cameraFrame.current = requestAnimationFrame(tick);
+      else setCameraMoving(false);
     };
     tick();
   }
 
   const initialBuildings = useMemo<CityBuilding[]>(
-    () => [
-      ...CITY_LAYOUT.map(
-        (entry): CityBuilding => ({
-          id: entry.buildingId,
-          category: entry.category,
-          position: { x: entry.x, z: entry.z },
-          blueprint: blueprintForVariant(
-            entry.variant,
-            entry.category,
-            entry.totalBlocks,
-            entry.buildingId,
-          ),
-          totalBlocks: entry.totalBlocks,
-          completedBlocks:
-            entry.buildingId === BUILDING_ID ? 0 : entry.totalBlocks,
-        }),
-      ),
-      ...STATIC_LANDMARKS,
-      ...STATIC_DECOR_BUILDINGS,
-    ].filter((b) => b.id === BUILDING_ID || !HIDDEN_BUILDINGS.includes(b.id)),
+    () =>
+      [
+        ...CITY_LAYOUT.map(
+          (entry): CityBuilding => ({
+            id: entry.buildingId,
+            category: entry.category,
+            position: { x: entry.x, z: entry.z },
+            blueprint: blueprintForVariant(
+              entry.variant,
+              entry.category,
+              entry.totalBlocks,
+              entry.buildingId,
+            ),
+            totalBlocks: entry.totalBlocks,
+            completedBlocks:
+              entry.buildingId === BUILDING_ID ? 0 : entry.totalBlocks,
+          }),
+        ),
+        ...STATIC_LANDMARKS,
+        ...STATIC_DECOR_BUILDINGS,
+      ].filter((b) => b.id === BUILDING_ID || !HIDDEN_BUILDINGS.includes(b.id)),
     [],
   );
 
@@ -150,8 +286,8 @@ export default function DevBuildSequence() {
     city.stopAmbientCycle(BUILDING_ID);
     city.setVisibleCount(BUILDING_ID, 0);
     playCamera(city);
-    setRunning(true);
-    const done = () => setRunning(false);
+    setBuilding(true);
+    const done = () => setBuilding(false);
     city.playBuildRun(
       BUILDING_ID,
       1,
@@ -189,14 +325,17 @@ export default function DevBuildSequence() {
         decor={STATIC_CITY_DECOR}
         style={{ position: "absolute", inset: 0 }}
       />
-      <Button
-        size="lg"
-        className="absolute bottom-6 left-1/2 -translate-x-1/2"
-        onClick={play}
-        disabled={running}
-      >
-        {running ? "Building…" : "Play"}
-      </Button>
+      {/* Hidden while playing so it stays out of the shot; back once both
+          the build and the camera move have finished. */}
+      {!building && !cameraMoving && (
+        <Button
+          size="lg"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2"
+          onClick={play}
+        >
+          Play
+        </Button>
+      )}
     </div>
   );
 }
