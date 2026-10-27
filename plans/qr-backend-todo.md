@@ -2,6 +2,14 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: glass window flicker fix — glass cubes 0.99 instead of 1 (2026-10-27)
+
+Not committed yet. **Affects the live kiosk too, so it needs a frontend redeploy.** User report: glass windows were very glitchy while the camera moved (seen on `/dev/sequence`).
+- **Likely cause:** z-fighting. Glass blocks were full 1×1×1 cubes, so their side faces shared a plane with the neighbouring wall blocks' faces. Through the transparent glass (`depthWrite: false`, `DoubleSide`), which of the two coplanar faces wins flips from frame to frame with camera motion.
+- **Fix:** a separate `glassGeo` built from `GLASS_VOXEL_SIZE = 0.99` (in `utils.ts`) for the glass `InstancedMesh`, disposed with the rest. That leaves a 0.005 gap per side. The log depth buffer resolves roughly 3e-4 even at 800 units out, so the gap is enough, and too thin to see.
+- **Why not `polygonOffset`:** it doesn't help with `logarithmicDepthBuffer`, because the shader writes `gl_FragDepth`.
+- **Verified:** the page loads with no console errors, and the user confirmed by eye that the flicker is gone (2026-10-27).
+
 ## Status: `/dev/sequence` camera spin direction (2026-10-26)
 
 Commit `bf552f0`, not pushed. User report: on the last move, the camera bounced and reversed direction.

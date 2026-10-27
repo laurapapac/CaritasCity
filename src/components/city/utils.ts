@@ -6,6 +6,12 @@ import type { Block, Blueprint } from "./types"
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const GLASS_HEX      = 0x90c8d8
+// Edge length of a glass block's cube (solid blocks are 1). Just under 1 so
+// glass faces never share a plane with neighbouring wall faces — at exactly 1
+// they z-fight through the transparent glass while the camera moves (see
+// cityScene.ts's glassGeo). 0.99 leaves a 0.005 gap per side: invisible, but
+// many times the log depth buffer's precision even at max zoom-out.
+export const GLASS_VOXEL_SIZE = 0.99
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drop-in placement animation (revealBlockAt) — shared by a real user's own

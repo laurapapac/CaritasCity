@@ -17,6 +17,7 @@ import type { Block, CityBuilding, CityDecor } from "./types"
 import {
   BLOCK_TEX,
   GLASS_HEX,
+  GLASS_VOXEL_SIZE,
   DROP_HEIGHT,
   DROP_HEIGHT_OWN,
   DROP_FALL_DUR,
@@ -1150,6 +1151,13 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
   // ── Shared geometry & materials (reused by every building) ───────────────
   // Two draw calls per building, but geo/mat uploads happen only once.
   const voxelGeo = new THREE.BoxGeometry(1, 1, 1)
+  // Glass is a hair smaller than a full voxel (2026-10-27 fix): at full size
+  // its side faces sit exactly in the plane of the neighbouring wall blocks'
+  // faces, and seen through the transparent glass those coplanar faces
+  // z-fight — windows flickered whenever the camera moved. GLASS_VOXEL_SIZE
+  // leaves a gap far bigger than the log depth buffer's precision at any
+  // zoom, yet far too thin to see.
+  const glassGeo = new THREE.BoxGeometry(GLASS_VOXEL_SIZE, GLASS_VOXEL_SIZE, GLASS_VOXEL_SIZE)
 
   const solidMat = new THREE.MeshLambertMaterial({ map: BLOCK_TEX })
 
@@ -1687,7 +1695,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
         sm.frustumCulled = false
         scene.add(sm)
 
-        const gm = new THREE.InstancedMesh(voxelGeo, glassMat, maxGlass)
+        const gm = new THREE.InstancedMesh(glassGeo, glassMat, maxGlass)
         gm.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
         gm.count = 0
         gm.frustumCulled = false
@@ -2082,6 +2090,7 @@ export function createCityScene(container: HTMLDivElement, options: CitySceneOpt
       }
       nodes.clear()
       voxelGeo.dispose()
+      glassGeo.dispose()
       solidMat.dispose()
       glassMat.dispose()
       scene.remove(dustMesh)
