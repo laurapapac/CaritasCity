@@ -117,14 +117,14 @@ const CAMERA_PATH: CameraKeyframe[] = [
   },*/
   {
     position: {
-      x: -40.762,
-      y: 15.1,
-      z: 58.431,
+      x: -41.82,
+      y: 14.807,
+      z: 58.165,
     },
     target: {
-      x: -18.069,
+      x: -21.651,
       y: 0.5,
-      z: 83.49,
+      z: 85.453,
     },
     fov: 50,
     durationMs: 60000,
@@ -145,6 +145,20 @@ const CAMERA_PATH: CameraKeyframe[] = [
     fov: 50,
     durationMs: 5500,
   },*/
+  {
+    position: {
+      x: -38.422,
+      y: 16.489,
+      z: 50.685,
+    },
+    target: {
+      x: -22.57,
+      y: 0.5,
+      z: 85.724,
+    },
+    fov: 50,
+    durationMs: 4000,
+  },
 
   // Kadar 4
   /*{
@@ -161,6 +175,20 @@ const CAMERA_PATH: CameraKeyframe[] = [
     fov: 50,
     durationMs: 5500,
   },*/
+  {
+    position: {
+      x: -20.801,
+      y: 17.887,
+      z: 46.992,
+    },
+    target: {
+      x: -30.859,
+      y: 0.5,
+      z: 86.469,
+    },
+    fov: 50,
+    durationMs: 7000,
+  },
 
   // Kadar 5
   /*{
@@ -177,6 +205,20 @@ const CAMERA_PATH: CameraKeyframe[] = [
     fov: 50,
     durationMs: 2000,
   },*/
+  {
+    position: {
+      x: 1.036,
+      y: 24.747,
+      z: 48.814,
+    },
+    target: {
+      x: -35.67,
+      y: 0.5,
+      z: 78.867,
+    },
+    fov: 50,
+    durationMs: 8000,
+  },
 
   // Kadar 6
   /*{
@@ -193,6 +235,36 @@ const CAMERA_PATH: CameraKeyframe[] = [
     fov: 50,
     durationMs: 11500,
   },*/
+  {
+    position: {
+      x: 41.495,
+      y: 48.007,
+      z: 113.333,
+    },
+    target: {
+      x: -27.765,
+      y: 0.5,
+      z: 61.689,
+    },
+    fov: 50,
+    durationMs: 10000,
+  },
+
+  // Kadar 7
+  {
+    position: {
+      x: 71.01,
+      y: 303.352,
+      z: 418.5,
+    },
+    target: {
+      x: 5.179,
+      y: 0.5,
+      z: 113.639,
+    },
+    fov: 50,
+    durationMs: 12000,
+  },
 
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50 },
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50, durationMs: 4000 },
@@ -208,7 +280,8 @@ const CAMERA_SPIN: CameraSpin = "shortest";
 // path. Any building id works: real ones ("house_12"), decoration-only
 // ones ("deco_school_0") and the landmarks ("church", "fountain").
 // BUILDING_ID is never hidden.
-const HIDDEN_BUILDINGS: string[] = ["school_21", "deco_school_4"];
+// const HIDDEN_BUILDINGS: string[] = ["school_21", "deco_school_4"];
+const HIDDEN_BUILDINGS: string[] = ["school_21"];
 
 export default function DevBuildSequence() {
   const cityRef = useRef<CityHandle>(null);
