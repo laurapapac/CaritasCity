@@ -40,11 +40,12 @@ const BUILDING_ID = "house_25";
 const FALLING_DELAY_MS = 1800;
 const FALLING_BLOCKS = 0;
 const FALLING_STAGGER_MS = 200;
-const REST_DELAY_MS = 1800;
-const REST_STAGGER_MS = 1;
+const REST_DELAY_MS = 2700;
+const REST_STAGGER_MS = 50;
 
 const CAMERA_PATH: CameraKeyframe[] = [
-  {
+  // Kadar 1
+  /*{
     position: {
       x: -27.725,
       y: 3.089,
@@ -70,8 +71,37 @@ const CAMERA_PATH: CameraKeyframe[] = [
     },
     fov: 50,
     durationMs: 1500,
+  },*/
+  {
+    position: {
+      x: -37.374,
+      y: 2.816,
+      z: 64.39,
+    },
+    target: {
+      x: -32.5,
+      y: 0.5,
+      z: 69.5,
+    },
+    fov: 50,
   },
   {
+    position: {
+      x: -37.374,
+      y: 2.816,
+      z: 64.39,
+    },
+    target: {
+      x: -32.5,
+      y: 0.5,
+      z: 69.5,
+    },
+    fov: 50,
+    durationMs: 2400,
+  },
+
+  // Kadar 2
+  /*{
     position: {
       x: -19.232,
       y: 10.047,
@@ -84,8 +114,24 @@ const CAMERA_PATH: CameraKeyframe[] = [
     },
     fov: 50,
     durationMs: 5500,
-  },
+  },*/
   {
+    position: {
+      x: -40.762,
+      y: 15.1,
+      z: 58.431,
+    },
+    target: {
+      x: -18.069,
+      y: 0.5,
+      z: 83.49,
+    },
+    fov: 50,
+    durationMs: 60000,
+  },
+
+  // Kadar 3
+  /*{
     position: {
       x: -46.451,
       y: 12.958,
@@ -98,8 +144,10 @@ const CAMERA_PATH: CameraKeyframe[] = [
     },
     fov: 50,
     durationMs: 5500,
-  },
-  {
+  },*/
+
+  // Kadar 4
+  /*{
     position: {
       x: -38.518,
       y: 13.364,
@@ -112,36 +160,10 @@ const CAMERA_PATH: CameraKeyframe[] = [
     },
     fov: 50,
     durationMs: 5500,
-  },
-  // {
-  //   position: {
-  //     x: -39.404,
-  //     y: 10.041,
-  //     z: 46.646,
-  //   },
-  //   target: {
-  //     x: -19.743,
-  //     y: 0.5,
-  //     z: 91.724,
-  //   },
-  //   fov: 50,
-  //   durationMs: 2500,
-  // },
-  // {
-  //   position: {
-  //     x: -45.082,
-  //     y: 10.438,
-  //     z: 44.342,
-  //   },
-  //   target: {
-  //     x: -17.162,
-  //     y: 0.5,
-  //     z: 96.806,
-  //   },
-  //   fov: 50,
-  //   durationMs: 2500,
-  // },
-  {
+  },*/
+
+  // Kadar 5
+  /*{
     position: {
       x: -49.347,
       y: 19.58,
@@ -154,22 +176,10 @@ const CAMERA_PATH: CameraKeyframe[] = [
     },
     fov: 50,
     durationMs: 2000,
-  },
-  // {
-  //   position: {
-  //     x: -57.972,
-  //     y: 50.784,
-  //     z: 3.394,
-  //   },
-  //   target: {
-  //     x: -17.795,
-  //     y: 0.5,
-  //     z: 94.454,
-  //   },
-  //   fov: 50,
-  //   durationMs: 2000,
-  // },
-  {
+  },*/
+
+  // Kadar 6
+  /*{
     position: {
       x: -159.813,
       y: 286.199,
@@ -182,36 +192,7 @@ const CAMERA_PATH: CameraKeyframe[] = [
     },
     fov: 50,
     durationMs: 11500,
-  },
-
-  // {
-  //   position: {
-  //     x: -45.294,
-  //     y: 11.345,
-  //     z: 63.356,
-  //   },
-  //   target: {
-  //     x: -29.09,
-  //     y: 0.5,
-  //     z: 74.595,
-  //   },
-  //   fov: 50,
-  //   durationMs: 8000,
-  // },
-  // {
-  //   position: {
-  //     x: -35.655,
-  //     y: 10.854,
-  //     z: 52.711,
-  //   },
-  //   target: {
-  //     x: -34.326,
-  //     y: 10,
-  //     z: 56.68,
-  //   },
-  //   fov: 50,
-  //   durationMs: 7000,
-  // },
+  },*/
 
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50 },
   // { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fov: 50, durationMs: 4000 },
@@ -227,7 +208,7 @@ const CAMERA_SPIN: CameraSpin = "shortest";
 // path. Any building id works: real ones ("house_12"), decoration-only
 // ones ("deco_school_0") and the landmarks ("church", "fountain").
 // BUILDING_ID is never hidden.
-const HIDDEN_BUILDINGS: string[] = ["school_21"];
+const HIDDEN_BUILDINGS: string[] = ["school_21", "deco_school_4"];
 
 export default function DevBuildSequence() {
   const cityRef = useRef<CityHandle>(null);

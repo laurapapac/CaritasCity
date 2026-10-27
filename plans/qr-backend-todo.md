@@ -4,7 +4,7 @@ Use this to re-prompt Claude if the conversation is lost. Paste it in and say "c
 
 ## Status: `/dev/sequence` camera spin direction (2026-10-26)
 
-Not committed yet. User report: on the last move, the camera bounced and reversed direction.
+Commit `bf552f0`, not pushed. User report: on the last move, the camera bounced and reversed direction.
 - **Cause:** each segment took the shortest turn. The shots face 136.7° → 46.9° → 198.5°, so the first move turned down 90° and the last turned up 152°.
 - **Change:** `cameraStateAt(path, elapsedMs, ease?, spin?)` takes a new last argument, a `CameraSpin` of `"shortest"` (the default, the old behaviour), `"clockwise"` or `"counterclockwise"`. It's set from `CAMERA_SPIN` in `DevBuildSequence.tsx` (`"clockwise"`, as the user asked). The forced directions turn more than 180° when needed.
 - **Direction is as seen on screen:** clockwise = heading increasing. Verified by projecting points through a three.js camera; my first version had this reversed and was fixed before handing over.
