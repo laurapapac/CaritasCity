@@ -109,7 +109,7 @@ export function PrivacyButton({ className }: { className?: string }) {
             propisanima GDPR-om možete zatražiti pristup osobnim podacima,
             njihov ispravak ili brisanje te ograničenje obrade. Na obradu
             utemeljenu na legitimnom interesu možete podnijeti prigovor zbog
-            razloga povezanih s Vašom posebnom situacijom. Zahtjev pošaljite na
+            razloga povezanih s Vašom posebnom situacijom. Zahtjev pošaljite na{" "}
             <a href="mailto:gdpr@caritas.hr">
               <span className="font-semibold">gdpr@caritas.hr</span>
             </a>
