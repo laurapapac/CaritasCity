@@ -2,9 +2,16 @@
 
 Use this to re-prompt Claude if the conversation is lost. Paste it in and say "continue from qr-backend-todo.md".
 
+## Status: background music added; city-complete and button-click sounds removed (2026-11-17)
+
+Not committed yet. **Affects the live kiosk, so it needs a frontend redeploy.**
+- **Sounds now:** only the user's own block landing, plus looping background music (`public/sounds/background-music.mp3`, supplied and shrunk by the user, at volume 0.25). The city-complete effect and all button-click calls are gone from `Kiosk.tsx` and `SOUND_URLS`.
+- **Starts muted on every load:** there's no localStorage persistence any more. The music starts when the sound button is tapped, which also counts as the user gesture browsers require before playing audio. Muting pauses the music. The music file is created on the first unmute, so visitors who never turn sound on don't download it.
+- **Background tab:** a `visibilitychange` listener pauses the music when the tab is hidden and resumes it on return if sound is on.
+
 ## Status: glass window flicker fix — glass cubes 0.99 instead of 1 (2026-10-27)
 
-Not committed yet. **Affects the live kiosk too, so it needs a frontend redeploy.** User report: glass windows were very glitchy while the camera moved (seen on `/dev/sequence`).
+Commit `34901a9`, pushed. **Affects the live kiosk too, so it needs a frontend redeploy.** User report: glass windows were very glitchy while the camera moved (seen on `/dev/sequence`).
 - **Likely cause:** z-fighting. Glass blocks were full 1×1×1 cubes, so their side faces shared a plane with the neighbouring wall blocks' faces. Through the transparent glass (`depthWrite: false`, `DoubleSide`), which of the two coplanar faces wins flips from frame to frame with camera motion.
 - **Fix:** a separate `glassGeo` built from `GLASS_VOXEL_SIZE = 0.99` (in `utils.ts`) for the glass `InstancedMesh`, disposed with the rest. That leaves a 0.005 gap per side. The log depth buffer resolves roughly 3e-4 even at 800 units out, so the gap is enough, and too thin to see.
 - **Why not `polygonOffset`:** it doesn't help with `logarithmicDepthBuffer`, because the shader writes `gl_FragDepth`.
@@ -12,7 +19,7 @@ Not committed yet. **Affects the live kiosk too, so it needs a frontend redeploy
 
 ## Status: `/dev/sequence` camera spin direction (2026-10-26)
 
-Commit `bf552f0`, not pushed. User report: on the last move, the camera bounced and reversed direction.
+Commit `bf552f0`, pushed. User report: on the last move, the camera bounced and reversed direction.
 - **Cause:** each segment took the shortest turn. The shots face 136.7° → 46.9° → 198.5°, so the first move turned down 90° and the last turned up 152°.
 - **Change:** `cameraStateAt(path, elapsedMs, ease?, spin?)` takes a new last argument, a `CameraSpin` of `"shortest"` (the default, the old behaviour), `"clockwise"` or `"counterclockwise"`. It's set from `CAMERA_SPIN` in `DevBuildSequence.tsx` (`"clockwise"`, as the user asked). The forced directions turn more than 180° when needed.
 - **Direction is as seen on screen:** clockwise = heading increasing. Verified by projecting points through a three.js camera; my first version had this reversed and was fixed before handing over.

@@ -240,19 +240,13 @@ function WelcomeStep({ onHasCode, onBrowse }: { onHasCode: () => void; onBrowse:
         <div className="flex w-full flex-col gap-3">
           <Button
             className="bg-neutral-500 text-white hover:bg-neutral-600"
-            onClick={() => {
-              playSound("buttonClick");
-              onHasCode();
-            }}
+            onClick={() => onHasCode()}
           >
             Imam kod
           </Button>
           <Button
             variant="outline"
-            onClick={() => {
-              playSound("buttonClick");
-              onBrowse();
-            }}
+            onClick={() => onBrowse()}
           >
             Pogledaj gradilište
           </Button>
@@ -281,19 +275,13 @@ function CityCompleteStep({ onVisitBlock, onBrowse }: { onVisitBlock: () => void
         <div className="flex w-full flex-col gap-3">
           <Button
             className="bg-neutral-500 text-white hover:bg-neutral-600"
-            onClick={() => {
-              playSound("buttonClick");
-              onVisitBlock();
-            }}
+            onClick={() => onVisitBlock()}
           >
             Posjeti svoju kockicu
           </Button>
           <Button
             variant="outline"
-            onClick={() => {
-              playSound("buttonClick");
-              onBrowse();
-            }}
+            onClick={() => onBrowse()}
           >
             Pogledaj grad
           </Button>
@@ -370,20 +358,14 @@ function EntryStep({
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => {
-              playSound("buttonClick");
-              onBack();
-            }}
+            onClick={() => onBack()}
           >
             Natrag
           </Button>
           <Button
             className="bg-neutral-500 text-white hover:bg-neutral-600"
             disabled={code.length !== CODE_LENGTH}
-            onClick={() => {
-              playSound("buttonClick");
-              onSubmit(code);
-            }}
+            onClick={() => onSubmit(code)}
           >
             Nastavi
           </Button>
@@ -492,10 +474,7 @@ function SchoolStep({
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => {
-                playSound("buttonClick");
-                onBack();
-              }}
+              onClick={() => onBack()}
             >
               Natrag
             </Button>
@@ -503,7 +482,6 @@ function SchoolStep({
               className="bg-neutral-500 text-white hover:bg-neutral-600"
               disabled={!schoolId}
               onClick={() => {
-                playSound("buttonClick");
                 if (schoolId) onConfirm(schoolId);
               }}
             >
@@ -555,17 +533,6 @@ export default function Kiosk() {
   const cityComplete = overallCompleted >= TOTAL_BLOCKS_TARGET;
   const [muted, toggleMuted] = useMuted();
   const [statsOpen, setStatsOpen] = useState(false);
-
-  // Fires once, the moment the city first reads as complete (not on every
-  // re-render while it stays true) — a one-off milestone sound, not tied to
-  // any particular button press the way the others above are.
-  const announcedCityComplete = useRef(false);
-  useEffect(() => {
-    if (cityComplete && !announcedCityComplete.current) {
-      announcedCityComplete.current = true;
-      playSound("cityComplete");
-    }
-  }, [cityComplete]);
 
   function refreshStats() {
     getStats()
@@ -817,17 +784,13 @@ export default function Kiosk() {
               <div className="flex flex-col gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    playSound("buttonClick");
-                    cityRef.current?.focusOnBlock(state.block.buildingId, state.block.blockIndex);
-                  }}
+                  onClick={() => cityRef.current?.focusOnBlock(state.block.buildingId, state.block.blockIndex)}
                 >
                   <MapPin />
                   Vrati me na moju kockicu
                 </Button>
                 <Button
                   onClick={() => {
-                    playSound("buttonClick");
                     cityRef.current?.resetCamera();
                     setState({ phase: "welcome" });
                   }}
@@ -885,10 +848,7 @@ export default function Kiosk() {
             size="icon"
             variant="outline"
             className="pointer-events-auto bg-card/90 backdrop-blur"
-            onClick={() => {
-              playSound("buttonClick");
-              refreshCity();
-            }}
+            onClick={() => refreshCity()}
             disabled={refreshing}
             aria-label="Osvježi grad"
             title="Osvježi grad"
@@ -907,10 +867,7 @@ export default function Kiosk() {
           <Button
             size="lg"
             className="pointer-events-auto bg-red-600 text-white shadow-xl hover:bg-red-700"
-            onClick={() => {
-              playSound("buttonClick");
-              setState({ phase: "entry" });
-            }}
+            onClick={() => setState({ phase: "entry" })}
           >
             <KeyRound />
             Unesi kod
