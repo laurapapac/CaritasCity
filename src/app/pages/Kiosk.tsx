@@ -674,6 +674,7 @@ export default function Kiosk() {
           () => {
             setTimeout(() => {
               cityRef.current?.addBlock(category);
+              const falling = playSound("blockFalling");
               cityRef.current?.markOwnBlock(res.block.buildingId, res.block.blockIndex);
               setState({ phase: "placed", block: res.block });
               refreshStats();
@@ -681,7 +682,11 @@ export default function Kiosk() {
               // seconds (see revealBlockAt/utils.ts) before settling — there's
               // no host-side "landed" callback out of the three.js scene, so
               // this just times the sound to the same fixed duration instead.
-              setTimeout(() => playSound("blockLanding"), DROP_FALL_DUR_OWN * 1000);
+              // The falling sound is cut off right as the landing one starts.
+              setTimeout(() => {
+                falling?.pause();
+                playSound("blockLanding");
+              }, DROP_FALL_DUR_OWN * 1000);
             }, MONTAGE_FINAL_BLOCK_DELAY_MS);
           }
         );

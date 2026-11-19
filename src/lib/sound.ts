@@ -4,9 +4,10 @@ import { useCallback, useState } from "react";
 // (2026-11-17, user request) — nothing plays until the visitor taps the
 // sound button, which also starts the background music. Browsers block
 // audio before a user gesture anyway, so the tap doubles as the unlock.
-// Only the user's own block landing has an effect; city-complete and
-// button-click sounds were dropped (same request).
+// Only the user's own block has effects (falling, then landing);
+// city-complete and button-click sounds were dropped (same request).
 const SOUND_URLS = {
+  blockFalling: "/sounds/block-falling.mp3",
   blockLanding: "/sounds/block-landing.mp3",
 } as const;
 
@@ -64,15 +65,17 @@ export function setMuted(next: boolean): void {
   syncMusic();
 }
 
-// Plays a short one-shot effect. No-ops if muted; swallows playback failures
+// Plays a short one-shot effect and returns it (so the caller can stop it
+// early), or null if muted. Swallows playback failures
 // (missing file, browser autoplay restrictions) since sound is a bonus layer
 // on top of the existing visual feedback, never a required signal.
-export function playSound(name: SoundName): void {
-  if (muted) return;
+export function playSound(name: SoundName): HTMLAudioElement | null {
+  if (muted) return null;
   // Clone rather than play the cached template directly so rapid repeated
   // triggers overlap instead of cutting each other off.
   const instance = getTemplate(name).cloneNode(true) as HTMLAudioElement;
   instance.play().catch(() => {});
+  return instance;
 }
 
 // Reactive mute state for the sound button — the module state above is the
